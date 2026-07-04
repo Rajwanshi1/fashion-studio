@@ -5,7 +5,7 @@ Mirrored from Claude Design project `20c88fe1-743b-4841-835d-d857410f2c8c`
 All files are verbatim copies and are REFERENCE ONLY — the production apps live in
 `frontend/`, `admin/`, `backend/`.
 
-## Imported (21 files)
+## Imported (25 files)
 
 Stylesheets:
 - brand.css — design tokens (colors, type, spacing, motion) + shared atoms
