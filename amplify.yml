@@ -1,0 +1,40 @@
+# AWS Amplify Hosting build spec (monorepo). Deployment itself is out of scope for now.
+# When connecting the repo in Amplify Console, pick the app root (frontend or admin).
+# Both are Vite SPAs — add a rewrite rule in Amplify:
+#   Source: </^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>
+#   Target: /index.html   Type: 200 (Rewrite)
+# Set env var VITE_API_URL to the deployed backend URL before building.
+version: 1
+applications:
+  - appRoot: frontend
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: dist
+        files:
+          - "**/*"
+      cache:
+        paths:
+          - node_modules/**/*
+  - appRoot: admin
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: dist
+        files:
+          - "**/*"
+      cache:
+        paths:
+          - node_modules/**/*

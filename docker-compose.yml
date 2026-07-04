@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: boutique-db
+    environment:
+      POSTGRES_USER: boutique
+      POSTGRES_PASSWORD: boutique
+      POSTGRES_DB: boutique
+    ports:
+      - "5433:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U boutique -d boutique"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./backend
+    container_name: boutique-api
+    environment:
+      DATABASE_URL: postgres://boutique:boutique@db:5432/boutique
+      JWT_SECRET: dev-secret-change-in-prod
+      CORS_ORIGINS: http://localhost:5173,http://localhost:5174,http://localhost:4173,http://localhost:4174
+      SEED_ON_START: "true"
+      PORT: "3001"
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  dbdata:
