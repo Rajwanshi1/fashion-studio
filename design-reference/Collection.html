@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lehenga Sets — Tanvi Agnihotry</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="shop.css">
+<style>
+  /* PLP layout */
+  .plp { display: grid; grid-template-columns: 246px 1fr; gap: clamp(1.5rem,3vw,3.5rem); padding: 0 var(--gutter) clamp(3rem,6vw,5rem); max-width: 1480px; margin: 0 auto; align-items: start; }
+  @media (max-width: 860px){ .plp { grid-template-columns: 1fr; } }
+
+  /* sidebar */
+  .filters { position: sticky; top: 96px; }
+  @media (max-width: 860px){ .filters { position: static; border: 1px solid var(--hairline); padding: 1.4rem; } }
+  .fgroup { padding: 1.4rem 0; border-bottom: 1px solid var(--hairline); }
+  .fgroup:first-child { padding-top: 0; }
+  .fgroup h4 { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold); margin-bottom: 1rem; }
+  .fopt { display: flex; align-items: center; gap: 0.6rem; font-size: 0.88rem; color: var(--ink-soft); padding: 0.32rem 0; cursor: pointer; }
+  .fopt input { accent-color: var(--forest-700); width: 14px; height: 14px; }
+  .fopt .ct { margin-left: auto; font-size: 0.72rem; color: var(--sage-500); }
+  .fcolors { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+  .fcolors .sw { width: 26px; height: 26px; border-radius: 999px; cursor: pointer; outline: 1px solid var(--hairline); outline-offset: 2px; transition: outline-color var(--dur) var(--ease); }
+  .fcolors .sw:hover, .fcolors .sw.on { outline-color: var(--gold); }
+  .fsizes { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .fsize { min-width: 38px; padding: 0.45em; text-align: center; border: 1px solid var(--hairline); font-size: 0.74rem; cursor: pointer; background: none; transition: all var(--dur) var(--ease); }
+  .fsize:hover { border-color: var(--gold); }
+  .fsize.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .frange { display:flex; align-items:center; gap: 0.6rem; font-size: 0.8rem; color: var(--fg-muted); }
+
+  .filter-toggle { display: none; }
+  @media (max-width: 860px){
+    .filter-toggle { display: flex; width: 100%; justify-content: space-between; align-items: center; padding: 1em 1.2em; border: 1px solid var(--hairline); background: var(--celadon-50); font-family: var(--sans); font-size: 0.7rem; letter-spacing: var(--track-wide); text-transform: uppercase; cursor: pointer; margin-bottom: 1.2rem; }
+    .filter-toggle .ic { color: var(--gold); font-size: 1.1rem; transition: transform var(--dur) var(--ease); }
+    .filter-toggle.open .ic { transform: rotate(45deg); }
+    .filters { display: none; margin-bottom: 1.2rem; }
+    .filters.show { display: block; }
+  }
+
+  /* toolbar */
+  .plp-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.4rem 0 1.6rem; border-bottom: 1px solid var(--hairline); margin-bottom: clamp(1.5rem,3vw,2.2rem); }
+  .plp-bar .count { font-size: 0.72rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }
+  .plp-bar .sort { display: flex; align-items: center; gap: 0.6rem; }
+  .plp-bar .sort label { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }
+  .plp-bar .sort select { appearance: none; border: 0; border-bottom: 1px solid var(--ink); background: none; font-family: var(--sans); font-size: 0.82rem; padding: 0.3em 1.6em 0.3em 0.2em; cursor: pointer; background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 50%); background-position: calc(100% - 10px) center, calc(100% - 5px) center; background-size: 5px 5px; background-repeat: no-repeat; }
+
+  .active-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.6rem; align-items: center; }
+  .active-chips .ac { display:inline-flex; align-items:center; gap: 0.5rem; font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; background: var(--celadon-50); border: 1px solid var(--hairline); padding: 0.45em 0.8em; }
+  .active-chips .ac button { background:none; border:0; cursor:pointer; color: var(--gold); font-size: 0.8rem; line-height: 1; }
+  .active-chips .clear { font-size: 0.64rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); border-bottom: 1px solid var(--hairline); cursor: pointer; }
+
+  /* editorial promo row inside grid */
+  .promo-tile { grid-column: span 2; background: var(--forest-800); color: var(--celadon-100); display: grid; grid-template-columns: 1fr 1fr; align-items: center; }
+  @media (max-width: 560px){ .promo-tile { grid-column: span 2; grid-template-columns: 1fr; } }
+  .promo-tile image-slot { width: 100%; height: 100%; min-height: 320px; }
+  .promo-tile .pt { padding: clamp(1.6rem,4vw,3rem); }
+  .promo-tile .eyebrow { color: var(--gold-soft); display: block; margin-bottom: 1rem; }
+  .promo-tile h3 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: clamp(1.6rem,3vw,2.3rem); line-height: 1.15; margin-bottom: 1.4rem; }
+</style>
+</head>
+<body class="shop">
+  <div class="ticker"><div class="ticker-track">
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+  </div></div>
+
+  <nav class="nav">
+    <div class="nav-links left">
+      <a href="Collection.html">Women</a>
+      <a href="Collections.html">Collections</a>
+      <a href="Lookbook.html">Lookbook</a>
+    </div>
+    <div class="wordmark"><a href="Homepage.html">Tanvi Agnihotry</a></div>
+    <div class="nav-links right">
+      <a href="Search.html">Search</a>
+      <a href="Account.html">Account</a>
+      <a class="bag" href="Cart.html">Bag <span class="count">(2)</span></a>
+    </div>
+  </nav>
+
+  <div class="crumbs">
+    <a href="Homepage.html">Home</a><span class="sep">/</span>
+    <a href="Collections.html">Collections</a><span class="sep">/</span>
+    <span class="here">Lehenga Sets</span>
+  </div>
+
+  <div class="page-hero">
+    <span class="eyebrow">The Verdant Edit</span>
+    <h1>Lehenga Sets</h1>
+    <p>Hand-embroidered indo-western lehengas in moss, sage and pistachio — structured, fluid, and made to order in our atelier.</p>
+  </div>
+
+  <main class="plp" data-screen-label="Category / PLP">
+    <button class="filter-toggle" id="filterToggle">Filter &amp; Refine <span class="ic">+</span></button>
+    <!-- SIDEBAR -->
+    <aside class="filters" id="filters">
+      <div class="fgroup">
+        <h4>Category</h4>
+        <label class="fopt"><input type="checkbox" checked> Lehenga Sets <span class="ct">24</span></label>
+        <label class="fopt"><input type="checkbox"> Jacket Sets <span class="ct">18</span></label>
+        <label class="fopt"><input type="checkbox"> Gowns <span class="ct">12</span></label>
+        <label class="fopt"><input type="checkbox"> Anarkali <span class="ct">15</span></label>
+        <label class="fopt"><input type="checkbox"> Sharara &amp; Gharara <span class="ct">9</span></label>
+      </div>
+      <div class="fgroup">
+        <h4>Colour</h4>
+        <div class="fcolors">
+          <span class="sw on" style="background:#9CB6AA" title="Sage"></span>
+          <span class="sw" style="background:#7C9A8C" title="Moss"></span>
+          <span class="sw" style="background:#DDE7CB" title="Pistachio"></span>
+          <span class="sw" style="background:#C9AE7A" title="Antique Gold"></span>
+          <span class="sw" style="background:#34423A" title="Deep Forest"></span>
+          <span class="sw" style="background:#E8EFE2" title="Eucalyptus"></span>
+        </div>
+      </div>
+      <div class="fgroup">
+        <h4>Size</h4>
+        <div class="fsizes">
+          <button class="fsize">XS</button>
+          <button class="fsize on">S</button>
+          <button class="fsize">M</button>
+          <button class="fsize">L</button>
+          <button class="fsize">XL</button>
+          <button class="fsize">Custom</button>
+        </div>
+      </div>
+      <div class="fgroup">
+        <h4>Occasion</h4>
+        <label class="fopt"><input type="checkbox"> Wedding</label>
+        <label class="fopt"><input type="checkbox"> Reception</label>
+        <label class="fopt"><input type="checkbox"> Festive</label>
+        <label class="fopt"><input type="checkbox"> Cocktail</label>
+      </div>
+      <div class="fgroup">
+        <h4>Price</h4>
+        <div class="frange"><span>₹50,000</span><input type="range" min="50000" max="300000" value="200000" style="flex:1;accent-color:var(--forest-700)"><span>₹3,00,000+</span></div>
+      </div>
+    </aside>
+
+    <!-- RESULTS -->
+    <section>
+      <div class="plp-bar">
+        <span class="count">24 Pieces</span>
+        <div class="sort">
+          <label for="sort">Sort</label>
+          <select id="sort">
+            <option>Featured</option>
+            <option>New Arrivals</option>
+            <option>Price — Low to High</option>
+            <option>Price — High to Low</option>
+            <option>Bestselling</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="active-chips">
+        <span class="ac">Lehenga Sets <button>✕</button></span>
+        <span class="ac">Sage <button>✕</button></span>
+        <span class="ac">Size S <button>✕</button></span>
+        <span class="clear">Clear all</span>
+      </div>
+
+      <div class="pgrid cols-2">
+        <a class="pcard" href="Product Detail.html"><div class="ph"><span class="flag">Bestseller</span><button class="fav" aria-label="Save">♡</button><image-slot id="plp-1" placeholder="Piece 1"></image-slot><button class="quick">Quick View</button></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Sage Sequin Jacket Lehenga</div><div class="pr">₹1,84,000</div></div></a>
+        <a class="pcard" href="Product Detail.html"><div class="ph"><button class="fav" aria-label="Save">♡</button><image-slot id="plp-2" placeholder="Piece 2"></image-slot><button class="quick">Quick View</button></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Moss Tissue Mirror Lehenga</div><div class="pr">₹1,72,000</div></div></a>
+
+        <div class="promo-tile">
+          <image-slot id="plp-promo" placeholder="Editorial campaign"></image-slot>
+          <div class="pt">
+            <span class="eyebrow">Made to Order</span>
+            <h3>Cut to your measure, finished by hand.</h3>
+            <a class="btn btn-line" style="color:var(--celadon-100);border-color:var(--gold-soft)" href="Contact.html">Book a Fitting →</a>
+          </div>
+        </div>
+
+        <a class="pcard" href="Product Detail.html"><div class="ph"><span class="flag">New</span><button class="fav" aria-label="Save">♡</button><image-slot id="plp-3" placeholder="Piece 3"></image-slot><button class="quick">Quick View</button></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Pistachio Zardozi Bridal Lehenga</div><div class="pr">₹2,48,000</div></div></a>
+        <a class="pcard" href="Product Detail.html"><div class="ph"><button class="fav" aria-label="Save">♡</button><image-slot id="plp-4" placeholder="Piece 4"></image-slot><button class="quick">Quick View</button></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Eucalyptus Organza Cape Lehenga</div><div class="pr">₹1,96,000</div></div></a>
+        <a class="pcard" href="Product Detail.html"><div class="ph"><button class="fav" aria-label="Save">♡</button><image-slot id="plp-5" placeholder="Piece 5"></image-slot><button class="quick">Quick View</button></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Forest Velvet Threadwork Lehenga</div><div class="pr">₹2,14,000</div></div></a>
+        <a class="pcard" href="Product Detail.html"><div class="ph"><button class="fav" aria-label="Save">♡</button><image-slot id="plp-6" placeholder="Piece 6"></image-slot><button class="quick">Quick View</button></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Celadon Tissue Draped Lehenga</div><div class="pr">₹1,68,000</div></div></a>
+        <a class="pcard" href="Product Detail.html"><div class="ph"><span class="flag">Bestseller</span><button class="fav" aria-label="Save">♡</button><image-slot id="plp-7" placeholder="Piece 7"></image-slot><button class="quick">Quick View</button></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Mint Mukaish Festive Lehenga</div><div class="pr">₹1,52,000</div></div></a>
+        <a class="pcard" href="Product Detail.html"><div class="ph"><button class="fav" aria-label="Save">♡</button><image-slot id="plp-8" placeholder="Piece 8"></image-slot><button class="quick">Quick View</button></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Sage Chikankari Light Lehenga</div><div class="pr">₹1,38,000</div></div></a>
+      </div>
+
+      <nav class="pager">
+        <a class="arrow" href="#">← Prev</a>
+        <a class="on" href="#">1</a>
+        <a href="#">2</a>
+        <a href="#">3</a>
+        <a class="arrow" href="#">Next →</a>
+      </nav>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="foot-top">
+      <div class="foot-brand">
+        <span class="wordmark">Tanvi Agnihotry</span>
+        <p>Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.</p>
+      </div>
+      <div class="foot-col"><h5>Shop</h5><a href="Collection.html">Lehenga Sets</a><a href="Collection.html">Jacket Sets</a><a href="Collection.html">Gowns</a><a href="Collection.html">Anarkali</a></div>
+      <div class="foot-col"><h5>The House</h5><a href="The House.html">Our Story</a><a href="The House.html">Artisanship</a><a href="Contact.html">Made to Order</a><a href="Client Care.html">Press</a></div>
+      <div class="foot-col"><h5>Client Care</h5><a href="Contact.html">Book an Appointment</a><a href="Size Guide.html">Size &amp; Fit</a><a href="Client Care.html">Shipping</a><a href="Contact.html">Contact</a></div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 Tanvi Agnihotry</span>
+      <div class="socials"><a href="#">Instagram</a><a href="#">Pinterest</a><a href="#">WhatsApp</a></div>
+    </div>
+  </footer>
+
+  <script src="image-slot.js"></script>
+  <script src="cart-drawer.js"></script>
+  <script>
+    document.querySelectorAll('.fsize, .fcolors .sw').forEach(el => el.addEventListener('click', () => el.classList.toggle('on')));
+    document.querySelectorAll('.fav').forEach(b => b.addEventListener('click', e => { e.preventDefault(); b.classList.toggle('on'); b.textContent = b.classList.contains('on') ? '♥' : '♡'; }));
+    document.querySelectorAll('.active-chips .ac button, .active-chips .clear').forEach(b => b.addEventListener('click', e => { e.preventDefault(); }));
+    const ft = document.getElementById('filterToggle'), fs = document.getElementById('filters');
+    ft.addEventListener('click', () => { ft.classList.toggle('open'); fs.classList.toggle('show'); });
+  </script>
+  <script src="mobile-nav.js"></script>
+  <script src="reveal.js"></script>
+  <script src="ambient.js"></script>
+</body>
+</html>

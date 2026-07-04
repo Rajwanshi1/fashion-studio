@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Lookbook — Tanvi Agnihotry</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="shop.css">
+<style>
+  body.shop { background: var(--forest-800); color: var(--celadon-100); }
+  .lb-cover { position: relative; height: min(94vh, 900px); overflow: hidden; display: grid; place-items: center; text-align: center; }
+  .lb-cover image-slot { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .lb-cover::after { content: ''; position: absolute; inset: 0; background: rgba(35,43,38,0.4); z-index: 2; }
+  .lb-cover .cc { position: relative; z-index: 3; color: #fff; padding: 2rem; }
+  .lb-cover .masthead { font-family: var(--serif-display); font-weight: 500; font-size: clamp(3rem,12vw,10rem); line-height: 0.88; letter-spacing: 0.02em; text-transform: uppercase; }
+  .lb-cover .sub { display: flex; gap: 1.4rem; justify-content: center; margin-top: 1.4rem; font-size: 0.7rem; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--gold-pale); }
+  .lb-cover .scroll { position: absolute; bottom: 1.6rem; left: 0; right: 0; z-index: 3; font-size: 0.62rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: rgba(255,255,255,0.7); }
+  /* image-slot fillability: cover overlays must not block drop / browse */
+  .lb-cover::after, .lb-cover .cc, .lb-cover .scroll { pointer-events: none; }
+
+  .lb { padding: clamp(3rem,7vw,6rem) var(--gutter); max-width: 1400px; margin: 0 auto; display: grid; gap: clamp(2.5rem,6vw,5rem); }
+
+  /* spread variants */
+  .spread { display: grid; gap: clamp(1.2rem,3vw,2.2rem); align-items: center; }
+  .spread.duo { grid-template-columns: 1fr 1fr; }
+  .spread.offset { grid-template-columns: 1.3fr 0.7fr; }
+  .spread.text-left { grid-template-columns: 0.8fr 1.2fr; }
+  @media (max-width: 760px){ .spread.duo, .spread.offset, .spread.text-left { grid-template-columns: 1fr; } }
+  .spread image-slot { width: 100%; }
+  .ar45 { aspect-ratio: 4/5; }
+  .ar34 { aspect-ratio: 3/4; }
+  .ar11 { aspect-ratio: 1/1; }
+  .ar54 { aspect-ratio: 5/4; }
+
+  .look-no { font-family: var(--serif-display); font-size: 1rem; color: var(--gold-soft); letter-spacing: var(--track-wide); }
+  .caption { padding: 1rem 0; }
+  .caption h3 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: clamp(1.6rem,3vw,2.4rem); line-height: 1.2; margin: 0.8rem 0; }
+  .caption p { color: var(--celadon-200); font-size: var(--t-sm); max-width: 38ch; margin-bottom: 1.2rem; }
+  .caption .shop-look { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold-pale); border-bottom: 1px solid var(--gold-soft); padding-bottom: 4px; }
+  .caption .shop-look:hover { color: #fff; }
+
+  .pull { text-align: center; max-width: 760px; margin: clamp(1rem,3vw,2rem) auto; }
+  .pull blockquote { margin: 0; font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: clamp(1.8rem,4vw,3rem); line-height: 1.3; }
+  .pull cite { display: block; margin-top: 1.4rem; font-family: var(--sans); font-style: normal; font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold-soft); }
+
+  /* footer override on dark */
+  .foot { background: var(--ink); margin-top: 0; }
+</style>
+</head>
+<body class="shop">
+  <div class="ticker"><div class="ticker-track">
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+  </div></div>
+  <nav class="nav">
+    <div class="nav-links left"><a href="Collection.html">Women</a><a href="Collections.html">Collections</a><a href="Lookbook.html">Lookbook</a></div>
+    <div class="wordmark"><a href="Homepage.html">Tanvi Agnihotry</a></div>
+    <div class="nav-links right"><a href="Search.html">Search</a><a href="Account.html">Account</a><a class="bag" href="Cart.html">Bag <span class="count">(2)</span></a></div>
+  </nav>
+
+  <header class="lb-cover" data-screen-label="Lookbook">
+    <image-slot id="lb-cover" placeholder="Lookbook cover — full bleed editorial" fit="cover"></image-slot>
+    <div class="cc">
+      <div class="masthead">The Edit</div>
+      <div class="sub"><span>Volume 01</span><span>·</span><span>Spring 2026</span><span>·</span><span>32 Looks</span></div>
+    </div>
+    <div class="scroll">Scroll to enter ↓</div>
+  </header>
+
+  <main class="lb">
+    <section class="spread text-left">
+      <div class="caption">
+        <span class="look-no">Look 01</span>
+        <h3>The garden, after rain.</h3>
+        <p>Sage sequin jacket lehenga with a hand-draped dupatta. Structured shoulder, fluid hem.</p>
+        <a class="shop-look" href="Product Detail.html">Shop the Look →</a>
+      </div>
+      <image-slot id="lb-1" class="ar54" placeholder="Look 01 — wide"></image-slot>
+    </section>
+
+    <section class="spread duo">
+      <image-slot id="lb-2" class="ar34" placeholder="Look 02"></image-slot>
+      <image-slot id="lb-3" class="ar34" placeholder="Look 03"></image-slot>
+    </section>
+
+    <div class="pull"><blockquote>"She does not choose between heritage and the present. She wears both, at once."</blockquote><cite>— The Verdant Edit</cite></div>
+
+    <section class="spread offset">
+      <image-slot id="lb-4" class="ar45" placeholder="Look 04 — large"></image-slot>
+      <div class="caption">
+        <span class="look-no">Look 04</span>
+        <h3>Moss &amp; mirror.</h3>
+        <p>A tissue draped gown caught with mirror-work — light moving as you do.</p>
+        <a class="shop-look" href="Product Detail.html">Shop the Look →</a>
+      </div>
+    </section>
+
+    <section class="spread duo">
+      <image-slot id="lb-5" class="ar34" placeholder="Look 05"></image-slot>
+      <image-slot id="lb-6" class="ar34" placeholder="Look 06"></image-slot>
+    </section>
+
+    <section class="spread">
+      <image-slot id="lb-7" class="ar54" placeholder="Look 07 — full bleed"></image-slot>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="foot-top">
+      <div class="foot-brand"><span class="wordmark">Tanvi Agnihotry</span><p>Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.</p></div>
+      <div class="foot-col"><h5>Shop</h5><a href="Collection.html">Lehenga Sets</a><a href="Collection.html">Jacket Sets</a><a href="Collection.html">Gowns</a><a href="Collection.html">Anarkali</a></div>
+      <div class="foot-col"><h5>The House</h5><a href="The House.html">Our Story</a><a href="The House.html">Artisanship</a><a href="Contact.html">Made to Order</a><a href="Client Care.html">Press</a></div>
+      <div class="foot-col"><h5>Client Care</h5><a href="Contact.html">Book an Appointment</a><a href="Size Guide.html">Size &amp; Fit</a><a href="Client Care.html">Shipping</a><a href="Contact.html">Contact</a></div>
+    </div>
+    <div class="foot-bottom"><span>© 2026 Tanvi Agnihotry</span><div class="socials"><a href="#">Instagram</a><a href="#">Pinterest</a><a href="#">WhatsApp</a></div></div>
+  </footer>
+
+  <script src="image-slot.js"></script>
+  <script src="cart-drawer.js"></script>
+  <script src="mobile-nav.js"></script>
+  <script src="reveal.js"></script>
+  <script src="ambient.js"></script>
+</body>
+</html>

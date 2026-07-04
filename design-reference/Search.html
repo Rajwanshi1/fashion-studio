@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Search — Tanvi Agnihotry</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="shop.css">
+<style>
+  .search-band { padding: clamp(2.5rem,6vw,5rem) var(--gutter) clamp(1.5rem,3vw,2.5rem); text-align: center; }
+  .search-band .eyebrow { display: block; margin-bottom: 1.4rem; }
+  .search-box { max-width: 620px; margin: 0 auto; display: flex; align-items: center; gap: 1rem; border-bottom: 1px solid var(--ink); padding-bottom: 0.6rem; }
+  .search-box input { flex: 1; border: 0; background: none; font-family: var(--serif-soft); font-size: clamp(1.6rem,3.5vw,2.4rem); font-style: italic; color: var(--ink); }
+  .search-box input::placeholder { color: var(--sage-500); }
+  .search-box input:focus { outline: none; }
+  .search-box .ic { color: var(--gold); font-size: 1.3rem; }
+  .suggest { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; margin-top: 1.8rem; }
+  .suggest .lbl { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); align-self: center; margin-right: 0.4rem; }
+
+  .results { padding: clamp(1.5rem,3vw,2.5rem) var(--gutter) clamp(3rem,6vw,5rem); max-width: 1480px; margin: 0 auto; }
+  .results-head { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--hairline); padding-bottom: 1.2rem; margin-bottom: clamp(1.5rem,3vw,2.2rem); }
+  .results-head h2 { font-family: var(--serif-display); font-size: var(--t-h3); }
+  .results-head h2 em { font-style: italic; color: var(--gold); }
+  .results-head .count { font-size: 0.72rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }
+</style>
+</head>
+<body class="shop">
+  <div class="ticker"><div class="ticker-track">
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+  </div></div>
+  <nav class="nav">
+    <div class="nav-links left"><a href="Collection.html">Women</a><a href="Collections.html">Collections</a><a href="Lookbook.html">Lookbook</a></div>
+    <div class="wordmark"><a href="Homepage.html">Tanvi Agnihotry</a></div>
+    <div class="nav-links right"><a href="Search.html">Search</a><a href="Account.html">Account</a><a class="bag" href="Cart.html">Bag <span class="count">(2)</span></a></div>
+  </nav>
+
+  <section class="search-band" data-screen-label="Search">
+    <span class="eyebrow">Find Your Piece</span>
+    <div class="search-box">
+      <span class="ic">⌕</span>
+      <input type="text" value="sage lehenga" aria-label="Search">
+    </div>
+    <div class="suggest">
+      <span class="lbl">Popular</span>
+      <button class="chip">Lehenga</button>
+      <button class="chip">Anarkali</button>
+      <button class="chip">Bridal</button>
+      <button class="chip">Sage</button>
+      <button class="chip">Made to Measure</button>
+    </div>
+  </section>
+
+  <section class="results">
+    <div class="results-head">
+      <h2>Results for <em>"sage lehenga"</em></h2>
+      <span class="count">6 Pieces</span>
+    </div>
+    <div class="pgrid cols-4">
+      <a class="pcard" href="Product Detail.html"><div class="ph"><span class="flag">Bestseller</span><image-slot id="s-1" placeholder="Result 1"></image-slot></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Sage Sequin Jacket Lehenga</div><div class="pr">₹1,84,000</div></div></a>
+      <a class="pcard" href="Product Detail.html"><div class="ph"><image-slot id="s-2" placeholder="Result 2"></image-slot></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Sage Chikankari Light Lehenga</div><div class="pr">₹1,38,000</div></div></a>
+      <a class="pcard" href="Product Detail.html"><div class="ph"><image-slot id="s-3" placeholder="Result 3"></image-slot></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Moss Tissue Mirror Lehenga</div><div class="pr">₹1,72,000</div></div></a>
+      <a class="pcard" href="Product Detail.html"><div class="ph"><span class="flag">New</span><image-slot id="s-4" placeholder="Result 4"></image-slot></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Eucalyptus Organza Cape Lehenga</div><div class="pr">₹1,96,000</div></div></a>
+      <a class="pcard" href="Product Detail.html"><div class="ph"><image-slot id="s-5" placeholder="Result 5"></image-slot></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Celadon Tissue Draped Lehenga</div><div class="pr">₹1,68,000</div></div></a>
+      <a class="pcard" href="Product Detail.html"><div class="ph"><image-slot id="s-6" placeholder="Result 6"></image-slot></div><div class="m"><div class="cat">Lehenga Set</div><div class="nm">Mint Mukaish Festive Lehenga</div><div class="pr">₹1,52,000</div></div></a>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div class="foot-top">
+      <div class="foot-brand"><span class="wordmark">Tanvi Agnihotry</span><p>Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.</p></div>
+      <div class="foot-col"><h5>Shop</h5><a href="Collection.html">Lehenga Sets</a><a href="Collection.html">Jacket Sets</a><a href="Collection.html">Gowns</a><a href="Collection.html">Anarkali</a></div>
+      <div class="foot-col"><h5>The House</h5><a href="The House.html">Our Story</a><a href="The House.html">Artisanship</a><a href="Contact.html">Made to Order</a><a href="Client Care.html">Press</a></div>
+      <div class="foot-col"><h5>Client Care</h5><a href="Contact.html">Book an Appointment</a><a href="Size Guide.html">Size &amp; Fit</a><a href="Client Care.html">Shipping</a><a href="Contact.html">Contact</a></div>
+    </div>
+    <div class="foot-bottom"><span>© 2026 Tanvi Agnihotry</span><div class="socials"><a href="#">Instagram</a><a href="#">Pinterest</a><a href="#">WhatsApp</a></div></div>
+  </footer>
+
+  <script src="image-slot.js"></script>
+  <script src="cart-drawer.js"></script>
+  <script src="mobile-nav.js"></script>
+  <script src="reveal.js"></script>
+  <script src="ambient.js"></script>
+</body>
+</html>

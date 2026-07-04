@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sage Sequin Jacket Lehenga — Tanvi Agnihotry</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="shop.css">
+<style>
+  /* ---- PDP layout ---- */
+  .pdp { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: clamp(2rem,4vw,4rem); padding: 1.6rem var(--gutter) clamp(3rem,6vw,5rem); align-items: start; max-width: 1480px; margin: 0 auto; }
+  .pdp > *, .gallery > *, .stage, .thumbs { min-width: 0; }
+  @media (max-width: 900px){ .pdp { grid-template-columns: 1fr; } }
+
+  /* gallery */
+  .gallery { display: grid; grid-template-columns: 76px 1fr; gap: 1rem; position: sticky; top: 96px; }
+  @media (max-width: 560px){ .gallery { grid-template-columns: 1fr; } }
+  .thumbs { display: flex; flex-direction: column; gap: 0.7rem; }
+  @media (max-width: 560px){ .thumbs { flex-direction: row; order: 2; } }
+  .thumbs image-slot { width: 100%; aspect-ratio: 3/4; cursor: pointer; outline: 1px solid transparent; transition: outline-color var(--dur) var(--ease); }
+  .thumbs image-slot.active { outline-color: var(--gold); }
+  .stage { position: relative; }
+  .stage image-slot { width: 100%; aspect-ratio: 3/4; }
+  .stage .flag { position: absolute; top: 1rem; left: 1rem; z-index: 3; display:flex; flex-direction: column; gap: 0.5rem; }
+  .stage .flag span { background: var(--paper); color: var(--gold); font-size: 0.58rem; letter-spacing: var(--track-wide); text-transform: uppercase; padding: 0.45em 0.9em; border-radius: 999px; align-self: flex-start; }
+
+  /* info column */
+  .info { padding-top: 0.4rem; }
+  .info .brandline { font-size: var(--t-eyebrow); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--gold); }
+  .info h1 { font-family: var(--serif-display); font-size: clamp(1.9rem,3.4vw,2.7rem); line-height: 1.05; margin: 0.9rem 0 1rem; }
+  .info .price { font-family: var(--serif-soft); font-size: 1.7rem; color: var(--forest-700); }
+  .info .price .tax { font-family: var(--sans); font-size: 0.7rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); margin-left: 0.6rem; }
+  .info .desc { color: var(--fg-muted); margin: 1.4rem 0; max-width: 46ch; }
+
+  .divline { height: 1px; background: var(--hairline); margin: 1.8rem 0; }
+
+  .opt-label { display:flex; justify-content: space-between; align-items: baseline; font-size: 0.7rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink); margin-bottom: 0.9rem; }
+  .opt-label .help { color: var(--gold); cursor: pointer; }
+
+  .swatches { display:flex; gap: 0.7rem; margin-bottom: 1.8rem; }
+  .swatch { width: 30px; height: 30px; border-radius: 999px; cursor: pointer; outline: 1px solid var(--hairline); outline-offset: 3px; transition: outline-color var(--dur) var(--ease); }
+  .swatch.active { outline-color: var(--gold); }
+
+  .sizes { display:flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .size { min-width: 48px; padding: 0.7em 0.9em; text-align:center; border: 1px solid var(--hairline); background: none; font-family: var(--sans); font-size: 0.8rem; letter-spacing: 0.04em; cursor: pointer; transition: all var(--dur) var(--ease); }
+  .size:hover { border-color: var(--gold); }
+  .size.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .size.custom { letter-spacing: var(--track-wide); text-transform: uppercase; font-size: 0.66rem; }
+
+  .mto { display:flex; gap: 0.8rem; align-items: flex-start; background: var(--celadon-50); border: 1px solid var(--hairline); padding: 1rem 1.2rem; margin-bottom: 1.6rem; }
+  .mto .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--gold); margin-top: 0.5rem; flex: none; }
+  .mto p { margin: 0; font-size: var(--t-sm); color: var(--ink-soft); }
+  .mto p strong { color: var(--ink); font-weight: 500; }
+
+  .buy-row { display:flex; gap: 0.8rem; align-items: stretch; margin-bottom: 0.8rem; }
+  .buy-row .qty { flex: none; }
+  .buy-row .btn-buy { flex: 1; }
+  .wish { margin-bottom: 2rem; }
+
+  /* accordions */
+  .acc { border-top: 1px solid var(--hairline); }
+  .acc summary { list-style: none; cursor: pointer; padding: 1.2rem 0; display:flex; justify-content: space-between; align-items: center; font-size: 0.78rem; letter-spacing: var(--track-wide); text-transform: uppercase; }
+  .acc summary::-webkit-details-marker { display:none; }
+  .acc summary .ic { color: var(--gold); transition: transform var(--dur) var(--ease); font-size: 1.1rem; }
+  .acc[open] summary .ic { transform: rotate(45deg); }
+  .acc .acc-body { padding: 0 0 1.4rem; color: var(--fg-muted); font-size: var(--t-sm); }
+  .acc .acc-body ul { margin: 0; padding-left: 1.1rem; }
+  .acc .acc-body li { margin-bottom: 0.4rem; }
+
+  /* editorial craft band */
+  .craft { background: var(--forest-800); color: var(--celadon-100); padding: var(--section-y) var(--gutter); }
+  .craft-grid { display:grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem,5vw,4rem); align-items:center; max-width: 1280px; margin: 0 auto; }
+  @media (max-width: 880px){ .craft-grid { grid-template-columns: 1fr; } }
+  .craft image-slot { width:100%; aspect-ratio: 4/3; }
+  .craft .eyebrow { color: var(--gold-soft); display:block; margin-bottom: 1.2rem; }
+  .craft h2 { font-family: var(--serif-soft); font-weight:300; font-style: italic; font-size: var(--t-h1); line-height: 1.15; margin-bottom: 1.2rem; }
+  .craft p { color: var(--celadon-200); max-width: 44ch; }
+
+  /* related */
+  .related { padding: var(--section-y) var(--gutter); }
+  .related .head-center { text-align:center; margin-bottom: clamp(2rem,4vw,3rem); }
+  .related .head-center .eyebrow { display:block; margin-bottom: 0.9rem; }
+  .related .head-center h2 { font-family: var(--serif-display); font-size: var(--t-h2); }
+  .rel-grid { display:grid; grid-template-columns: repeat(4,1fr); gap: clamp(0.8rem,2vw,1.8rem); max-width: 1480px; margin: 0 auto; }
+  @media (max-width: 980px){ .rel-grid { grid-template-columns: repeat(2,1fr); } }
+  .rel { display:block; }
+  .rel image-slot { width:100%; aspect-ratio: 3/4; }
+  .rel .m { padding-top: 1rem; }
+  .rel .m .nm { font-family: var(--serif-display); font-size: 1rem; line-height: 1.25; transition: color var(--dur) var(--ease); }
+  .rel:hover .m .nm { color: var(--gold); }
+  .rel .m .pr { font-size: var(--t-sm); color: var(--fg-muted); margin-top: 0.4rem; }
+
+  /* toast */
+  .toast { position: fixed; right: 20px; bottom: 20px; z-index: 200; background: var(--ink); color: var(--paper); padding: 1rem 1.4rem; border-radius: 4px; font-size: 0.78rem; letter-spacing: 0.04em; transform: translateY(140%); transition: transform 360ms var(--ease); display:flex; gap:0.7rem; align-items:center; }
+  .toast.show { transform: none; }
+  .toast .g { color: var(--gold-soft); }
+</style>
+</head>
+<body class="shop">
+  <div class="ticker"><div class="ticker-track">
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+  </div></div>
+
+  <nav class="nav">
+    <div class="nav-links left">
+      <a href="Homepage.html">Women</a>
+      <a href="Homepage.html#feature">Collections</a>
+      <a href="Homepage.html#look">Lookbook</a>
+    </div>
+    <div class="wordmark"><a href="Homepage.html">Tanvi Agnihotry</a></div>
+    <div class="nav-links right">
+      <a href="#">Search</a>
+      <a href="#">Account</a>
+      <a class="bag" href="Cart.html">Bag <span class="count">(1)</span></a>
+    </div>
+  </nav>
+
+  <div class="crumbs">
+    <a href="Homepage.html">Home</a><span class="sep">/</span>
+    <a href="#">Lehenga Sets</a><span class="sep">/</span>
+    <span class="here">Sage Sequin Jacket Lehenga</span>
+  </div>
+
+  <!-- PDP -->
+  <main class="pdp" data-screen-label="Product Detail">
+    <div class="gallery">
+      <div class="thumbs" id="thumbs">
+        <image-slot id="pdp-t1" class="active" placeholder="View 1"></image-slot>
+        <image-slot id="pdp-t2" placeholder="View 2"></image-slot>
+        <image-slot id="pdp-t3" placeholder="Detail"></image-slot>
+        <image-slot id="pdp-t4" placeholder="Back"></image-slot>
+      </div>
+      <div class="stage">
+        <div class="flag"><span>Bestseller</span><span>Made to Order</span></div>
+        <image-slot id="pdp-main" placeholder="Drop main product image — full figure" fit="cover"></image-slot>
+      </div>
+    </div>
+
+    <div class="info">
+      <div class="brandline">The Verdant Edit</div>
+      <h1>Sage Sequin Jacket Lehenga</h1>
+      <div class="price">₹1,84,000 <span class="tax">incl. of all taxes</span></div>
+      <p class="desc">A hand-embroidered jacket lehenga in moss-sage tissue, scattered with matte sequins and fine zardozi along the hem. Structured shoulder, fluid drape — heritage craft cut for the way you actually move.</p>
+
+      <div class="divline"></div>
+
+      <div class="opt-label"><span>Colour — <strong id="colorName">Sage</strong></span></div>
+      <div class="swatches" id="swatches">
+        <span class="swatch active" style="background:#9CB6AA" data-name="Sage"></span>
+        <span class="swatch" style="background:#7C9A8C" data-name="Moss"></span>
+        <span class="swatch" style="background:#C9AE7A" data-name="Antique Gold"></span>
+        <span class="swatch" style="background:#34423A" data-name="Deep Forest"></span>
+      </div>
+
+      <div class="opt-label"><span>Size</span><span class="help">Size &amp; Fit Guide</span></div>
+      <div class="sizes" id="sizes">
+        <button class="size">XS</button>
+        <button class="size active">S</button>
+        <button class="size">M</button>
+        <button class="size">L</button>
+        <button class="size">XL</button>
+        <button class="size custom">Made to Measure</button>
+      </div>
+
+      <div class="mto">
+        <span class="dot"></span>
+        <p><strong>Made to order.</strong> Each piece is crafted on commission and dispatched in 4–6 weeks. Book a complimentary virtual fitting for a made-to-measure cut.</p>
+      </div>
+
+      <div class="buy-row">
+        <div class="qty">
+          <button type="button" data-step="-1">−</button>
+          <span class="val" id="qty">1</span>
+          <button type="button" data-step="1">+</button>
+        </div>
+        <button class="btn-buy" id="addBtn">Add to Bag</button>
+      </div>
+      <button class="btn-outline wish">♡ &nbsp; Add to Wishlist</button>
+
+      <details class="acc" open>
+        <summary>Details &amp; Composition <span class="ic">+</span></summary>
+        <div class="acc-body">
+          <ul>
+            <li>Moss-sage tissue with matte hand-sequin &amp; zardozi embroidery</li>
+            <li>Structured jacket, A-line lehenga, matching draped dupatta</li>
+            <li>Concealed side zip · cotton-silk lining</li>
+            <li>Dry clean only · handle embroidery with care</li>
+          </ul>
+        </div>
+      </details>
+      <details class="acc">
+        <summary>Made to Order &amp; Fittings <span class="ic">+</span></summary>
+        <div class="acc-body">Crafted on commission in our atelier. Standard sizes ship in 4–6 weeks; made-to-measure in 6–8 weeks following a virtual fitting. Our team will be in touch within 48 hours of order to confirm measurements.</div>
+      </details>
+      <details class="acc">
+        <summary>Shipping &amp; Returns <span class="ic">+</span></summary>
+        <div class="acc-body">Complimentary insured shipping worldwide. As each piece is made to order, we offer exchanges and store credit rather than refunds. Made-to-measure pieces are final sale.</div>
+      </details>
+    </div>
+  </main>
+
+  <!-- CRAFT BAND -->
+  <section class="craft">
+    <div class="craft-grid">
+      <image-slot id="pdp-craft" placeholder="Atelier / embroidery close-up"></image-slot>
+      <div>
+        <span class="eyebrow">The Making</span>
+        <h2>Three hundred hours, by hand.</h2>
+        <p>Every Verdant Edit piece begins as a single length of tissue. Our karigars map each motif, lay the zardozi, and set every sequin by hand — a slow craft we refuse to rush.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- RELATED -->
+  <section class="related">
+    <div class="head-center">
+      <span class="eyebrow">Complete the Look</span>
+      <h2>You may also love</h2>
+    </div>
+    <div class="rel-grid">
+      <a class="rel" href="Product Detail.html"><image-slot id="pdp-r1" placeholder="Related 1"></image-slot><div class="m"><div class="nm">Moss Tissue Draped Gown</div><div class="pr">₹96,000</div></div></a>
+      <a class="rel" href="Product Detail.html"><image-slot id="pdp-r2" placeholder="Related 2"></image-slot><div class="m"><div class="nm">Pistachio Threadwork Anarkali</div><div class="pr">₹1,42,000</div></div></a>
+      <a class="rel" href="Product Detail.html"><image-slot id="pdp-r3" placeholder="Related 3"></image-slot><div class="m"><div class="nm">Celadon Organza Cape Set</div><div class="pr">₹1,28,000</div></div></a>
+      <a class="rel" href="Product Detail.html"><image-slot id="pdp-r4" placeholder="Related 4"></image-slot><div class="m"><div class="nm">Eucalyptus Mirror-Work Sharara</div><div class="pr">₹1,56,000</div></div></a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="foot">
+    <div class="foot-top">
+      <div class="foot-brand">
+        <span class="wordmark">Tanvi Agnihotry</span>
+        <p>Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.</p>
+      </div>
+      <div class="foot-col"><h5>Shop</h5><a href="#">Lehenga Sets</a><a href="#">Jacket Sets</a><a href="#">Gowns</a><a href="#">Anarkali</a></div>
+      <div class="foot-col"><h5>The House</h5><a href="#">Our Story</a><a href="#">Artisanship</a><a href="#">Made to Order</a><a href="#">Press</a></div>
+      <div class="foot-col"><h5>Client Care</h5><a href="#">Book an Appointment</a><a href="#">Size &amp; Fit</a><a href="#">Shipping</a><a href="#">Contact</a></div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 Tanvi Agnihotry</span>
+      <div class="socials"><a href="#">Instagram</a><a href="#">Pinterest</a><a href="#">WhatsApp</a></div>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast"><span class="g">✓</span> Added to your bag</div>
+
+  <script src="image-slot.js"></script>
+  <script>
+    // thumbnail select
+    document.querySelectorAll('#thumbs image-slot').forEach(t => {
+      t.addEventListener('click', () => {
+        document.querySelectorAll('#thumbs image-slot').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+      });
+    });
+    // swatch select
+    document.querySelectorAll('#swatches .swatch').forEach(s => {
+      s.addEventListener('click', () => {
+        document.querySelectorAll('#swatches .swatch').forEach(x => x.classList.remove('active'));
+        s.classList.add('active');
+        document.getElementById('colorName').textContent = s.dataset.name;
+      });
+    });
+    // size select
+    document.querySelectorAll('#sizes .size').forEach(b => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('#sizes .size').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+      });
+    });
+    // qty
+    let q = 1;
+    document.querySelectorAll('.qty button').forEach(b => {
+      b.addEventListener('click', () => {
+        q = Math.max(1, q + parseInt(b.dataset.step, 10));
+        document.getElementById('qty').textContent = q;
+      });
+    });
+    // add to bag toast
+    const toast = document.getElementById('toast');
+    document.getElementById('addBtn').addEventListener('click', () => {
+      toast.classList.add('show');
+      clearTimeout(window.__t);
+      window.__t = setTimeout(() => toast.classList.remove('show'), 2600);
+    });
+  </script>
+  <script src="mobile-nav.js"></script>
+  <script src="reveal.js"></script>
+  <script src="ambient.js"></script>
+</body>
+</html>

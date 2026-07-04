@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The House — Tanvi Agnihotry</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="shop.css">
+<style>
+  /* hero */
+  .house-hero { position: relative; height: min(78vh, 720px); overflow: hidden; display: flex; align-items: flex-end; }
+  .house-hero image-slot { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .house-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(35,43,38,0.7), rgba(35,43,38,0.05) 55%); z-index: 2; }
+  .house-hero .ht { position: relative; z-index: 3; padding: clamp(2rem,5vw,4rem) var(--gutter); color: #fff; max-width: 900px; }
+  .house-hero .eyebrow { color: var(--gold-pale); display: block; margin-bottom: 1.2rem; }
+  .house-hero h1 { font-family: var(--serif-soft); font-weight: 300; font-style: italic; font-size: var(--t-mega); line-height: 0.98; }
+
+  .manifesto { max-width: 820px; margin: 0 auto; padding: var(--section-y) var(--gutter); text-align: center; }
+  .manifesto .lede { font-family: var(--serif-soft); font-style: italic; font-size: clamp(1.5rem,3vw,2.2rem); line-height: 1.4; color: var(--forest-700); }
+  .manifesto p { color: var(--ink-soft); margin-top: 1.8rem; font-size: 1.05rem; }
+
+  /* split story */
+  .story { padding: 0 var(--gutter) var(--section-y); max-width: 1380px; margin: 0 auto; display: grid; gap: clamp(3rem,7vw,6rem); }
+  .srow { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem,5vw,4.5rem); align-items: center; }
+  .srow.flip .stext { order: 2; }
+  @media (max-width: 820px){ .srow { grid-template-columns: 1fr; } .srow.flip .stext { order: 0; } }
+  .srow image-slot { width: 100%; aspect-ratio: 4/5; }
+  .stext .num { font-family: var(--serif-display); font-size: 2.6rem; color: var(--gold-soft); line-height: 1; margin-bottom: 1rem; }
+  .stext .eyebrow { display: block; margin-bottom: 0.9rem; }
+  .stext h2 { font-family: var(--serif-display); font-size: var(--t-h2); margin-bottom: 1.2rem; }
+  .stext p { color: var(--fg-muted); max-width: 46ch; }
+
+  /* values band */
+  .values { background: var(--forest-800); color: var(--celadon-100); padding: var(--section-y) var(--gutter); }
+  .values .vh { text-align: center; max-width: 600px; margin: 0 auto clamp(2.5rem,5vw,3.5rem); }
+  .values .vh .eyebrow { color: var(--gold-soft); display: block; margin-bottom: 1rem; }
+  .values .vh h2 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: var(--t-h1); }
+  .vgrid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: rgba(228,212,180,0.18); border: 1px solid rgba(228,212,180,0.18); max-width: 1100px; margin: 0 auto; }
+  @media (max-width: 760px){ .vgrid { grid-template-columns: 1fr; } }
+  .vcell { background: var(--forest-800); padding: 2.2rem 1.8rem; }
+  .vcell .vn { font-family: var(--serif-display); font-size: 1.1rem; color: var(--gold-soft); margin-bottom: 0.9rem; }
+  .vcell h3 { font-family: var(--serif-display); font-size: 1.3rem; margin-bottom: 0.8rem; }
+  .vcell p { font-size: var(--t-sm); color: var(--celadon-200); }
+
+  /* stats */
+  .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: var(--hairline); border-block: 1px solid var(--hairline); }
+  @media (max-width: 700px){ .stats { grid-template-columns: 1fr; } }
+  .stat { background: var(--paper); padding: clamp(2rem,4vw,3rem) var(--gutter); text-align: center; }
+  .stat .big { font-family: var(--serif-display); font-size: clamp(2.4rem,5vw,3.4rem); color: var(--forest-700); }
+  .stat .lbl { font-size: 0.68rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); margin-top: 0.6rem; }
+
+  /* cta */
+  .house-cta { text-align: center; padding: var(--section-y) var(--gutter); }
+  .house-cta h2 { font-family: var(--serif-display); font-size: var(--t-h2); margin-bottom: 1rem; }
+  .house-cta p { color: var(--fg-muted); max-width: 44ch; margin: 0 auto 2rem; }
+</style>
+</head>
+<body class="shop">
+  <div class="ticker"><div class="ticker-track">
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+  </div></div>
+  <nav class="nav">
+    <div class="nav-links left"><a href="Collection.html">Women</a><a href="Collections.html">Collections</a><a href="Lookbook.html">Lookbook</a></div>
+    <div class="wordmark"><a href="Homepage.html">Tanvi Agnihotry</a></div>
+    <div class="nav-links right"><a href="Search.html">Search</a><a href="Account.html">Account</a><a class="bag" href="Cart.html">Bag <span class="count">(2)</span></a></div>
+  </nav>
+
+  <header class="house-hero" data-screen-label="The House">
+    <image-slot id="h-hero" placeholder="Atelier / founder portrait — full bleed" fit="cover"></image-slot>
+    <div class="ht">
+      <span class="eyebrow">The House of Tanvi Agnihotry</span>
+      <h1>Heritage,<br>made to move.</h1>
+    </div>
+  </header>
+
+  <section class="manifesto">
+    <p class="lede">We began with a simple conviction — that an Indian woman should never have to choose between the weight of tradition and the ease of the present.</p>
+    <p>Tanvi Agnihotry is an indo-western couture house built on hand-craft. Every piece is conceived in our studio, embroidered by karigars who have carried their craft for generations, and cut to the way you actually live — at the wedding, the reception, and every evening in between.</p>
+  </section>
+
+  <section class="story">
+    <div class="srow">
+      <image-slot id="h-1" placeholder="The studio"></image-slot>
+      <div class="stext">
+        <div class="num">01</div>
+        <span class="eyebrow">The Beginning</span>
+        <h2>From a single length of tissue.</h2>
+        <p>Founded in 2026, the house grew from a studio in Mumbai and a small circle of master embroiderers. We chose green as our signature — the colour of renewal — and built every collection around it.</p>
+      </div>
+    </div>
+    <div class="srow flip">
+      <div class="stext">
+        <div class="num">02</div>
+        <span class="eyebrow">The Craft</span>
+        <h2>Three hundred hours, by hand.</h2>
+        <p>Zardozi, mukaish, chikankari, mirror — our karigars map each motif and set every sequin individually. Nothing is rushed; nothing is machine-finished where a hand can do it better.</p>
+      </div>
+      <image-slot id="h-2" placeholder="Embroidery detail"></image-slot>
+    </div>
+    <div class="srow">
+      <image-slot id="h-3" placeholder="Made to order fitting"></image-slot>
+      <div class="stext">
+        <div class="num">03</div>
+        <span class="eyebrow">Made to Order</span>
+        <h2>Cut to your measure.</h2>
+        <p>We make to order, never to waste. Each commission begins with a consultation — virtual or in our studio — so the finished piece is yours alone, in fit and in feeling.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="values">
+    <div class="vh"><span class="eyebrow">What We Hold To</span><h2>The house values.</h2></div>
+    <div class="vgrid">
+      <div class="vcell"><div class="vn">I.</div><h3>Hand over Machine</h3><p>Every embellishment is placed by a karigar's hand. Slow craft, honestly made.</p></div>
+      <div class="vcell"><div class="vn">II.</div><h3>Made, not Stocked</h3><p>We craft on commission — reducing waste and making each piece personal.</p></div>
+      <div class="vcell"><div class="vn">III.</div><h3>Heritage, Forward</h3><p>Archival techniques, contemporary silhouettes. Tradition you can actually wear.</p></div>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="stat"><div class="big">40+</div><div class="lbl">Master Karigars</div></div>
+    <div class="stat"><div class="big">300 hrs</div><div class="lbl">Avg. per Piece</div></div>
+    <div class="stat"><div class="big">100%</div><div class="lbl">Made to Order</div></div>
+  </section>
+
+  <section class="house-cta">
+    <h2>Begin your commission</h2>
+    <p>Book a complimentary consultation with our atelier — virtual or in studio.</p>
+    <a class="btn btn-solid" style="background:var(--ink);color:var(--paper);border-radius:999px;" href="Contact.html">Book an Appointment</a>
+  </section>
+
+  <footer class="foot">
+    <div class="foot-top">
+      <div class="foot-brand"><span class="wordmark">Tanvi Agnihotry</span><p>Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.</p></div>
+      <div class="foot-col"><h5>Shop</h5><a href="Collection.html">Lehenga Sets</a><a href="Collection.html">Jacket Sets</a><a href="Collection.html">Gowns</a><a href="Collection.html">Anarkali</a></div>
+      <div class="foot-col"><h5>The House</h5><a href="The House.html">Our Story</a><a href="The House.html">Artisanship</a><a href="Contact.html">Made to Order</a><a href="Client Care.html">Press</a></div>
+      <div class="foot-col"><h5>Client Care</h5><a href="Contact.html">Book an Appointment</a><a href="Size Guide.html">Size &amp; Fit</a><a href="Client Care.html">Shipping</a><a href="Contact.html">Contact</a></div>
+    </div>
+    <div class="foot-bottom"><span>© 2026 Tanvi Agnihotry</span><div class="socials"><a href="#">Instagram</a><a href="#">Pinterest</a><a href="#">WhatsApp</a></div></div>
+  </footer>
+
+  <script src="image-slot.js"></script>
+  <script src="cart-drawer.js"></script>
+  <script src="mobile-nav.js"></script>
+  <script src="reveal.js"></script>
+  <script src="ambient.js"></script>
+</body>
+</html>

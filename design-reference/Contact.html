@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact & Appointments — Tanvi Agnihotry</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="shop.css">
+<style>
+  .ct { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 0; max-width: 1320px; margin: 0 auto; }
+  @media (max-width: 880px){ .ct { grid-template-columns: 1fr; } }
+  .ct-aside { background: var(--forest-800); color: var(--celadon-100); padding: clamp(2.5rem,5vw,4rem) clamp(1.8rem,4vw,3.5rem); }
+  .ct-aside .eyebrow { color: var(--gold-soft); display: block; margin-bottom: 1.2rem; }
+  .ct-aside h1 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: clamp(2.2rem,4vw,3.2rem); line-height: 1.1; margin-bottom: 1.4rem; }
+  .ct-aside > p { color: var(--celadon-200); font-size: var(--t-sm); max-width: 36ch; margin-bottom: 2.5rem; }
+  .ct-block { padding: 1.4rem 0; border-top: 1px solid rgba(228,212,180,0.2); }
+  .ct-block h4 { font-size: 0.64rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold-soft); margin-bottom: 0.7rem; }
+  .ct-block p { font-size: var(--t-sm); color: var(--celadon-100); margin: 0; line-height: 1.6; }
+  .ct-block a { color: var(--celadon-100); border-bottom: 1px solid rgba(228,212,180,0.3); }
+  .ct-block a:hover { color: var(--gold-pale); }
+
+  .ct-form { padding: clamp(2.5rem,5vw,4rem) clamp(1.8rem,4vw,3.5rem); }
+  .ct-form .fh { margin-bottom: 1.8rem; }
+  .ct-form .fh h2 { font-family: var(--serif-display); font-size: var(--t-h3); margin-bottom: 0.5rem; }
+  .ct-form .fh p { color: var(--fg-muted); font-size: var(--t-sm); }
+  .ct-tabs { display: flex; gap: 0.6rem; margin-bottom: 1.8rem; }
+  .ct-tab { flex: 1; padding: 0.9em; border: 1px solid var(--hairline); background: none; font-family: var(--sans); font-size: 0.7rem; letter-spacing: var(--track-wide); text-transform: uppercase; cursor: pointer; transition: all var(--dur) var(--ease); }
+  .ct-tab.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .ct-form .submit { margin-top: 0.8rem; }
+  .ok { display: none; text-align: center; padding: 2rem; background: var(--celadon-50); border: 1px solid var(--hairline-gold); margin-top: 1rem; }
+  .ok.show { display: block; }
+  .ok .s { color: var(--gold); font-size: 1.6rem; }
+  .ok h3 { font-family: var(--serif-display); font-size: 1.3rem; margin: 0.6rem 0 0.4rem; }
+  .ok p { color: var(--fg-muted); font-size: var(--t-sm); }
+</style>
+</head>
+<body class="shop">
+  <div class="ticker"><div class="ticker-track">
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+  </div></div>
+  <nav class="nav">
+    <div class="nav-links left"><a href="Collection.html">Women</a><a href="Collections.html">Collections</a><a href="Lookbook.html">Lookbook</a></div>
+    <div class="wordmark"><a href="Homepage.html">Tanvi Agnihotry</a></div>
+    <div class="nav-links right"><a href="Search.html">Search</a><a href="Account.html">Account</a><a class="bag" href="Cart.html">Bag <span class="count">(2)</span></a></div>
+  </nav>
+
+  <div class="crumbs"><a href="Homepage.html">Home</a><span class="sep">/</span><span class="here">Contact</span></div>
+
+  <main class="ct" data-screen-label="Contact">
+    <aside class="ct-aside">
+      <span class="eyebrow">Client Care</span>
+      <h1>We would love to dress you.</h1>
+      <p>Book a complimentary consultation, ask about a commission, or simply say hello. Our atelier responds within 48 hours.</p>
+      <div class="ct-block"><h4>The Studio</h4><p>Apt 4, Verdant House<br>Altamount Road, Mumbai 400026<br>By appointment only</p></div>
+      <div class="ct-block"><h4>Write to Us</h4><p><a href="#">care@tanviagnihotry.com</a><br><a href="#">+91 90000 00000</a></p></div>
+      <div class="ct-block"><h4>Studio Hours</h4><p>Monday – Saturday · 11am – 7pm IST</p></div>
+      <div class="ct-block"><h4>Follow</h4><p><a href="#">Instagram</a> &nbsp; <a href="#">Pinterest</a> &nbsp; <a href="#">WhatsApp</a></p></div>
+    </aside>
+
+    <section class="ct-form">
+      <div class="fh">
+        <h2>Get in touch</h2>
+        <p>Tell us what you're looking for and we'll be in touch.</p>
+      </div>
+      <div class="ct-tabs">
+        <button class="ct-tab on" data-tab="appointment">Book an Appointment</button>
+        <button class="ct-tab" data-tab="enquiry">General Enquiry</button>
+      </div>
+
+      <form id="ctForm" onsubmit="document.getElementById('ctForm').style.display='none';document.getElementById('ctOk').classList.add('show');return false;">
+        <div class="grid2">
+          <div class="field"><label class="lab">First Name</label><input class="inp" placeholder="First name" required></div>
+          <div class="field"><label class="lab">Last Name</label><input class="inp" placeholder="Last name" required></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label class="lab">Email</label><input class="inp" type="email" placeholder="you@example.com" required></div>
+          <div class="field"><label class="lab">Phone</label><input class="inp" type="tel" placeholder="+91 90000 00000"></div>
+        </div>
+        <div class="grid2" id="apptFields">
+          <div class="field"><label class="lab">Preferred Date</label><input class="inp" type="text" placeholder="DD / MM / YYYY"></div>
+          <div class="field"><label class="lab">Consultation Type</label><select class="inp"><option>Virtual consultation</option><option>In-studio (Mumbai)</option><option>Bridal commission</option></select></div>
+        </div>
+        <div class="field"><label class="lab">Tell us more</label><textarea class="inp" placeholder="The occasion, the piece you have in mind, timelines…"></textarea></div>
+        <label class="check" style="margin:0.4rem 0 1.2rem;"><input type="checkbox" checked> Keep me updated on new collections</label>
+        <button class="btn-buy submit" type="submit">Send Request</button>
+      </form>
+
+      <div class="ok" id="ctOk">
+        <div class="s">✓</div>
+        <h3>Thank you — request received.</h3>
+        <p>A member of our atelier will be in touch within 48 hours.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="foot-top">
+      <div class="foot-brand"><span class="wordmark">Tanvi Agnihotry</span><p>Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.</p></div>
+      <div class="foot-col"><h5>Shop</h5><a href="Collection.html">Lehenga Sets</a><a href="Collection.html">Jacket Sets</a><a href="Collection.html">Gowns</a><a href="Collection.html">Anarkali</a></div>
+      <div class="foot-col"><h5>The House</h5><a href="The House.html">Our Story</a><a href="The House.html">Artisanship</a><a href="Contact.html">Made to Order</a><a href="Client Care.html">Press</a></div>
+      <div class="foot-col"><h5>Client Care</h5><a href="Contact.html">Book an Appointment</a><a href="Size Guide.html">Size &amp; Fit</a><a href="Client Care.html">Shipping</a><a href="Contact.html">Contact</a></div>
+    </div>
+    <div class="foot-bottom"><span>© 2026 Tanvi Agnihotry</span><div class="socials"><a href="#">Instagram</a><a href="#">Pinterest</a><a href="#">WhatsApp</a></div></div>
+  </footer>
+
+  <script src="image-slot.js"></script>
+  <script src="cart-drawer.js"></script>
+  <script>
+    document.querySelectorAll('.ct-tab').forEach(t => t.addEventListener('click', () => {
+      document.querySelectorAll('.ct-tab').forEach(x => x.classList.remove('on'));
+      t.classList.add('on');
+      document.getElementById('apptFields').style.display = t.dataset.tab === 'appointment' ? 'grid' : 'none';
+    }));
+  </script>
+  <script src="mobile-nav.js"></script>
+  <script src="reveal.js"></script>
+  <script src="ambient.js"></script>
+</body>
+</html>

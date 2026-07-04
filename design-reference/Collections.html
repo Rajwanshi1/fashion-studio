@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Collections — Tanvi Agnihotry</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="shop.css">
+<style>
+  .coll-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: clamp(1rem,2.5vw,2rem); padding: 0 var(--gutter) clamp(3rem,6vw,5rem); max-width: 1480px; margin: 0 auto; }
+  @media (max-width: 680px){ .coll-grid { grid-template-columns: 1fr; } }
+  .coll { position: relative; display: block; overflow: hidden; aspect-ratio: 4/3; }
+  .coll.tall { aspect-ratio: 3/4; }
+  .coll image-slot { position: absolute; inset: 0; width: 100%; height: 100%; transition: transform 1000ms var(--ease); }
+  .coll:hover image-slot { transform: scale(1.04); }
+  .coll::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(35,43,38,0.62), rgba(35,43,38,0.08) 60%); z-index: 2; }
+  .coll .cc { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; padding: clamp(1.4rem,3vw,2.4rem); color: #fff; }
+  .coll .cc .num { font-size: 0.62rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold-pale); }
+  .coll .cc h2 { font-family: var(--serif-display); font-size: clamp(1.6rem,3vw,2.4rem); margin: 0.5rem 0 0.6rem; }
+  .coll .cc p { font-size: var(--t-sm); color: rgba(255,255,255,0.82); max-width: 38ch; margin: 0 0 1rem; }
+  .coll .cc .go { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: #fff; border-bottom: 1px solid var(--gold-soft); padding-bottom: 4px; }
+  .coll:hover .cc .go { color: var(--gold-pale); }
+  .intro { text-align: center; max-width: 60ch; margin: 0 auto clamp(2.5rem,5vw,4rem); padding: 0 var(--gutter); }
+  .intro .lede { font-family: var(--serif-soft); font-style: italic; font-size: clamp(1.3rem,2.4vw,1.7rem); color: var(--forest-700); line-height: 1.45; }
+</style>
+</head>
+<body class="shop">
+  <div class="ticker"><div class="ticker-track">
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+  </div></div>
+  <nav class="nav">
+    <div class="nav-links left"><a href="Collection.html">Women</a><a href="Collections.html">Collections</a><a href="Lookbook.html">Lookbook</a></div>
+    <div class="wordmark"><a href="Homepage.html">Tanvi Agnihotry</a></div>
+    <div class="nav-links right"><a href="Search.html">Search</a><a href="Account.html">Account</a><a class="bag" href="Cart.html">Bag <span class="count">(2)</span></a></div>
+  </nav>
+
+  <div class="crumbs"><a href="Homepage.html">Home</a><span class="sep">/</span><span class="here">Collections</span></div>
+
+  <div class="page-hero">
+    <span class="eyebrow">The House</span>
+    <h1>Collections</h1>
+  </div>
+  <div class="intro"><p class="lede">Each collection is a season of craft — conceived in the studio, embroidered by hand, and cut for the modern Indian woman.</p></div>
+
+  <main class="coll-grid" data-screen-label="Collections Index">
+    <a class="coll tall" href="Collection.html"><image-slot id="c-1" placeholder="The Verdant Edit"></image-slot><div class="cc"><span class="num">Spring 2026 · 24 Pieces</span><h2>The Verdant Edit</h2><p>Moss, sage and pistachio. Our signature indo-western silhouettes in a garden of greens.</p><span class="go">Explore →</span></div></a>
+    <a class="coll tall" href="Collection.html"><image-slot id="c-2" placeholder="Bridal"></image-slot><div class="cc"><span class="num">Bridal · 18 Pieces</span><h2>The Bridal Atelier</h2><p>Heirloom lehengas and capes in zardozi and mirror, crafted for the day you'll remember forever.</p><span class="go">Explore →</span></div></a>
+    <a class="coll" href="Collection.html"><image-slot id="c-3" placeholder="Festive"></image-slot><div class="cc"><span class="num">Festive · 21 Pieces</span><h2>Festive Lights</h2><p>Anarkalis, shararas and drapes for the season of celebration.</p><span class="go">Explore →</span></div></a>
+    <a class="coll" href="Collection.html"><image-slot id="c-4" placeholder="Occasion"></image-slot><div class="cc"><span class="num">Occasion · 16 Pieces</span><h2>Cocktail &amp; Reception</h2><p>Fluid gowns and jacket sets for the modern evening.</p><span class="go">Explore →</span></div></a>
+    <a class="coll" href="Collection.html"><image-slot id="c-5" placeholder="Heritage"></image-slot><div class="cc"><span class="num">Heritage · 12 Pieces</span><h2>The Heritage Revival</h2><p>Archival techniques — chikankari, mukaish, gota — reimagined.</p><span class="go">Explore →</span></div></a>
+    <a class="coll" href="Collection.html"><image-slot id="c-6" placeholder="Made to Measure"></image-slot><div class="cc"><span class="num">Made to Measure</span><h2>By Commission</h2><p>A piece designed with you, cut to your exact measure.</p><span class="go">Book a Fitting →</span></div></a>
+  </main>
+
+  <footer class="foot">
+    <div class="foot-top">
+      <div class="foot-brand"><span class="wordmark">Tanvi Agnihotry</span><p>Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.</p></div>
+      <div class="foot-col"><h5>Shop</h5><a href="Collection.html">Lehenga Sets</a><a href="Collection.html">Jacket Sets</a><a href="Collection.html">Gowns</a><a href="Collection.html">Anarkali</a></div>
+      <div class="foot-col"><h5>The House</h5><a href="The House.html">Our Story</a><a href="The House.html">Artisanship</a><a href="Contact.html">Made to Order</a><a href="Client Care.html">Press</a></div>
+      <div class="foot-col"><h5>Client Care</h5><a href="Contact.html">Book an Appointment</a><a href="Size Guide.html">Size &amp; Fit</a><a href="Client Care.html">Shipping</a><a href="Contact.html">Contact</a></div>
+    </div>
+    <div class="foot-bottom"><span>© 2026 Tanvi Agnihotry</span><div class="socials"><a href="#">Instagram</a><a href="#">Pinterest</a><a href="#">WhatsApp</a></div></div>
+  </footer>
+
+  <script src="image-slot.js"></script>
+  <script src="cart-drawer.js"></script>
+  <script src="mobile-nav.js"></script>
+  <script src="reveal.js"></script>
+  <script src="ambient.js"></script>
+</body>
+</html>

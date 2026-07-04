@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tanvi Agnihotry — Design System</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="shop.css">
+<script src="image-slot.js" defer></script>
+<style>
+  /* ============================================================
+     DESIGN SYSTEM REFERENCE — chrome for documentation only.
+     All tokens & components are pulled live from brand.css/shop.css
+     ============================================================ */
+  body.ds { background: var(--paper); color: var(--ink); }
+
+  /* ---- Masthead ---- */
+  .ds-mast {
+    padding: clamp(3.5rem, 8vw, 7rem) var(--gutter) clamp(2.5rem, 5vw, 4rem);
+    border-bottom: 1px solid var(--hairline);
+    background:
+      radial-gradient(120% 90% at 85% -10%, var(--celadon-100), transparent 55%),
+      var(--paper);
+  }
+  .ds-mast .eyebrow { display: block; margin-bottom: 1.4rem; }
+  .ds-mast h1 {
+    font-family: var(--serif-display);
+    font-size: var(--t-h1);
+    line-height: 0.98;
+  }
+  .ds-mast h1 em { font-family: var(--serif-soft); font-style: italic; color: var(--forest-700); }
+  .ds-mast .lede { margin: 1.6rem 0 0; max-width: 56ch; color: var(--fg-muted); font-size: var(--t-body); }
+  .ds-meta { display: flex; flex-wrap: wrap; gap: 2.4rem; margin-top: 2.6rem; }
+  .ds-meta .m { display: flex; flex-direction: column; gap: 0.35rem; }
+  .ds-meta .m .k { font-size: 0.58rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold); }
+  .ds-meta .m .v { font-family: var(--serif-display); font-size: 1.1rem; }
+
+  /* ---- Section scaffolding ---- */
+  .ds-section { padding: clamp(3rem, 6vw, 5.5rem) var(--gutter); border-bottom: 1px solid var(--hairline); }
+  .ds-section.tint { background: var(--celadon-50); }
+  .ds-section.ink { background: var(--ink); color: var(--celadon-100); }
+  .ds-section.ink .ds-head h2 { color: var(--celadon-50); }
+  .ds-section.ink .ds-head .num { color: var(--gold-soft); }
+  .ds-head { display: flex; align-items: baseline; gap: 1.4rem; margin-bottom: clamp(2rem, 4vw, 3.2rem); }
+  .ds-head .num { font-family: var(--sans); font-size: 0.7rem; letter-spacing: var(--track-wide); color: var(--gold); padding-top: 0.5rem; }
+  .ds-head h2 { font-family: var(--serif-display); font-size: var(--t-h2); }
+  .ds-head .sub { margin-left: auto; max-width: 34ch; font-size: var(--t-sm); color: var(--fg-muted); text-align: right; }
+  .ds-section.ink .ds-head .sub { color: var(--celadon-200); }
+  @media (max-width: 720px){ .ds-head { flex-wrap: wrap; } .ds-head .sub { margin-left: 0; text-align: left; } }
+
+  /* ---- Subhead within sections ---- */
+  .ds-sub { font-size: 0.6rem; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--ink-soft); margin: 2.6rem 0 1.3rem; }
+  .ds-section.ink .ds-sub { color: var(--gold-soft); }
+  .ds-sub:first-of-type { margin-top: 0; }
+
+  /* ---- Color swatches ---- */
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); }
+  .sw { background: var(--surface); padding: 0; display: flex; flex-direction: column; }
+  .sw .chip { height: 88px; }
+  .sw .info { padding: 0.85rem 0.9rem 1rem; }
+  .sw .nm { font-family: var(--sans); font-size: 0.72rem; letter-spacing: 0.02em; }
+  .sw .hex { font-family: var(--sans); font-size: 0.64rem; color: var(--fg-muted); margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .sw .var { font-family: var(--sans); font-size: 0.58rem; color: var(--sage-600); margin-top: 0.45rem; }
+
+  /* role swatch list */
+  .roles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 1rem; }
+  .role { display: flex; align-items: center; gap: 0.9rem; border: 1px solid var(--hairline); padding: 0.7rem 0.8rem; background: var(--surface); }
+  .role .dot { width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--hairline); flex: none; }
+  .role .rt .a { font-size: 0.72rem; }
+  .role .rt .b { font-size: 0.6rem; color: var(--fg-muted); margin-top: 0.2rem; }
+
+  /* ---- Type specimens ---- */
+  .type-row { display: grid; grid-template-columns: 120px 1fr; gap: 1.6rem; align-items: baseline; padding: 1.6rem 0; border-top: 1px solid var(--hairline); }
+  .type-row:last-child { border-bottom: 1px solid var(--hairline); }
+  .type-row .label { font-size: 0.58rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }
+  .type-row .label .px { display: block; color: var(--sage-600); margin-top: 0.3rem; letter-spacing: 0.04em; }
+  .specimen-mega { font-family: var(--serif-soft); font-weight: 300; font-size: clamp(3rem, 8vw, 6rem); line-height: 0.95; }
+  .specimen-h1 { font-family: var(--serif-display); font-size: var(--t-h1); line-height: 1; }
+  .specimen-h2 { font-family: var(--serif-display); font-size: var(--t-h2); }
+  .specimen-h3 { font-family: var(--serif-display); font-size: var(--t-h3); }
+  .specimen-body { font-family: var(--sans); font-weight: 300; font-size: var(--t-body); max-width: 60ch; }
+  .specimen-sm { font-family: var(--sans); font-size: var(--t-sm); color: var(--fg-muted); max-width: 60ch; }
+  @media (max-width: 640px){ .type-row { grid-template-columns: 1fr; gap: 0.6rem; } }
+
+  .families { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); }
+  @media (max-width: 820px){ .families { grid-template-columns: 1fr; } }
+  .fam { background: var(--surface); padding: 1.8rem 1.6rem; }
+  .fam .glyph { font-size: 3.4rem; line-height: 1; margin-bottom: 1.1rem; }
+  .fam .glyph.s1 { font-family: var(--serif-display); }
+  .fam .glyph.s2 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; }
+  .fam .glyph.s3 { font-family: var(--sans); font-weight: 300; }
+  .fam .fname { font-family: var(--serif-display); font-size: 1.2rem; margin-bottom: 0.4rem; }
+  .fam .frole { font-size: 0.6rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold); margin-bottom: 0.9rem; }
+  .fam .fdesc { font-size: var(--t-sm); color: var(--fg-muted); }
+  .fam .fweights { margin-top: 1rem; font-size: 0.62rem; color: var(--sage-600); letter-spacing: 0.04em; }
+
+  /* ---- Spacing / geometry visualisation ---- */
+  .spec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px,1fr)); gap: 1.4rem; }
+  .spec { border: 1px solid var(--hairline); background: var(--surface); padding: 1.4rem; }
+  .spec .st { font-size: 0.6rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold); margin-bottom: 0.9rem; }
+  .spec .sv { font-family: var(--serif-display); font-size: 1.3rem; margin-bottom: 1rem; }
+  .bar { height: 14px; background: var(--celadon-400); }
+  .gut-demo { display: flex; gap: 1rem; align-items: flex-end; height: 70px; }
+  .gut-demo i { flex: 1; background: var(--celadon); display: block; }
+  .gut-demo i:nth-child(2){ background: var(--sage-500); }
+  .gut-demo i:nth-child(3){ background: var(--celadon-400); }
+  .edge-demo { display: flex; gap: 1.2rem; }
+  .edge-demo .e { width: 60px; height: 60px; background: var(--ink); }
+  .edge-demo .e.r { border-radius: var(--edge); }
+
+  /* ---- Component demo blocks ---- */
+  .demos { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap: 1.4rem; align-items: start; }
+  .demo {
+    border: 1px solid var(--hairline); background: var(--surface);
+    padding: 1.5rem; display: flex; flex-direction: column; gap: 1.1rem;
+  }
+  .demo .dt { font-size: 0.58rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink-soft); }
+  .demo .dstage { display: flex; flex-wrap: wrap; gap: 0.9rem; align-items: center; }
+  .demo .dstage.col { flex-direction: column; align-items: stretch; }
+  .demo .dnote { font-size: 0.62rem; color: var(--sage-600); letter-spacing: 0.02em; }
+  .demo code { font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 0.66rem; color: var(--forest-700); background: var(--celadon-50); padding: 0.15em 0.45em; border-radius: 2px; }
+
+  .demo-wide { grid-column: 1 / -1; }
+
+  /* product card demo sizing */
+  .card-demo { max-width: 260px; }
+
+  /* nav demo wrapper */
+  .nav-demo { border: 1px solid var(--hairline); overflow: hidden; }
+
+  /* footer hint */
+  .ds-foot { padding: clamp(2.5rem,5vw,4rem) var(--gutter); text-align: center; color: var(--fg-muted); }
+  .ds-foot .wm { font-family: var(--serif-display); text-transform: uppercase; letter-spacing: 0.2em; font-size: clamp(1.6rem,5vw,3rem); color: var(--ink); margin-bottom: 1rem; }
+  .ds-foot p { font-size: var(--t-sm); }
+
+  /* token table */
+  .tok { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .tok th { text-align: left; font-size: 0.56rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold); padding: 0 0 0.9rem; font-weight: 400; }
+  .tok td { padding: 0.7rem 1rem 0.7rem 0; border-top: 1px solid var(--hairline); vertical-align: middle; }
+  .tok td code { font-family: ui-monospace, Menlo, monospace; font-size: 0.7rem; color: var(--forest-700); }
+  .tok td .mono { font-family: ui-monospace, Menlo, monospace; font-size: 0.7rem; color: var(--fg-muted); }
+</style>
+</head>
+<template id="__bundler_thumbnail" data-bg-color="#F7F8F4">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#F7F8F4"/>
+    <rect x="360" y="300" width="480" height="200" fill="#CFE0D8"/>
+    <text x="600" y="430" text-anchor="middle" font-family="Georgia, serif" font-size="120" letter-spacing="8" fill="#2F3D35">TA</text>
+    <rect x="540" y="540" width="120" height="3" fill="#B0894A"/>
+  </svg>
+</template>
+<body class="ds">
+
+  <!-- ============ MASTHEAD ============ -->
+  <header class="ds-mast" data-screen-label="Masthead">
+    <span class="eyebrow">Design System · v2</span>
+    <h1>Tanvi Agnihotry<br><em>quiet couture, codified</em></h1>
+    <p class="lede">The visual language behind the Indo-Western atelier — a celadon canvas, soft-gold detailing, and a three-voice type system tuned for editorial calm. Every swatch and component below renders live from the production stylesheets.</p>
+    <div class="ds-meta">
+      <div class="m"><span class="k">Palette</span><span class="v">Celadon &amp; Gold</span></div>
+      <div class="m"><span class="k">Type</span><span class="v">Bodoni · Cormorant · Jost</span></div>
+      <div class="m"><span class="k">Geometry</span><span class="v">2px edge</span></div>
+      <div class="m"><span class="k">Source</span><span class="v">brand.css · shop.css</span></div>
+    </div>
+  </header>
+
+  <!-- ============ COLOR ============ -->
+  <section class="ds-section" data-screen-label="Color">
+    <div class="ds-head">
+      <span class="num">01</span>
+      <h2>Color</h2>
+      <p class="sub">A single celadon temperature from paper to ink, warmed only by a restrained gold. No pure black, no pure white.</p>
+    </div>
+
+    <p class="ds-sub">Celadon canvas — light to deep</p>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:var(--paper)"></div><div class="info"><div class="nm">Paper</div><div class="hex">#F7F8F4</div><div class="var">--paper</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--celadon-50)"></div><div class="info"><div class="nm">Celadon 50</div><div class="hex">#EEF3EA</div><div class="var">--celadon-50</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--celadon-100)"></div><div class="info"><div class="nm">Celadon 100</div><div class="hex">#E4EDE2</div><div class="var">--celadon-100</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--celadon-200)"></div><div class="info"><div class="nm">Celadon 200</div><div class="hex">#D9E6DA</div><div class="var">--celadon-200</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--celadon)"></div><div class="info"><div class="nm">Celadon</div><div class="hex">#CFE0D8</div><div class="var">--celadon</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--celadon-400)"></div><div class="info"><div class="nm">Celadon 400</div><div class="hex">#B9D0C6</div><div class="var">--celadon-400</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--sage-500)"></div><div class="info"><div class="nm">Sage 500</div><div class="hex">#9CB6AA</div><div class="var">--sage-500</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--sage-600)"></div><div class="info"><div class="nm">Sage 600</div><div class="hex">#7C9A8C</div><div class="var">--sage-600</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--forest-700)"></div><div class="info"><div class="nm">Forest 700</div><div class="hex">#46584E</div><div class="var">--forest-700</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--forest-800)"></div><div class="info"><div class="nm">Forest 800</div><div class="hex">#2F3D35</div><div class="var">--forest-800</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--ink)"></div><div class="info"><div class="nm">Ink</div><div class="hex">#1E2620</div><div class="var">--ink</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--ink-soft)"></div><div class="info"><div class="nm">Ink Soft</div><div class="hex">#4A554D</div><div class="var">--ink-soft</div></div></div>
+    </div>
+
+    <p class="ds-sub">Soft gold — the only accent</p>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:var(--gold)"></div><div class="info"><div class="nm">Gold</div><div class="hex">#B0894A</div><div class="var">--gold</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--gold-soft)"></div><div class="info"><div class="nm">Gold Soft</div><div class="hex">#C9AE7A</div><div class="var">--gold-soft</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--gold-pale)"></div><div class="info"><div class="nm">Gold Pale</div><div class="hex">#E6D7B8</div><div class="var">--gold-pale</div></div></div>
+    </div>
+
+    <p class="ds-sub">Semantic roles</p>
+    <div class="roles">
+      <div class="role"><span class="dot" style="background:var(--bg)"></span><div class="rt"><div class="a">Background</div><div class="b">--bg → paper</div></div></div>
+      <div class="role"><span class="dot" style="background:var(--bg-tint)"></span><div class="rt"><div class="a">Background tint</div><div class="b">--bg-tint → celadon-50</div></div></div>
+      <div class="role"><span class="dot" style="background:var(--surface)"></span><div class="rt"><div class="a">Surface</div><div class="b">--surface → #FFF</div></div></div>
+      <div class="role"><span class="dot" style="background:var(--fg)"></span><div class="rt"><div class="a">Foreground</div><div class="b">--fg → ink</div></div></div>
+      <div class="role"><span class="dot" style="background:var(--fg-muted)"></span><div class="rt"><div class="a">Foreground muted</div><div class="b">--fg-muted → ink-soft</div></div></div>
+      <div class="role"><span class="dot" style="background:var(--gold)"></span><div class="rt"><div class="a">Accent</div><div class="b">--gold</div></div></div>
+      <div class="role"><span class="dot" style="border-color:var(--ink);background:linear-gradient(135deg,transparent 47%,var(--hairline) 47% 53%,transparent 53%)"></span><div class="rt"><div class="a">Hairline</div><div class="b">--hairline · rgba ink 13%</div></div></div>
+      <div class="role"><span class="dot" style="border-color:var(--gold);background:linear-gradient(135deg,transparent 47%,var(--hairline-gold) 47% 53%,transparent 53%)"></span><div class="rt"><div class="a">Hairline gold</div><div class="b">--hairline-gold · gold 45%</div></div></div>
+    </div>
+  </section>
+
+  <!-- ============ TYPE ============ -->
+  <section class="ds-section tint" data-screen-label="Typography">
+    <div class="ds-head">
+      <span class="num">02</span>
+      <h2>Typography</h2>
+      <p class="sub">Three voices: a sharp Bodoni for display, a soft Cormorant italic for poetry, a quiet Jost for everything functional.</p>
+    </div>
+
+    <div class="families">
+      <div class="fam">
+        <div class="glyph s1">Aa</div>
+        <div class="fname">Bodoni Moda</div>
+        <div class="frole">Serif Display</div>
+        <div class="fdesc">High-contrast couture serif. Wordmarks, headings, product names, footer mark.</div>
+        <div class="fweights">--serif-display · 400 / 500 · italic</div>
+      </div>
+      <div class="fam">
+        <div class="glyph s2">Aa</div>
+        <div class="fname">Cormorant Garamond</div>
+        <div class="frole">Serif Soft</div>
+        <div class="fdesc">Delicate italic at light weight. Hero display, pull-quotes, lyrical accents within headings.</div>
+        <div class="fweights">--serif-soft · 300 / 400 · italic</div>
+      </div>
+      <div class="fam">
+        <div class="glyph s3">Aa</div>
+        <div class="fname">Jost</div>
+        <div class="frole">Sans</div>
+        <div class="fdesc">Geometric sans at 300. Body, navigation, eyebrows, buttons, all UI chrome.</div>
+        <div class="fweights">--sans · 300 / 400 / 500</div>
+      </div>
+    </div>
+
+    <p class="ds-sub">Type scale</p>
+    <div class="type-row">
+      <div class="label">Mega<span class="px">--t-mega · clamp 3.8→10rem</span></div>
+      <div class="specimen-mega">Atelier</div>
+    </div>
+    <div class="type-row">
+      <div class="label">H1<span class="px">--t-h1 · clamp 2.7→5.4rem</span></div>
+      <div class="specimen-h1">The Spring Collection</div>
+    </div>
+    <div class="type-row">
+      <div class="label">H2<span class="px">--t-h2 · clamp 2→3.4rem</span></div>
+      <div class="specimen-h2">Crafted in the atelier</div>
+    </div>
+    <div class="type-row">
+      <div class="label">H3<span class="px">--t-h3 · 1.65rem</span></div>
+      <div class="specimen-h3">Hand-finished embroidery</div>
+    </div>
+    <div class="type-row">
+      <div class="label">Body<span class="px">--t-body · 1.0625rem</span></div>
+      <div class="specimen-body">Each piece is conceived as a meeting of two wardrobes — the drape and ornament of Indian craft set against the precision of Western tailoring. Cut in limited runs, finished by hand.</div>
+    </div>
+    <div class="type-row">
+      <div class="label">Small<span class="px">--t-sm · 0.9375rem</span></div>
+      <div class="specimen-sm">Supporting copy, captions, product descriptions and form helper text sit at the small step in muted ink.</div>
+    </div>
+    <div class="type-row">
+      <div class="label">Eyebrow<span class="px">--t-eyebrow · 0.7rem · 0.34em</span></div>
+      <div><span class="eyebrow">Indo-Western Couture</span></div>
+    </div>
+  </section>
+
+  <!-- ============ SPACING & GEOMETRY ============ -->
+  <section class="ds-section" data-screen-label="Spacing">
+    <div class="ds-head">
+      <span class="num">03</span>
+      <h2>Spacing &amp; Geometry</h2>
+      <p class="sub">Fluid rhythm from a single gutter and section step. Corners stay near-sharp — a 2px edge, never rounded soft.</p>
+    </div>
+    <div class="spec-grid">
+      <div class="spec">
+        <div class="st">Gutter</div>
+        <div class="sv">clamp(1.25 – 5.5rem)</div>
+        <div class="gut-demo"><i></i><i></i><i></i></div>
+        <div class="dnote" style="margin-top:0.9rem;font-size:0.62rem;color:var(--sage-600)">--gutter · horizontal page padding</div>
+      </div>
+      <div class="spec">
+        <div class="st">Section step</div>
+        <div class="sv">clamp(4.5 – 10rem)</div>
+        <div class="bar" style="height:46px"></div>
+        <div class="dnote" style="margin-top:0.9rem;font-size:0.62rem;color:var(--sage-600)">--section-y · vertical block rhythm</div>
+      </div>
+      <div class="spec">
+        <div class="st">Edge radius</div>
+        <div class="sv">2px</div>
+        <div class="edge-demo"><span class="e"></span><span class="e r"></span></div>
+        <div class="dnote" style="margin-top:0.9rem;font-size:0.62rem;color:var(--sage-600)">--edge · sharp couture corners</div>
+      </div>
+      <div class="spec">
+        <div class="st">Tracking</div>
+        <div class="sv" style="letter-spacing:var(--track-caps);font-family:var(--sans);font-size:0.8rem;text-transform:uppercase">Caps 0.34em</div>
+        <div class="dnote" style="font-size:0.62rem;color:var(--sage-600)">--track-caps eyebrows · --track-wide 0.2em links</div>
+      </div>
+    </div>
+
+    <p class="ds-sub">Shared atoms</p>
+    <div class="demos">
+      <div class="demo">
+        <span class="dt">Eyebrow + gold rule</span>
+        <div class="dstage col">
+          <span class="eyebrow">New Arrivals</span>
+          <hr class="rule-gold">
+        </div>
+        <span class="dnote"><code>.eyebrow</code> · <code>.rule-gold</code></span>
+      </div>
+      <div class="demo">
+        <span class="dt">Selection</span>
+        <div class="dstage"><p style="margin:0;max-width:30ch">Highlight text to see the <span style="background:var(--gold);color:var(--paper)">gold selection</span> treatment.</p></div>
+        <span class="dnote">::selection → gold on paper</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BUTTONS ============ -->
+  <section class="ds-section tint" data-screen-label="Buttons">
+    <div class="ds-head">
+      <span class="num">04</span>
+      <h2>Buttons &amp; Links</h2>
+      <p class="sub">Uppercase Jost, wide tracking. The underline link is the house default; solids reserve emphasis.</p>
+    </div>
+    <div class="demos">
+      <div class="demo">
+        <span class="dt">Line link — default</span>
+        <div class="dstage"><a class="btn btn-line" href="#">Discover more</a></div>
+        <span class="dnote"><code>.btn.btn-line</code> · gap widens on hover</span>
+      </div>
+      <div class="demo">
+        <span class="dt">Solid — primary</span>
+        <div class="dstage"><a class="btn btn-solid" href="#">Add to bag</a></div>
+        <span class="dnote"><code>.btn.btn-solid</code> · ink → forest</span>
+      </div>
+      <div class="demo">
+        <span class="dt">Ghost — secondary</span>
+        <div class="dstage"><a class="btn btn-ghost" href="#">View lookbook</a></div>
+        <span class="dnote"><code>.btn.btn-ghost</code> · gold hairline</span>
+      </div>
+      <div class="demo">
+        <span class="dt">Buy — full width</span>
+        <div class="dstage col"><button class="btn-buy">Add to bag — $480</button></div>
+        <span class="dnote"><code>.btn-buy</code></span>
+      </div>
+      <div class="demo">
+        <span class="dt">Buy gold variant</span>
+        <div class="dstage col"><button class="btn-buy gold">Express checkout</button></div>
+        <span class="dnote"><code>.btn-buy.gold</code></span>
+      </div>
+      <div class="demo">
+        <span class="dt">Outline — full width</span>
+        <div class="dstage col"><button class="btn-outline">Add to wishlist</button></div>
+        <span class="dnote"><code>.btn-outline</code></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FORMS ============ -->
+  <section class="ds-section" data-screen-label="Forms">
+    <div class="ds-head">
+      <span class="num">05</span>
+      <h2>Forms &amp; Inputs</h2>
+      <p class="sub">Hairline fields on white, gold focus. Labels are tiny uppercase Jost above each control.</p>
+    </div>
+    <div class="demos">
+      <div class="demo demo-wide">
+        <span class="dt">Fields</span>
+        <div class="dstage col">
+          <div class="grid2">
+            <div class="field"><label class="lab">First name</label><input class="inp" placeholder="Tanvi"></div>
+            <div class="field"><label class="lab">Last name</label><input class="inp" placeholder="Agnihotry"></div>
+          </div>
+          <div class="field"><label class="lab">Email</label><input class="inp" type="email" placeholder="you@studio.com"></div>
+          <div class="field"><label class="lab">Size</label>
+            <select class="inp"><option>Select a size</option><option>XS</option><option>S</option><option>M</option><option>L</option></select>
+          </div>
+          <div class="field"><label class="lab">Note to atelier</label><textarea class="inp" placeholder="Any bespoke requests…"></textarea></div>
+          <label class="check"><input type="checkbox" checked> Keep me on the atelier list</label>
+        </div>
+        <span class="dnote"><code>.inp</code> · <code>.lab</code> · <code>.field</code> · <code>.grid2</code> · <code>.check</code></span>
+      </div>
+      <div class="demo">
+        <span class="dt">Quantity stepper</span>
+        <div class="dstage">
+          <div class="qty"><button>−</button><span class="val">1</span><button>+</button></div>
+        </div>
+        <span class="dnote"><code>.qty</code></span>
+      </div>
+      <div class="demo">
+        <span class="dt">Filter chips</span>
+        <div class="dstage">
+          <div class="chips"><button class="chip on">All</button><button class="chip">Lehenga</button><button class="chip">Saree</button><button class="chip">Drape</button></div>
+        </div>
+        <span class="dnote"><code>.chips</code> · <code>.chip.on</code></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PRODUCT CARD ============ -->
+  <section class="ds-section tint" data-screen-label="Product Card">
+    <div class="ds-head">
+      <span class="num">06</span>
+      <h2>Product Card</h2>
+      <p class="sub">The retail workhorse. Image zooms on hover, the favourite and quick-add reveal, name shifts to gold.</p>
+    </div>
+    <div class="demos">
+      <a class="pcard card-demo" href="#">
+        <div class="ph">
+          <span class="flag">New</span>
+          <button class="fav" aria-label="favourite">♡</button>
+          <image-slot id="ds-card-1" shape="rect" placeholder="product shot · 3:4"></image-slot>
+          <button class="quick">Quick add</button>
+        </div>
+        <div class="m">
+          <div class="cat">Lehenga</div>
+          <div class="nm">Marigold Hand-Embroidered Set</div>
+          <div class="pr">$1,240</div>
+        </div>
+      </a>
+      <div class="demo">
+        <span class="dt">Anatomy</span>
+        <div class="dstage col" style="gap:0.5rem">
+          <span class="dnote"><code>.flag</code> — corner status badge</span>
+          <span class="dnote"><code>.fav</code> — reveal-on-hover heart, <code>.on</code> = gold</span>
+          <span class="dnote"><code>.quick</code> — slide-up quick add bar</span>
+          <span class="dnote"><code>.m .cat / .nm / .pr</code> — gold cat, serif name, muted price</span>
+          <span class="dnote">Grid: <code>.pgrid.cols-2 / 3 / 4</code></span>
+        </div>
+        <span class="dnote" style="color:var(--fg-muted)">Hover the card to the left to see every interaction.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CHROME COMPONENTS ============ -->
+  <section class="ds-section" data-screen-label="Chrome">
+    <div class="ds-head">
+      <span class="num">07</span>
+      <h2>Site Chrome</h2>
+      <p class="sub">Navigation, breadcrumb and ticker share the ink ground with celadon text and gold underlines.</p>
+    </div>
+
+    <p class="ds-sub">Announcement ticker</p>
+    <div class="ticker">
+      <div class="ticker-track">
+        <span>Complimentary shipping on orders over $500</span>
+        <span>Bespoke appointments now open</span>
+        <span>The Spring Atelier has arrived</span>
+        <span>Complimentary shipping on orders over $500</span>
+        <span>Bespoke appointments now open</span>
+        <span>The Spring Atelier has arrived</span>
+      </div>
+    </div>
+
+    <p class="ds-sub">Navigation</p>
+    <div class="nav-demo">
+      <nav class="nav" style="position:static">
+        <div class="nav-links left"><a href="#">Shop</a><a href="#">Collections</a><a href="#">The House</a></div>
+        <div class="wordmark"><a href="#">Tanvi Agnihotry</a></div>
+        <div class="nav-links right"><a href="#">Search</a><a href="#">Account</a><button class="bag">Bag <span class="count">(2)</span></button></div>
+      </nav>
+    </div>
+
+    <p class="ds-sub">Breadcrumb</p>
+    <div class="crumbs" style="padding-left:0;padding-top:0">
+      <a href="#">Home</a><span class="sep">/</span><a href="#">Collections</a><span class="sep">/</span><span class="here">Spring Atelier</span>
+    </div>
+
+    <p class="ds-sub">Pager</p>
+    <div class="pager" style="justify-content:flex-start;margin-top:0">
+      <a class="arrow" href="#">Prev</a>
+      <a class="on" href="#">1</a><a href="#">2</a><a href="#">3</a><a href="#">4</a>
+      <a class="arrow" href="#">Next</a>
+    </div>
+  </section>
+
+  <!-- ============ DISCLOSURE & FEEDBACK ============ -->
+  <section class="ds-section tint" data-screen-label="Disclosure">
+    <div class="ds-head">
+      <span class="num">08</span>
+      <h2>Disclosure &amp; Feedback</h2>
+      <p class="sub">Accordions carry product detail; the trust row reassures; the toast confirms quietly in the corner.</p>
+    </div>
+
+    <p class="ds-sub">Accordion</p>
+    <div style="max-width:640px">
+      <details class="acc" open>
+        <summary>Materials &amp; care <span class="ic">+</span></summary>
+        <div class="acc-body">Silk organza with hand-couched zardozi. Dry clean only; store flat, away from direct light.</div>
+      </details>
+      <details class="acc">
+        <summary>Sizing &amp; fit <span class="ic">+</span></summary>
+        <div class="acc-body">Cut to a tailored couture fit. Consult the size guide or book a bespoke appointment for made-to-measure.</div>
+      </details>
+      <details class="acc">
+        <summary>Shipping &amp; returns <span class="ic">+</span></summary>
+        <div class="acc-body">Complimentary insured shipping worldwide. Returns accepted within 14 days on unworn, tagged pieces.</div>
+      </details>
+    </div>
+
+    <p class="ds-sub">Trust row</p>
+    <div class="trust">
+      <div class="item"><div class="t">Hand-finished</div><div class="d">Made in limited runs</div></div>
+      <div class="item"><div class="t">Insured delivery</div><div class="d">Worldwide, complimentary</div></div>
+      <div class="item"><div class="t">Atelier care</div><div class="d">Bespoke appointments</div></div>
+    </div>
+
+    <p class="ds-sub">Toast — confirmation</p>
+    <div class="demos">
+      <div class="demo">
+        <span class="dt">Inline preview</span>
+        <div class="dstage">
+          <div class="toast show" style="position:static;transform:none">Added to bag <span class="g">— Marigold Set</span></div>
+        </div>
+        <span class="dnote"><code>.toast.show</code> · fixed bottom-right in production</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MOTION ============ -->
+  <section class="ds-section ink" data-screen-label="Motion">
+    <div class="ds-head">
+      <span class="num">09</span>
+      <h2>Motion</h2>
+      <p class="sub">One easing curve, one base duration. Reveals rise gently; nothing loops or distracts.</p>
+    </div>
+    <table class="tok">
+      <thead><tr><th style="width:30%">Token</th><th style="width:34%">Value</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>--ease</code></td><td><span class="mono">cubic-bezier(.22, 1, .36, 1)</span></td><td>All transitions &amp; reveals</td></tr>
+        <tr><td><code>--dur</code></td><td><span class="mono">520ms</span></td><td>Hover, focus, state changes</td></tr>
+        <tr><td><code>.rv → .rv-in</code></td><td><span class="mono">translateY(26px) → 0, 900ms</span></td><td>Scroll reveal (reveal.js)</td></tr>
+        <tr><td><code>image zoom</code></td><td><span class="mono">scale(1.045), 1100ms</span></td><td>Product card hover</td></tr>
+        <tr><td><code>ticker slide</code></td><td><span class="mono">32s linear infinite</span></td><td>Announcement bar</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class="ds-foot">
+    <div class="wm">Tanvi Agnihotry</div>
+    <p>Design system reference · v2 · rendered live from <code style="font-family:ui-monospace,Menlo,monospace;font-size:0.78rem">brand.css</code> &amp; <code style="font-family:ui-monospace,Menlo,monospace;font-size:0.78rem">shop.css</code></p>
+  </footer>
+
+</body>
+</html>

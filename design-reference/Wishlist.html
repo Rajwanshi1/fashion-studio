@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wishlist — Tanvi Agnihotry</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="shop.css">
+<style>
+  .wl { padding: 0 var(--gutter) clamp(3rem,6vw,5rem); max-width: 1480px; margin: 0 auto; }
+  .wl .pcard .m { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .wl .pcard .actions { display: flex; flex-direction: column; gap: 0.5rem; padding-top: 1rem; }
+  .wl .pcard .actions button { font-size: 0.62rem; letter-spacing: var(--track-wide); text-transform: uppercase; background: none; border: 0; cursor: pointer; color: var(--ink); border-bottom: 1px solid var(--hairline); padding: 0 0 3px; align-self: flex-start; transition: color var(--dur) var(--ease); }
+  .wl .pcard .actions button:hover { color: var(--gold); }
+  .wl .pcard .actions .rm { color: var(--fg-muted); }
+  .empty { text-align: center; padding: clamp(3rem,8vw,6rem) var(--gutter); }
+  .empty h2 { font-family: var(--serif-display); font-size: var(--t-h3); margin: 1rem 0 0.6rem; }
+  .empty p { color: var(--fg-muted); margin-bottom: 1.8rem; }
+  .empty .heart { font-size: 2rem; color: var(--gold-soft); }
+</style>
+</head>
+<body class="shop">
+  <div class="ticker"><div class="ticker-track">
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+  </div></div>
+  <nav class="nav">
+    <div class="nav-links left"><a href="Collection.html">Women</a><a href="Collections.html">Collections</a><a href="Lookbook.html">Lookbook</a></div>
+    <div class="wordmark"><a href="Homepage.html">Tanvi Agnihotry</a></div>
+    <div class="nav-links right"><a href="Search.html">Search</a><a href="Account.html">Account</a><a class="bag" href="Cart.html">Bag <span class="count">(2)</span></a></div>
+  </nav>
+
+  <div class="crumbs"><a href="Account.html">Account</a><span class="sep">/</span><span class="here">Wishlist</span></div>
+
+  <div class="page-hero">
+    <span class="eyebrow">Saved for Later</span>
+    <h1>Your Wishlist</h1>
+    <p>The pieces you're considering. Move them to your bag whenever you're ready — each is made to order.</p>
+  </div>
+
+  <main class="wl" data-screen-label="Wishlist">
+    <div class="pgrid cols-4" id="wlgrid">
+      <div class="pcard" data-id="1"><div class="ph"><image-slot id="wl-1" placeholder="Saved 1"></image-slot></div><div class="m"><div><div class="cat">Lehenga Set</div><div class="nm">Sage Sequin Jacket Lehenga</div><div class="pr">₹1,84,000</div></div></div><div class="actions"><button class="bag-it">+ Add to Bag</button><button class="rm">Remove</button></div></div>
+      <div class="pcard" data-id="2"><div class="ph"><image-slot id="wl-2" placeholder="Saved 2"></image-slot></div><div class="m"><div><div class="cat">Anarkali</div><div class="nm">Pistachio Threadwork Anarkali</div><div class="pr">₹1,42,000</div></div></div><div class="actions"><button class="bag-it">+ Add to Bag</button><button class="rm">Remove</button></div></div>
+      <div class="pcard" data-id="3"><div class="ph"><image-slot id="wl-3" placeholder="Saved 3"></image-slot></div><div class="m"><div><div class="cat">Gown</div><div class="nm">Moss Tissue Draped Gown</div><div class="pr">₹96,000</div></div></div><div class="actions"><button class="bag-it">+ Add to Bag</button><button class="rm">Remove</button></div></div>
+      <div class="pcard" data-id="4"><div class="ph"><image-slot id="wl-4" placeholder="Saved 4"></image-slot></div><div class="m"><div><div class="cat">Cape Set</div><div class="nm">Celadon Organza Cape Set</div><div class="pr">₹1,28,000</div></div></div><div class="actions"><button class="bag-it">+ Add to Bag</button><button class="rm">Remove</button></div></div>
+    </div>
+
+    <div class="empty" id="empty" style="display:none;">
+      <div class="heart">♡</div>
+      <h2>Your wishlist is empty</h2>
+      <p>Save the pieces you love and they'll wait for you here.</p>
+      <a class="btn btn-line" href="Collection.html">Explore the Collection →</a>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <div class="foot-top">
+      <div class="foot-brand"><span class="wordmark">Tanvi Agnihotry</span><p>Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.</p></div>
+      <div class="foot-col"><h5>Shop</h5><a href="Collection.html">Lehenga Sets</a><a href="Collection.html">Jacket Sets</a><a href="Collection.html">Gowns</a><a href="Collection.html">Anarkali</a></div>
+      <div class="foot-col"><h5>The House</h5><a href="The House.html">Our Story</a><a href="The House.html">Artisanship</a><a href="Contact.html">Made to Order</a><a href="Client Care.html">Press</a></div>
+      <div class="foot-col"><h5>Client Care</h5><a href="Contact.html">Book an Appointment</a><a href="Size Guide.html">Size &amp; Fit</a><a href="Client Care.html">Shipping</a><a href="Contact.html">Contact</a></div>
+    </div>
+    <div class="foot-bottom"><span>© 2026 Tanvi Agnihotry</span><div class="socials"><a href="#">Instagram</a><a href="#">Pinterest</a><a href="#">WhatsApp</a></div></div>
+  </footer>
+
+  <div class="toast" id="toast"><span class="g">✓</span> Added to your bag</div>
+
+  <script src="image-slot.js"></script>
+  <script src="cart-drawer.js"></script>
+  <script>
+    const grid = document.getElementById('wlgrid'), empty = document.getElementById('empty'), toast = document.getElementById('toast');
+    function checkEmpty(){ if (!grid.querySelector('.pcard')) { grid.style.display='none'; empty.style.display='block'; } }
+    grid.querySelectorAll('.rm').forEach(b => b.addEventListener('click', () => {
+      const c = b.closest('.pcard'); c.style.transition='opacity .25s, transform .25s'; c.style.opacity='0'; c.style.transform='translateY(8px)';
+      setTimeout(() => { c.remove(); checkEmpty(); }, 250);
+    }));
+    grid.querySelectorAll('.bag-it').forEach(b => b.addEventListener('click', () => {
+      toast.classList.add('show'); clearTimeout(window.__t); window.__t = setTimeout(() => toast.classList.remove('show'), 2400);
+    }));
+  </script>
+  <script src="mobile-nav.js"></script>
+  <script src="reveal.js"></script>
+  <script src="ambient.js"></script>
+</body>
+</html>

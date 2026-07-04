@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Bag — Tanvi Agnihotry</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="shop.css">
+<style>
+  .cart-wrap { display:grid; grid-template-columns: 1.5fr 0.85fr; gap: clamp(2rem,4vw,4rem); padding: clamp(1.5rem,3vw,2.5rem) var(--gutter) 0; max-width: 1380px; margin: 0 auto; align-items: start; }
+  @media (max-width: 900px){ .cart-wrap { grid-template-columns: 1fr; } }
+
+  .cart-head { display:flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--hairline); padding-bottom: 1.2rem; margin-bottom: 0.5rem; }
+  .cart-head h1 { font-family: var(--serif-display); font-size: var(--t-h2); }
+  .cart-head .n { font-size: 0.72rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }
+
+  /* line item */
+  .line { display:grid; grid-template-columns: 116px 1fr auto; gap: 1.4rem; padding: 1.8rem 0; border-bottom: 1px solid var(--hairline); }
+  @media (max-width: 560px){ .line { grid-template-columns: 92px 1fr; } .line .price-col { grid-column: 2; text-align: left; } }
+  .line image-slot { width: 116px; aspect-ratio: 3/4; }
+  @media (max-width: 560px){ .line image-slot { width: 92px; } }
+  .line .nm { font-family: var(--serif-display); font-size: 1.15rem; line-height: 1.2; }
+  .line .attrs { margin: 0.6rem 0 0; display:flex; flex-direction: column; gap: 0.25rem; font-size: var(--t-sm); color: var(--fg-muted); }
+  .line .attrs .tag { display:inline-block; font-size: 0.58rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold); border: 1px solid var(--hairline-gold); padding: 0.25em 0.7em; border-radius: 999px; margin-top: 0.5rem; align-self: flex-start; }
+  .line .controls { display:flex; align-items:center; gap: 1.4rem; margin-top: 1rem; }
+  .line .controls .rm { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); background:none; border:0; cursor:pointer; border-bottom: 1px solid var(--hairline); padding-bottom: 2px; transition: color var(--dur) var(--ease); }
+  .line .controls .rm:hover { color: var(--gold); }
+  .line .price-col { text-align: right; font-family: var(--serif-soft); font-size: 1.3rem; color: var(--forest-700); white-space: nowrap; }
+
+  .cart-foot { display:flex; justify-content: space-between; align-items:center; padding: 1.6rem 0; }
+  .cart-foot a { font-size: 0.72rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink); border-bottom: 1px solid var(--gold); padding-bottom: 4px; }
+  .cart-foot a:hover { color: var(--gold); }
+
+  /* summary */
+  .summary { background: var(--celadon-50); border: 1px solid var(--hairline); padding: 1.8rem; position: sticky; top: 96px; }
+  .summary h2 { font-family: var(--serif-display); font-size: 1.3rem; margin-bottom: 1.4rem; }
+  .sline { display:flex; justify-content: space-between; font-size: var(--t-sm); color: var(--ink-soft); padding: 0.55rem 0; }
+  .sline.muted { color: var(--fg-muted); }
+  .sline .free { color: var(--forest-700); }
+  .summary .sdiv { height:1px; background: var(--hairline); margin: 1rem 0; }
+  .stotal { display:flex; justify-content: space-between; align-items: baseline; margin: 0.4rem 0 0.3rem; }
+  .stotal .l { font-size: 0.78rem; letter-spacing: var(--track-wide); text-transform: uppercase; }
+  .stotal .v { font-family: var(--serif-soft); font-size: 1.7rem; color: var(--forest-700); }
+  .summary .vat { font-size: 0.68rem; color: var(--fg-muted); margin-bottom: 1.4rem; }
+  .promo { display:flex; gap: 0.5rem; margin: 1.2rem 0 1.4rem; }
+  .promo input { flex:1; border: 1px solid var(--hairline); background: var(--paper); padding: 0.75em 0.9em; font-family: var(--sans); font-size: 0.82rem; color: var(--ink); }
+  .promo input:focus { outline:none; border-color: var(--gold); }
+  .promo button { background:none; border:1px solid var(--hairline-gold); padding: 0 1.1em; font-size: 0.64rem; letter-spacing: var(--track-wide); text-transform: uppercase; cursor:pointer; transition: all var(--dur) var(--ease); }
+  .promo button:hover { background: var(--celadon); }
+  .summary .reassure { display:flex; gap:0.6rem; align-items:flex-start; margin-top: 1.2rem; font-size: 0.7rem; color: var(--fg-muted); line-height: 1.5; }
+  .summary .reassure .dot { width:6px;height:6px;border-radius:999px;background:var(--gold);margin-top:0.45rem;flex:none; }
+</style>
+</head>
+<body class="shop">
+  <div class="ticker"><div class="ticker-track">
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+    <span>Complimentary Made-to-Order Consultation</span><span>·</span><span>Worldwide Shipping</span><span>·</span><span>Spring 2026 — The Verdant Edit</span><span>·</span>
+  </div></div>
+
+  <nav class="nav">
+    <div class="nav-links left">
+      <a href="Homepage.html">Women</a>
+      <a href="Homepage.html#feature">Collections</a>
+      <a href="Homepage.html#look">Lookbook</a>
+    </div>
+    <div class="wordmark"><a href="Homepage.html">Tanvi Agnihotry</a></div>
+    <div class="nav-links right">
+      <a href="#">Search</a>
+      <a href="#">Account</a>
+      <a class="bag" href="Cart.html">Bag <span class="count">(2)</span></a>
+    </div>
+  </nav>
+
+  <main class="cart-wrap" data-screen-label="Cart">
+    <section>
+      <div class="cart-head">
+        <h1>Your Bag</h1>
+        <span class="n">2 Pieces</span>
+      </div>
+
+      <!-- item 1 -->
+      <article class="line">
+        <image-slot id="cart-1" placeholder="Item 1"></image-slot>
+        <div>
+          <div class="nm">Sage Sequin Jacket Lehenga</div>
+          <div class="attrs">
+            <span>Colour — Sage</span>
+            <span>Size — S</span>
+            <span class="tag">Made to Order · 4–6 weeks</span>
+          </div>
+          <div class="controls">
+            <div class="qty">
+              <button type="button" data-line="1" data-step="-1">−</button>
+              <span class="val" id="q1">1</span>
+              <button type="button" data-line="1" data-step="1">+</button>
+            </div>
+            <button class="rm" data-rm="1">Remove</button>
+          </div>
+        </div>
+        <div class="price-col" id="p1">₹1,84,000</div>
+      </article>
+
+      <!-- item 2 -->
+      <article class="line">
+        <image-slot id="cart-2" placeholder="Item 2"></image-slot>
+        <div>
+          <div class="nm">Pistachio Threadwork Anarkali</div>
+          <div class="attrs">
+            <span>Colour — Pistachio</span>
+            <span>Size — M</span>
+            <span class="tag">Made to Order · 4–6 weeks</span>
+          </div>
+          <div class="controls">
+            <div class="qty">
+              <button type="button" data-line="2" data-step="-1">−</button>
+              <span class="val" id="q2">1</span>
+              <button type="button" data-line="2" data-step="1">+</button>
+            </div>
+            <button class="rm" data-rm="2">Remove</button>
+          </div>
+        </div>
+        <div class="price-col" id="p2">₹1,42,000</div>
+      </article>
+
+      <div class="cart-foot">
+        <a href="Homepage.html">← Continue Shopping</a>
+      </div>
+    </section>
+
+    <!-- summary -->
+    <aside class="summary">
+      <h2>Order Summary</h2>
+      <div class="sline"><span>Subtotal</span><span id="subtotal">₹3,26,000</span></div>
+      <div class="sline muted"><span>Shipping</span><span class="free">Complimentary</span></div>
+      <div class="sline muted"><span>Estimated Duties</span><span>Calculated at checkout</span></div>
+
+      <div class="promo">
+        <input type="text" placeholder="Gift card or promo code">
+        <button type="button">Apply</button>
+      </div>
+
+      <div class="sdiv"></div>
+      <div class="stotal"><span class="l">Total</span><span class="v" id="total">₹3,26,000</span></div>
+      <div class="vat">Inclusive of all taxes</div>
+
+      <a class="btn-buy" href="Checkout.html" style="text-decoration:none;">Proceed to Checkout</a>
+
+      <div class="reassure"><span class="dot"></span><span>Each piece is crafted to order. Our atelier confirms your measurements within 48 hours of purchase.</span></div>
+    </aside>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="foot">
+    <div class="foot-top">
+      <div class="foot-brand">
+        <span class="wordmark">Tanvi Agnihotry</span>
+        <p>Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.</p>
+      </div>
+      <div class="foot-col"><h5>Shop</h5><a href="#">Lehenga Sets</a><a href="#">Jacket Sets</a><a href="#">Gowns</a><a href="#">Anarkali</a></div>
+      <div class="foot-col"><h5>The House</h5><a href="#">Our Story</a><a href="#">Artisanship</a><a href="#">Made to Order</a><a href="#">Press</a></div>
+      <div class="foot-col"><h5>Client Care</h5><a href="#">Book an Appointment</a><a href="#">Size &amp; Fit</a><a href="#">Shipping</a><a href="#">Contact</a></div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 Tanvi Agnihotry</span>
+      <div class="socials"><a href="#">Instagram</a><a href="#">Pinterest</a><a href="#">WhatsApp</a></div>
+    </div>
+  </footer>
+
+  <script src="image-slot.js"></script>
+  <script>
+    const PRICES = { 1: 184000, 2: 142000 };
+    const QTY = { 1: 1, 2: 1 };
+    const fmt = n => '₹' + n.toLocaleString('en-IN');
+
+    function render() {
+      let sub = 0;
+      for (const id in PRICES) {
+        if (QTY[id] === 0) continue;
+        const lineTotal = PRICES[id] * QTY[id];
+        sub += lineTotal;
+        const p = document.getElementById('p' + id);
+        if (p) p.textContent = fmt(lineTotal);
+      }
+      document.getElementById('subtotal').textContent = fmt(sub);
+      document.getElementById('total').textContent = fmt(sub);
+      const count = Object.values(QTY).reduce((a,b)=>a+b,0);
+      document.querySelector('.nav .count').textContent = '(' + count + ')';
+      document.querySelector('.cart-head .n').textContent = count + (count === 1 ? ' Piece' : ' Pieces');
+    }
+
+    document.querySelectorAll('.qty button').forEach(b => {
+      b.addEventListener('click', () => {
+        const id = b.dataset.line;
+        QTY[id] = Math.max(1, QTY[id] + parseInt(b.dataset.step, 10));
+        document.getElementById('q' + id).textContent = QTY[id];
+        render();
+      });
+    });
+    document.querySelectorAll('.rm').forEach(b => {
+      b.addEventListener('click', () => {
+        const id = b.dataset.rm;
+        const line = b.closest('.line');
+        line.style.transition = 'opacity .3s, transform .3s';
+        line.style.opacity = '0'; line.style.transform = 'translateX(-12px)';
+        setTimeout(() => { line.remove(); QTY[id] = 0; render(); }, 300);
+      });
+    });
+    render();
+  </script>
+  <script src="mobile-nav.js"></script>
+  <script src="reveal.js"></script>
+  <script src="ambient.js"></script>
+</body>
+</html>

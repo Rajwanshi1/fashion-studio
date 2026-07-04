@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checkout — Tanvi Agnihotry</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="shop.css">
+<style>
+  /* minimal checkout chrome */
+  .co-nav { display:flex; align-items:center; justify-content: space-between; padding: 1.3rem var(--gutter); border-bottom: 1px solid var(--hairline); }
+  .co-nav .wordmark { font-family: var(--serif-display); font-size: 1.4rem; letter-spacing: 0.14em; text-transform: uppercase; }
+  .co-nav .secure { display:flex; align-items:center; gap: 0.5rem; font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }
+  .co-nav .secure .lock { color: var(--gold); }
+
+  .co { display:grid; grid-template-columns: 1.25fr 0.9fr; gap: 0; max-width: 1320px; margin: 0 auto; min-height: 70vh; }
+  @media (max-width: 900px){ .co { grid-template-columns: 1fr; } }
+
+  .co-form { padding: clamp(2rem,5vw,3.5rem) clamp(1.5rem,4vw,4rem) clamp(3rem,6vw,5rem); border-right: 1px solid var(--hairline); }
+  @media (max-width: 900px){ .co-form { border-right: 0; order: 2; } }
+
+  .steps { display:flex; gap: 0.6rem; align-items:center; font-size: 0.64rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); margin-bottom: 2.5rem; }
+  .steps .on { color: var(--gold); }
+  .steps .sep { color: var(--hairline-gold); }
+
+  .block { margin-bottom: 2.6rem; }
+  .block .bh { display:flex; align-items: baseline; justify-content: space-between; margin-bottom: 1.2rem; }
+  .block .bh h3 { font-family: var(--serif-display); font-size: 1.35rem; }
+  .block .bh .num { font-size: 0.66rem; letter-spacing: var(--track-wide); color: var(--gold); }
+  .block .bh .alt { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }
+  .block .bh .alt a { color: var(--gold); border-bottom: 1px solid var(--hairline-gold); padding-bottom: 1px; }
+
+  /* express */
+  .express { display:grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; margin-bottom: 1rem; }
+  .express button { padding: 0.95em; border: 1px solid var(--hairline); background: var(--surface); font-family: var(--sans); font-size: 0.78rem; letter-spacing: 0.06em; cursor: pointer; transition: all var(--dur) var(--ease); }
+  .express button:hover { border-color: var(--gold); background: var(--celadon-50); }
+  .or { display:flex; align-items:center; gap: 1rem; margin: 1.6rem 0; color: var(--fg-muted); font-size: 0.62rem; letter-spacing: var(--track-wide); text-transform: uppercase; }
+  .or::before, .or::after { content:''; flex:1; height:1px; background: var(--hairline); }
+
+  /* fields */
+  .field { margin-bottom: 1rem; }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 480px){ .grid2 { grid-template-columns: 1fr; } }
+  label.lab { display:block; font-size: 0.62rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink-soft); margin-bottom: 0.5rem; }
+  .inp { width:100%; border: 1px solid var(--hairline); background: var(--surface); padding: 0.9em 1em; font-family: var(--sans); font-size: 0.92rem; color: var(--ink); transition: border-color var(--dur) var(--ease); }
+  .inp::placeholder { color: var(--sage-500); }
+  .inp:focus { outline:none; border-color: var(--gold); }
+  select.inp { appearance:none; background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 50%); background-position: calc(100% - 18px) center, calc(100% - 13px) center; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+  .check { display:flex; align-items:center; gap: 0.6rem; font-size: var(--t-sm); color: var(--ink-soft); margin-top: 0.4rem; }
+  .check input { accent-color: var(--forest-700); width: 15px; height: 15px; }
+
+  /* delivery / payment options */
+  .opt-row { border: 1px solid var(--hairline); padding: 1rem 1.2rem; display:flex; align-items:center; gap: 0.9rem; cursor:pointer; margin-bottom: 0.7rem; transition: all var(--dur) var(--ease); }
+  .opt-row.sel { border-color: var(--gold); background: var(--celadon-50); }
+  .opt-row .radio { width: 16px; height:16px; border-radius: 999px; border: 1px solid var(--sage-500); flex:none; position: relative; transition: border-color var(--dur) var(--ease); }
+  .opt-row.sel .radio { border-color: var(--gold); }
+  .opt-row.sel .radio::after { content:''; position:absolute; inset:3px; border-radius:999px; background: var(--gold); }
+  .opt-row .ot { flex:1; }
+  .opt-row .ot .t { font-size: 0.9rem; }
+  .opt-row .ot .d { font-size: 0.72rem; color: var(--fg-muted); margin-top: 0.15rem; }
+  .opt-row .op { font-size: 0.9rem; color: var(--forest-700); white-space:nowrap; }
+
+  .pay-fields { padding: 0 0 0.2rem; margin-top: 0.2rem; }
+
+  .place { margin-top: 1rem; }
+  .legal { font-size: 0.68rem; color: var(--fg-muted); text-align:center; margin-top: 1rem; line-height: 1.6; }
+  .legal a { color: var(--gold); }
+
+  /* right: order summary */
+  .co-summary { background: var(--celadon-50); padding: clamp(2rem,5vw,3.5rem) clamp(1.5rem,3vw,3rem); }
+  @media (max-width: 900px){ .co-summary { order: 1; } }
+  .co-summary .sticky { position: sticky; top: 2rem; }
+  .co-summary h2 { font-family: var(--serif-display); font-size: 1.2rem; margin-bottom: 1.6rem; }
+  .ci { display:grid; grid-template-columns: 64px 1fr auto; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--hairline); align-items:center; }
+  .ci image-slot { width: 64px; aspect-ratio: 3/4; }
+  .ci .cn { font-family: var(--serif-display); font-size: 0.95rem; line-height: 1.2; }
+  .ci .ca { font-size: 0.72rem; color: var(--fg-muted); margin-top: 0.3rem; }
+  .ci .cp { font-family: var(--serif-soft); font-size: 1.05rem; color: var(--forest-700); white-space:nowrap; }
+  .srow { display:flex; justify-content: space-between; font-size: var(--t-sm); color: var(--ink-soft); padding: 0.5rem 0; }
+  .srow.muted { color: var(--fg-muted); }
+  .srow .free { color: var(--forest-700); }
+  .co-summary .sdiv { height:1px; background: var(--hairline); margin: 1rem 0; }
+  .co-total { display:flex; justify-content: space-between; align-items: baseline; margin-top: 0.4rem; }
+  .co-total .l { font-size: 0.76rem; letter-spacing: var(--track-wide); text-transform: uppercase; }
+  .co-total .v { font-family: var(--serif-soft); font-size: 1.7rem; color: var(--forest-700); }
+  .co-summary .note { display:flex; gap: 0.6rem; align-items:flex-start; margin-top: 1.6rem; font-size: 0.72rem; color: var(--fg-muted); line-height: 1.55; }
+  .co-summary .note .dot { width:6px;height:6px;border-radius:999px;background:var(--gold);margin-top:0.4rem;flex:none; }
+</style>
+</head>
+<body class="shop">
+  <div class="co-nav">
+    <a href="Cart.html" style="font-size:0.66rem;letter-spacing:var(--track-wide);text-transform:uppercase;color:var(--fg-muted);">← Back to Bag</a>
+    <div class="wordmark">Tanvi Agnihotry</div>
+    <div class="secure"><span class="lock">🔒</span> Secure Checkout</div>
+  </div>
+
+  <main class="co" data-screen-label="Checkout">
+    <!-- FORM -->
+    <section class="co-form">
+      <div class="steps"><span>Bag</span><span class="sep">→</span><span class="on">Information</span><span class="sep">→</span><span>Payment</span><span class="sep">→</span><span>Confirm</span></div>
+
+      <!-- express -->
+      <div class="block">
+        <div class="express">
+          <button type="button">Pay with UPI</button>
+          <button type="button">Pay with Wallet</button>
+        </div>
+        <div class="or">or check out with details</div>
+      </div>
+
+      <!-- contact -->
+      <div class="block">
+        <div class="bh"><h3>Contact</h3><span class="alt">Have an account? <a href="#">Sign in</a></span></div>
+        <div class="field"><label class="lab">Email Address</label><input class="inp" type="email" placeholder="you@example.com"></div>
+        <div class="field"><label class="lab">Mobile Number</label><input class="inp" type="tel" placeholder="+91 90000 00000"></div>
+        <label class="check"><input type="checkbox" checked> Keep me updated on my order &amp; new collections</label>
+      </div>
+
+      <!-- shipping -->
+      <div class="block">
+        <div class="bh"><h3>Shipping Address</h3><span class="num">01 / 03</span></div>
+        <div class="grid2">
+          <div class="field"><label class="lab">First Name</label><input class="inp" placeholder="First name"></div>
+          <div class="field"><label class="lab">Last Name</label><input class="inp" placeholder="Last name"></div>
+        </div>
+        <div class="field"><label class="lab">Address</label><input class="inp" placeholder="House no., street, area"></div>
+        <div class="field"><label class="lab">Apartment, landmark (optional)</label><input class="inp" placeholder="Apartment, suite, landmark"></div>
+        <div class="grid2">
+          <div class="field"><label class="lab">City</label><input class="inp" placeholder="City"></div>
+          <div class="field"><label class="lab">PIN Code</label><input class="inp" placeholder="000000"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label class="lab">State</label>
+            <select class="inp"><option>Maharashtra</option><option>Delhi</option><option>Karnataka</option><option>Gujarat</option><option>Tamil Nadu</option><option>West Bengal</option></select>
+          </div>
+          <div class="field"><label class="lab">Country</label>
+            <select class="inp"><option>India</option><option>United Arab Emirates</option><option>United Kingdom</option><option>United States</option><option>Singapore</option></select>
+          </div>
+        </div>
+      </div>
+
+      <!-- delivery -->
+      <div class="block">
+        <div class="bh"><h3>Delivery</h3><span class="num">02 / 03</span></div>
+        <div class="opt-row sel" data-group="delivery"><span class="radio"></span><div class="ot"><div class="t">Made-to-Order Atelier Dispatch</div><div class="d">Crafted &amp; shipped in 4–6 weeks · insured</div></div><span class="op">Complimentary</span></div>
+        <div class="opt-row" data-group="delivery"><span class="radio"></span><div class="ot"><div class="t">Priority Made-to-Order</div><div class="d">Expedited craft &amp; shipping · 3–4 weeks</div></div><span class="op">₹2,500</span></div>
+      </div>
+
+      <!-- payment -->
+      <div class="block">
+        <div class="bh"><h3>Payment</h3><span class="num">03 / 03</span></div>
+        <div class="opt-row sel" data-group="payment" data-pay="card"><span class="radio"></span><div class="ot"><div class="t">Credit / Debit Card</div></div><span class="op" style="font-size:0.66rem;letter-spacing:var(--track-wide);color:var(--fg-muted);">Visa · MC · Amex</span></div>
+        <div class="pay-fields" id="cardFields">
+          <div class="field"><label class="lab">Card Number</label><input class="inp" placeholder="0000 0000 0000 0000"></div>
+          <div class="grid2">
+            <div class="field"><label class="lab">Expiry</label><input class="inp" placeholder="MM / YY"></div>
+            <div class="field"><label class="lab">CVV</label><input class="inp" placeholder="•••"></div>
+          </div>
+          <div class="field"><label class="lab">Name on Card</label><input class="inp" placeholder="Full name"></div>
+        </div>
+        <div class="opt-row" data-group="payment" data-pay="upi"><span class="radio"></span><div class="ot"><div class="t">UPI</div><div class="d">Google Pay · PhonePe · Paytm</div></div></div>
+        <div class="opt-row" data-group="payment" data-pay="cod"><span class="radio"></span><div class="ot"><div class="t">Cash on Delivery</div><div class="d">Available on standard sizes only</div></div></div>
+      </div>
+
+      <button class="btn-buy gold place" type="button" id="placeBtn">Place Order · ₹3,26,000</button>
+      <p class="legal">By placing your order you agree to our <a href="#">Terms</a> and <a href="#">Made-to-Order Policy</a>.</p>
+    </section>
+
+    <!-- SUMMARY -->
+    <aside class="co-summary">
+      <div class="sticky">
+        <h2>Order Summary</h2>
+
+        <div class="ci">
+          <image-slot id="co-1" placeholder="Item 1"></image-slot>
+          <div><div class="cn">Sage Sequin Jacket Lehenga</div><div class="ca">Sage · Size S · Qty 1</div></div>
+          <div class="cp">₹1,84,000</div>
+        </div>
+        <div class="ci">
+          <image-slot id="co-2" placeholder="Item 2"></image-slot>
+          <div><div class="cn">Pistachio Threadwork Anarkali</div><div class="ca">Pistachio · Size M · Qty 1</div></div>
+          <div class="cp">₹1,42,000</div>
+        </div>
+
+        <div style="height:1.2rem"></div>
+        <div class="srow"><span>Subtotal</span><span>₹3,26,000</span></div>
+        <div class="srow muted"><span>Shipping</span><span class="free">Complimentary</span></div>
+        <div class="srow muted"><span>Duties &amp; Taxes</span><span>Included</span></div>
+        <div class="sdiv"></div>
+        <div class="co-total"><span class="l">Total</span><span class="v">₹3,26,000</span></div>
+
+        <div class="note"><span class="dot"></span><span>Each piece is made to order. Our atelier will confirm your measurements within 48 hours of purchase.</span></div>
+      </div>
+    </aside>
+  </main>
+
+  <div class="toast" id="toast" style="position:fixed;right:20px;bottom:20px;z-index:200;background:var(--ink);color:var(--paper);padding:1rem 1.4rem;border-radius:4px;font-size:0.78rem;letter-spacing:0.04em;transform:translateY(140%);transition:transform 360ms var(--ease);display:flex;gap:0.7rem;align-items:center;">
+    <span style="color:var(--gold-soft)">✓</span> Order placed — thank you. A stylist will be in touch.
+  </div>
+
+  <script src="image-slot.js"></script>
+  <script>
+    document.querySelectorAll('.opt-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const group = row.dataset.group;
+        document.querySelectorAll('.opt-row[data-group="'+group+'"]').forEach(r => r.classList.remove('sel'));
+        row.classList.add('sel');
+        if (group === 'payment') {
+          const cf = document.getElementById('cardFields');
+          cf.style.display = row.dataset.pay === 'card' ? 'block' : 'none';
+        }
+      });
+    });
+    const toast = document.getElementById('toast');
+    document.getElementById('placeBtn').addEventListener('click', () => {
+      toast.style.transform = 'none';
+      setTimeout(() => { toast.style.transform = 'translateY(140%)'; }, 3200);
+    });
+  </script>
+  <script src="reveal.js"></script>
+  <script src="ambient.js"></script>
+</body>
+</html>

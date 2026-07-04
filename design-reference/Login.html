@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign In — Tanvi Agnihotry</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="shop.css">
+<style>
+  .auth { display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; }
+  @media (max-width: 820px){ .auth { grid-template-columns: 1fr; } }
+  .auth-art { position: relative; overflow: hidden; }
+  @media (max-width: 820px){ .auth-art { display: none; } }
+  .auth-art image-slot { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .auth-art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(35,43,38,0.6), rgba(35,43,38,0.1) 60%); z-index: 2; }
+  .auth-art .cap { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; padding: clamp(2rem,4vw,3.5rem); color: #fff; }
+  .auth-art .cap .eyebrow { color: var(--gold-pale); display: block; margin-bottom: 0.9rem; }
+  .auth-art .cap h2 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: clamp(1.8rem,3vw,2.6rem); line-height: 1.15; }
+
+  .auth-form { display: flex; flex-direction: column; justify-content: center; padding: clamp(2.5rem,6vw,5rem) clamp(1.8rem,6vw,5rem); }
+  .auth-form .brand { font-family: var(--serif-display); font-size: 1.4rem; letter-spacing: 0.14em; text-transform: uppercase; text-align: center; margin-bottom: 2.5rem; }
+  .auth-tabs { display: flex; border-bottom: 1px solid var(--hairline); margin-bottom: 2rem; }
+  .auth-tab { flex: 1; padding: 0.9em; background: none; border: 0; border-bottom: 2px solid transparent; font-family: var(--sans); font-size: 0.72rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); cursor: pointer; transition: all var(--dur) var(--ease); margin-bottom: -1px; }
+  .auth-tab.on { color: var(--ink); border-bottom-color: var(--gold); }
+  .auth-panel { display: none; }
+  .auth-panel.on { display: block; }
+  .auth-panel h1 { font-family: var(--serif-display); font-size: 1.8rem; margin-bottom: 0.5rem; }
+  .auth-panel .lead { color: var(--fg-muted); font-size: var(--t-sm); margin-bottom: 1.8rem; }
+  .auth-row { display: flex; justify-content: space-between; align-items: center; margin: 0.4rem 0 1.4rem; }
+  .auth-row a { font-size: 0.72rem; color: var(--gold); border-bottom: 1px solid var(--hairline-gold); padding-bottom: 1px; }
+  .auth-or { display: flex; align-items: center; gap: 1rem; margin: 1.6rem 0; color: var(--fg-muted); font-size: 0.62rem; letter-spacing: var(--track-wide); text-transform: uppercase; }
+  .auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--hairline); }
+  .social-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
+  .social-row button { padding: 0.95em; border: 1px solid var(--hairline); background: var(--surface); font-family: var(--sans); font-size: 0.74rem; letter-spacing: 0.04em; cursor: pointer; transition: all var(--dur) var(--ease); }
+  .social-row button:hover { border-color: var(--gold); background: var(--celadon-50); }
+  .back-home { text-align: center; margin-top: 2rem; font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }
+  .back-home a:hover { color: var(--gold); }
+</style>
+</head>
+<body class="shop">
+  <main class="auth" data-screen-label="Login / Register">
+    <div class="auth-art">
+      <image-slot id="auth-img" placeholder="Editorial portrait — full bleed" fit="cover"></image-slot>
+      <div class="cap"><span class="eyebrow">The Verdant Edit</span><h2>Your atelier, remembered.</h2></div>
+    </div>
+
+    <div class="auth-form">
+      <div class="brand">Tanvi Agnihotry</div>
+      <div class="auth-tabs">
+        <button class="auth-tab on" data-p="signin">Sign In</button>
+        <button class="auth-tab" data-p="register">Create Account</button>
+      </div>
+
+      <div class="auth-panel on" id="signin">
+        <h1>Welcome back</h1>
+        <p class="lead">Sign in to track commissions and your saved pieces.</p>
+        <div class="field"><label class="lab">Email</label><input class="inp" type="email" placeholder="you@example.com"></div>
+        <div class="field"><label class="lab">Password</label><input class="inp" type="password" placeholder="••••••••"></div>
+        <div class="auth-row"><label class="check"><input type="checkbox"> Remember me</label><a href="#">Forgot password?</a></div>
+        <a class="btn-buy" href="Account.html" style="text-decoration:none;">Sign In</a>
+      </div>
+
+      <div class="auth-panel" id="register">
+        <h1>Join the house</h1>
+        <p class="lead">Create an account for private previews and made-to-order openings.</p>
+        <div class="grid2">
+          <div class="field"><label class="lab">First Name</label><input class="inp" placeholder="First name"></div>
+          <div class="field"><label class="lab">Last Name</label><input class="inp" placeholder="Last name"></div>
+        </div>
+        <div class="field"><label class="lab">Email</label><input class="inp" type="email" placeholder="you@example.com"></div>
+        <div class="field"><label class="lab">Password</label><input class="inp" type="password" placeholder="Create a password"></div>
+        <label class="check" style="margin:0.4rem 0 1.4rem;"><input type="checkbox" checked> Keep me updated on new collections</label>
+        <a class="btn-buy" href="Account.html" style="text-decoration:none;">Create Account</a>
+      </div>
+
+      <div class="auth-or">or continue with</div>
+      <div class="social-row"><button type="button">Google</button><button type="button">Apple</button></div>
+      <div class="back-home"><a href="Homepage.html">← Back to Tanvi Agnihotry</a></div>
+    </div>
+  </main>
+
+  <script src="image-slot.js"></script>
+  <script>
+    document.querySelectorAll('.auth-tab').forEach(t => t.addEventListener('click', () => {
+      document.querySelectorAll('.auth-tab').forEach(x => x.classList.remove('on'));
+      document.querySelectorAll('.auth-panel').forEach(x => x.classList.remove('on'));
+      t.classList.add('on');
+      document.getElementById(t.dataset.p).classList.add('on');
+    }));
+  </script>
+  <script src="reveal.js"></script>
+  <script src="ambient.js"></script>
+</body>
+</html>
