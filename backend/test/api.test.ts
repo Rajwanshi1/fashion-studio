@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import { FakePaymentProvider, Fakes, fakeTx, makeFakes, seedCatalog } from './fakes';
+import { FakeGoogleVerifier, FakePaymentProvider, Fakes, fakeTx, makeFakes, seedCatalog } from './fakes';
 
 const SECRET = 'api-test-secret';
 
@@ -140,6 +140,82 @@ describe('API', () => {
       const res = await app.request('/api/auth/me', bearer(token));
       expect(res.status).toBe(200);
       expect((await res.json()).user).toEqual(user);
+    });
+  });
+
+  describe('google sign-in', () => {
+    let google: FakeGoogleVerifier;
+    let googleApp: ReturnType<typeof createApp>;
+
+    beforeEach(() => {
+      google = new FakeGoogleVerifier();
+      googleApp = createApp({
+        repos: f,
+        paymentProvider: new FakePaymentProvider(),
+        verifyGoogleToken: google.verify,
+        jwtSecret: SECRET,
+        corsOrigins: ['http://localhost:5173'],
+        runInTransaction: fakeTx,
+      });
+    });
+
+    it('503 while GOOGLE_CLIENT_ID is unset (masked)', async () => {
+      const res = await app.request('/api/auth/google', post({ credential: 'anything' }));
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({ error: 'Google sign-in is not configured yet' });
+    });
+
+    it('400 on a missing credential', async () => {
+      expect((await googleApp.request('/api/auth/google', post({}))).status).toBe(400);
+    });
+
+    it('creates a google user and our JWT works on /api/auth/me', async () => {
+      google.issue('cred-riya', { email: 'riya@example.com', givenName: 'Riya', familyName: 'Kapoor' });
+      const res = await googleApp.request('/api/auth/google', post({ credential: 'cred-riya' }));
+      expect(res.status).toBe(200);
+      const { token, user } = await res.json();
+      expect(user).toMatchObject({ email: 'riya@example.com', firstName: 'Riya', lastName: 'Kapoor', role: 'customer' });
+      expect(user).not.toHaveProperty('passwordHash');
+      expect(f.users.users.find((u) => u.email === 'riya@example.com')).toMatchObject({
+        authProvider: 'google',
+        passwordHash: null,
+      });
+
+      const me = await googleApp.request('/api/auth/me', bearer(token));
+      expect(me.status).toBe(200);
+      expect((await me.json()).user).toEqual(user);
+    });
+
+    it('logs an existing password account in through google (no duplicate)', async () => {
+      const { user: registered } = await registerCustomer();
+      google.issue('cred-aanya', { email: 'aanya@example.com', givenName: 'Aanya', familyName: 'Mehra' });
+      const res = await googleApp.request('/api/auth/google', post({ credential: 'cred-aanya' }));
+      expect(res.status).toBe(200);
+      expect((await res.json()).user.id).toBe(registered.id);
+      expect(f.users.users.filter((u) => u.email === 'aanya@example.com')).toHaveLength(1);
+    });
+
+    it('401 {error:"Google sign-in failed"} on an invalid credential', async () => {
+      const res = await googleApp.request('/api/auth/google', post({ credential: 'forged' }));
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: 'Google sign-in failed' });
+    });
+
+    it('password login against a google-only account is 401, not a crash', async () => {
+      google.issue('cred-riya', { email: 'riya@example.com', givenName: 'Riya', familyName: '' });
+      await googleApp.request('/api/auth/google', post({ credential: 'cred-riya' }));
+      const res = await googleApp.request('/api/auth/login', post({ email: 'riya@example.com', password: 'whatever1' }));
+      expect(res.status).toBe(401);
+    });
+
+    it('registering over a google email is 409', async () => {
+      google.issue('cred-riya', { email: 'riya@example.com', givenName: 'Riya', familyName: '' });
+      await googleApp.request('/api/auth/google', post({ credential: 'cred-riya' }));
+      const res = await googleApp.request(
+        '/api/auth/register',
+        post({ email: 'riya@example.com', password: 'Riya@2026', firstName: 'Riya' }),
+      );
+      expect(res.status).toBe(409);
     });
   });
 
@@ -347,6 +423,7 @@ describe('API', () => {
         ['/api/admin/products', undefined],
         ['/api/admin/orders', undefined],
         ['/api/admin/payments', undefined],
+        ['/api/admin/users', undefined],
       ] as const) {
         expect((await app.request(path, init)).status).toBe(401);
         expect((await app.request(path, bearer(customerToken))).status).toBe(403);
@@ -453,6 +530,51 @@ describe('API', () => {
       const payments = await res.json();
       expect(payments).toHaveLength(1);
       expect(payments[0]).toMatchObject({ status: 'captured', orderNumber: order.orderNumber, currency: 'INR' });
+    });
+
+    it('lists users newest first with authProvider and ordersCount', async () => {
+      const { token, user } = await registerCustomer();
+      await placeOrder([{ variantId: sageM().id, quantity: 1 }], token);
+      await placeOrder([{ variantId: sageM().id, quantity: 1 }], token);
+      await placeOrder([{ variantId: sageM().id, quantity: 1 }]); // guest order — counts for nobody
+
+      const res = await app.request('/api/admin/users', bearer(adminToken));
+      expect(res.status).toBe(200);
+      const list = await res.json();
+      expect(list).toHaveLength(2);
+      // newest first: the customer registered after the seeded admin
+      expect(list.map((u: any) => u.email)).toEqual(['aanya@example.com', 'admin@tanviagnihotry.com']);
+      expect(list[0]).toEqual({
+        id: user.id,
+        email: 'aanya@example.com',
+        firstName: 'Aanya',
+        lastName: 'Mehra',
+        role: 'customer',
+        authProvider: 'password',
+        createdAt: expect.any(String),
+        ordersCount: 2,
+      });
+      expect(list[1]).toMatchObject({ role: 'admin', authProvider: 'password', ordersCount: 0 });
+      expect(list[0]).not.toHaveProperty('passwordHash');
+    });
+
+    it('patches a user role, refuses self-demotion, 404s unknown ids', async () => {
+      const { user } = await registerCustomer();
+
+      const promoted = await app.request(`/api/admin/users/${user.id}`, withMethod('PATCH', { role: 'admin' }, adminToken));
+      expect(promoted.status).toBe(200);
+      expect(await promoted.json()).toMatchObject({ id: user.id, role: 'admin', authProvider: 'password', ordersCount: 0 });
+
+      const demoted = await app.request(`/api/admin/users/${user.id}`, withMethod('PATCH', { role: 'customer' }, adminToken));
+      expect((await demoted.json()).role).toBe('customer');
+
+      const admin = (await (await app.request('/api/auth/me', bearer(adminToken))).json()).user;
+      const self = await app.request(`/api/admin/users/${admin.id}`, withMethod('PATCH', { role: 'customer' }, adminToken));
+      expect(self.status).toBe(400);
+      expect(await self.json()).toEqual({ error: 'You cannot change your own role' });
+
+      expect((await app.request('/api/admin/users/ghost', withMethod('PATCH', { role: 'admin' }, adminToken))).status).toBe(404);
+      expect((await app.request(`/api/admin/users/${user.id}`, withMethod('PATCH', { role: 'superuser' }, adminToken))).status).toBe(400);
     });
 
     it('summary reports activeOrders, revenue, pendingPayments, lowStock and recentOrders', async () => {

@@ -9,6 +9,7 @@ import { createUsersRepo } from './data/users.repo';
 import { createPool, makeTxRunner } from './db';
 import { migrate } from './migrate';
 import { seed } from './seed';
+import { createGoogleVerifier } from './services/google.verifier';
 import { MockRazorpayProvider } from './services/payments.service';
 
 async function main() {
@@ -34,12 +35,15 @@ async function main() {
       payments: createPaymentsRepo(pool),
     },
     paymentProvider: new MockRazorpayProvider(),
+    verifyGoogleToken: config.googleClientId ? createGoogleVerifier(config.googleClientId) : null,
     jwtSecret: config.jwtSecret,
     corsOrigins: config.corsOrigins,
     runInTransaction: makeTxRunner(pool),
   });
 
   console.warn('payments: MOCK Razorpay provider active — do not use in production');
+  if (config.googleClientId) console.log('auth: Google sign-in enabled');
+  else console.warn('auth: Google sign-in masked — set GOOGLE_CLIENT_ID to enable');
 
   const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
     console.log(`Tanvi Agnihotry API listening on :${info.port}`);

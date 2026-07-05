@@ -17,6 +17,10 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const googleSchema = z.object({
+  credential: z.string().min(1),
+});
+
 export function authRoutes(auth: AuthService, jwtSecret: string) {
   const r = new Hono<AuthEnv>();
 
@@ -27,6 +31,11 @@ export function authRoutes(auth: AuthService, jwtSecret: string) {
 
   r.post('/login', zValidator('json', loginSchema, zodHook), async (c) => {
     return c.json(await auth.login(c.req.valid('json')));
+  });
+
+  // Google Identity Services credential → our JWT. 503 until GOOGLE_CLIENT_ID is configured.
+  r.post('/google', zValidator('json', googleSchema, zodHook), async (c) => {
+    return c.json(await auth.loginWithGoogle(c.req.valid('json').credential));
   });
 
   r.get('/me', requireAuth(jwtSecret), async (c) => {

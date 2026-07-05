@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { OrdersRepo } from '../data/orders.repo';
 import type { PaymentsRepo } from '../data/payments.repo';
 import type { ProductsRepo } from '../data/products.repo';
+import type { UsersRepo } from '../data/users.repo';
 import { AuthEnv, requireAdmin, requireAuth } from '../middleware/auth';
 import type { OrdersService } from '../services/orders.service';
 import { OrderStatus } from '../types';
@@ -47,6 +48,7 @@ export interface AdminDeps {
   products: ProductsRepo;
   orders: OrdersRepo;
   payments: PaymentsRepo;
+  users: UsersRepo;
   ordersService: OrdersService;
   jwtSecret: string;
 }
@@ -131,6 +133,16 @@ export function adminRoutes(deps: AdminDeps) {
   });
 
   r.get('/payments', async (c) => c.json(await deps.payments.listAdmin()));
+
+  r.get('/users', async (c) => c.json(await deps.users.listAdmin()));
+
+  r.patch('/users/:id', zValidator('json', z.object({ role: z.enum(['customer', 'admin']) }), zodHook), async (c) => {
+    const id = c.req.param('id');
+    if (id === c.var.user!.id) return c.json({ error: 'You cannot change your own role' }, 400);
+    const user = await deps.users.updateRole(id, c.req.valid('json').role);
+    if (!user) return c.json({ error: 'User not found' }, 404);
+    return c.json(user);
+  });
 
   return r;
 }

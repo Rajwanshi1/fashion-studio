@@ -2,13 +2,18 @@
 
 export type Role = 'customer' | 'admin';
 
+export type AuthProvider = 'password' | 'google';
+
 export interface User {
   id: string;
   email: string;
-  passwordHash: string;
+  /** Null for accounts created through Google sign-in. */
+  passwordHash: string | null;
   firstName: string;
   lastName: string;
   role: Role;
+  authProvider: AuthProvider;
+  createdAt: string;
 }
 
 export interface PublicUser {
@@ -145,7 +150,8 @@ export class DomainError extends Error {
       | 'INSUFFICIENT_STOCK'
       | 'EMPTY_ORDER'
       | 'INVALID_STATUS_TRANSITION'
-      | 'PAYMENT_ALREADY_FINAL',
+      | 'PAYMENT_ALREADY_FINAL'
+      | 'NOT_CONFIGURED',
     message: string,
   ) {
     super(message);

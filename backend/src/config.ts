@@ -4,6 +4,8 @@ export interface Config {
   jwtSecret: string;
   corsOrigins: string[];
   seedOnStart: boolean;
+  /** Null keeps Google sign-in masked (endpoint answers 503). */
+  googleClientId: string | null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -16,5 +18,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       .map((s) => s.trim())
       .filter(Boolean),
     seedOnStart: env.SEED_ON_START === 'true',
+    googleClientId: env.GOOGLE_CLIENT_ID?.trim() || null,
   };
 }

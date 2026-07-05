@@ -9,7 +9,8 @@ import type {
   VariantForOrder,
   WishlistRepo,
 } from '../src/data/products.repo';
-import type { CreateUserInput, UsersRepo } from '../src/data/users.repo';
+import type { AdminUser, CreateUserInput, UsersRepo } from '../src/data/users.repo';
+import type { GoogleTokenClaims, VerifyGoogleToken } from '../src/services/auth.service';
 import type { PaymentProvider } from '../src/services/payments.service';
 import {
   Category,
@@ -21,6 +22,7 @@ import {
   PaymentStatus,
   ProductFilter,
   ProductSummary,
+  Role,
   Tx,
   TxRunner,
   User,
@@ -34,6 +36,9 @@ const nextId = (prefix: string) => `${prefix}-${++idCounter}`;
 
 export class FakeUsersRepo implements UsersRepo {
   users: User[] = [];
+  private clock = 0;
+
+  constructor(private ordersRepo?: FakeOrdersRepo) {}
 
   async create(input: CreateUserInput): Promise<User> {
     if (this.users.some((u) => u.email.toLowerCase() === input.email.toLowerCase())) {
@@ -46,6 +51,8 @@ export class FakeUsersRepo implements UsersRepo {
       firstName: input.firstName,
       lastName: input.lastName,
       role: input.role ?? 'customer',
+      authProvider: input.authProvider ?? 'password',
+      createdAt: new Date(Date.UTC(2026, 0, 1) + ++this.clock * 60_000).toISOString(),
     };
     this.users.push(user);
     return user;
@@ -58,6 +65,47 @@ export class FakeUsersRepo implements UsersRepo {
   async findById(id: string): Promise<User | null> {
     return this.users.find((u) => u.id === id) ?? null;
   }
+
+  private toAdmin(u: User): AdminUser {
+    return {
+      id: u.id,
+      email: u.email,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      role: u.role,
+      authProvider: u.authProvider,
+      createdAt: u.createdAt,
+      ordersCount: this.ordersRepo?.orders.filter((o) => o.userId === u.id).length ?? 0,
+    };
+  }
+
+  async listAdmin(): Promise<AdminUser[]> {
+    return [...this.users]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((u) => this.toAdmin(u));
+  }
+
+  async updateRole(id: string, role: Role): Promise<AdminUser | null> {
+    const u = this.users.find((x) => x.id === id);
+    if (!u) return null;
+    u.role = role;
+    return this.toAdmin(u);
+  }
+}
+
+export class FakeGoogleVerifier {
+  /** credential string → claims returned when that credential is verified. */
+  tokens = new Map<string, GoogleTokenClaims>();
+
+  issue(credential: string, claims: GoogleTokenClaims): void {
+    this.tokens.set(credential, claims);
+  }
+
+  verify: VerifyGoogleToken = async (credential) => {
+    const claims = this.tokens.get(credential);
+    if (!claims) throw new Error('invalid Google credential');
+    return claims;
+  };
 }
 
 function toSummary(p: AdminProduct): ProductSummary {
@@ -422,10 +470,10 @@ export interface Fakes {
 }
 
 export function makeFakes(): Fakes {
-  const users = new FakeUsersRepo();
   const products = new FakeProductsRepo();
   const wishlist = new FakeWishlistRepo(products);
   const orders = new FakeOrdersRepo();
+  const users = new FakeUsersRepo(orders);
   const payments = new FakePaymentsRepo(orders);
   return { users, products, wishlist, orders, payments };
 }

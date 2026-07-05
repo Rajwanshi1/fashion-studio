@@ -23,23 +23,35 @@ To go live:
 - [ ] Add webhook endpoint + secret for async payment capture events
 - [ ] Enable COD rules / UPI as desired in Razorpay dashboard
 
-## 2. Product photography / image hosting
+## 2. Google Sign-In — WIRED, AWAITING CLIENT ID
+The full flow is implemented (storefront GIS button → POST /api/auth/google → ID-token
+verification against Google JWKS → account upsert). It stays dormant until configured:
+- [ ] Create an OAuth 2.0 Client ID (type "Web application") in Google Cloud Console →
+      APIs & Services → Credentials (free; add http://localhost:5173 and your production
+      origin to "Authorized JavaScript origins")
+- [ ] Set `GOOGLE_CLIENT_ID` on the backend (docker-compose env) and
+      `VITE_GOOGLE_CLIENT_ID` for the storefront build — same value
+- [ ] Until then: backend returns 503 for /api/auth/google; the storefront button shows
+      "Google sign-in — setup pending"
+Apple Sign-In remains visual-only (needs an Apple Developer account; add later if wanted).
+
+## 3. Product photography / image hosting
 Products currently render the on-brand celadon placeholder (design's image-slot look) when
 `image_url` is null.
 - [ ] Real photography for catalog + campaign (hero, lookbook, categories)
 - [ ] Host on S3 + CloudFront (or any object storage — code only needs URLs)
 - [ ] Populate `products.image_url` via admin app
 
-## 3. Transactional email (order confirmations, atelier updates)
+## 4. Transactional email (order confirmations, atelier updates)
 Not implemented — order confirmation is on-screen only.
 - [ ] Pick provider (SES / Resend / Postmark), add keys, send on order paid + status changes
 
-## 4. Domain, DNS, TLS
+## 5. Domain, DNS, TLS
 - [ ] Domain for storefront/admin/api; TLS certs (ACM on AWS or Let's Encrypt on EC2)
 
-## 5. Analytics / monitoring (optional, later)
+## 6. Analytics / monitoring (optional, later)
 - [ ] Web analytics for the storefront; uptime/log monitoring for the API containers
 
-## 6. Deployment (explicitly out of scope this run)
+## 7. Deployment (explicitly out of scope this run)
 - [ ] Frontend + admin → AWS Amplify Hosting (build spec committed in `amplify.yml`)
 - [ ] Backend containers (api + postgres) → EC2 via docker compose (portable to any cloud)

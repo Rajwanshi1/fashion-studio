@@ -12,7 +12,7 @@ import { authRoutes } from './routes/auth.routes';
 import { catalogRoutes } from './routes/catalog.routes';
 import { orderRoutes } from './routes/orders.routes';
 import { paymentRoutes } from './routes/payments.routes';
-import { createAuthService } from './services/auth.service';
+import { createAuthService, VerifyGoogleToken } from './services/auth.service';
 import { createCatalogService } from './services/catalog.service';
 import { createOrdersService } from './services/orders.service';
 import { createPaymentsService, PaymentProvider } from './services/payments.service';
@@ -27,12 +27,14 @@ export interface AppDeps {
     payments: PaymentsRepo;
   };
   paymentProvider: PaymentProvider;
+  /** Masked Google sign-in seam — null/undefined until GOOGLE_CLIENT_ID exists. */
+  verifyGoogleToken?: VerifyGoogleToken | null;
   jwtSecret: string;
   corsOrigins: string[];
   runInTransaction: TxRunner;
 }
 
-const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409> = {
+const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 503> = {
   EMAIL_TAKEN: 409,
   INSUFFICIENT_STOCK: 409,
   PAYMENT_ALREADY_FINAL: 409,
@@ -40,12 +42,13 @@ const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409> = {
   NOT_FOUND: 404,
   EMPTY_ORDER: 400,
   INVALID_STATUS_TRANSITION: 400,
+  NOT_CONFIGURED: 503,
 };
 
 export function createApp(deps: AppDeps) {
-  const { repos, paymentProvider, jwtSecret, corsOrigins, runInTransaction } = deps;
+  const { repos, paymentProvider, verifyGoogleToken, jwtSecret, corsOrigins, runInTransaction } = deps;
 
-  const auth = createAuthService({ users: repos.users, jwtSecret });
+  const auth = createAuthService({ users: repos.users, jwtSecret, verifyGoogleToken });
   const catalog = createCatalogService({ products: repos.products });
   const orders = createOrdersService({ products: repos.products, orders: repos.orders, runInTransaction });
   const payments = createPaymentsService({ payments: repos.payments, orders: repos.orders, provider: paymentProvider });
@@ -77,6 +80,7 @@ export function createApp(deps: AppDeps) {
       products: repos.products,
       orders: repos.orders,
       payments: repos.payments,
+      users: repos.users,
       ordersService: orders,
       jwtSecret,
     }),

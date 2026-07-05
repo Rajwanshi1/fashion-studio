@@ -3,17 +3,19 @@ import { verify } from 'hono/jwt';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AuthService, createAuthService } from '../src/services/auth.service';
 import { DomainError } from '../src/types';
-import { FakeUsersRepo } from './fakes';
+import { FakeGoogleVerifier, FakeUsersRepo } from './fakes';
 
 const SECRET = 'test-secret';
 
 describe('AuthService', () => {
   let users: FakeUsersRepo;
+  let google: FakeGoogleVerifier;
   let auth: AuthService;
 
   beforeEach(() => {
     users = new FakeUsersRepo();
-    auth = createAuthService({ users, jwtSecret: SECRET });
+    google = new FakeGoogleVerifier();
+    auth = createAuthService({ users, jwtSecret: SECRET, verifyGoogleToken: google.verify });
   });
 
   it('registers a user and returns a verifiable token + public user', async () => {
@@ -89,5 +91,63 @@ describe('AuthService', () => {
   it('getUser throws NOT_FOUND for an unknown id', async () => {
     await expect(auth.getUser('nope')).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(auth.getUser('nope')).rejects.toBeInstanceOf(DomainError);
+  });
+
+  describe('Google sign-in', () => {
+    it('throws NOT_CONFIGURED when no verifier is wired', async () => {
+      const masked = createAuthService({ users, jwtSecret: SECRET });
+      await expect(masked.loginWithGoogle('anything')).rejects.toMatchObject({
+        code: 'NOT_CONFIGURED',
+        message: 'Google sign-in is not configured yet',
+      });
+    });
+
+    it('creates a google user (null hash, provider google) and returns a verifiable token', async () => {
+      google.issue('good-credential', { email: 'Riya@Example.com', givenName: 'Riya', familyName: 'Kapoor' });
+      const { token, user } = await auth.loginWithGoogle('good-credential');
+      expect(user).toEqual({
+        id: expect.any(String),
+        email: 'riya@example.com',
+        firstName: 'Riya',
+        lastName: 'Kapoor',
+        role: 'customer',
+      });
+      expect((await verify(token, SECRET, 'HS256')).sub).toBe(user.id);
+      const stored = users.users[0];
+      expect(stored.passwordHash).toBeNull();
+      expect(stored.authProvider).toBe('google');
+    });
+
+    it('logs an existing email in through google without creating a duplicate', async () => {
+      const { user: registered } = await auth.register({ email: 'riya@example.com', password: 'Riya@2026', firstName: 'Riya' });
+      google.issue('good-credential', { email: 'riya@example.com', givenName: 'Other', familyName: 'Name' });
+      const { user } = await auth.loginWithGoogle('good-credential');
+      expect(user.id).toBe(registered.id);
+      expect(users.users).toHaveLength(1);
+      expect(users.users[0].authProvider).toBe('password'); // provider unchanged
+    });
+
+    it('rejects an invalid credential with INVALID_CREDENTIALS "Google sign-in failed"', async () => {
+      await expect(auth.loginWithGoogle('bogus')).rejects.toMatchObject({
+        code: 'INVALID_CREDENTIALS',
+        message: 'Google sign-in failed',
+      });
+    });
+
+    it('password login against a null-hash google user throws INVALID_CREDENTIALS, never crashes', async () => {
+      google.issue('good-credential', { email: 'riya@example.com', givenName: 'Riya', familyName: '' });
+      await auth.loginWithGoogle('good-credential');
+      await expect(auth.login({ email: 'riya@example.com', password: 'whatever' })).rejects.toMatchObject({
+        code: 'INVALID_CREDENTIALS',
+      });
+    });
+
+    it('register over a google email throws EMAIL_TAKEN', async () => {
+      google.issue('good-credential', { email: 'riya@example.com', givenName: 'Riya', familyName: '' });
+      await auth.loginWithGoogle('good-credential');
+      await expect(
+        auth.register({ email: 'riya@example.com', password: 'Riya@2026', firstName: 'Riya' }),
+      ).rejects.toMatchObject({ code: 'EMAIL_TAKEN' });
+    });
   });
 });
