@@ -1,0 +1,43 @@
+/* Cart — ported from Cart.html inline styles */
+.page-cart .cart-wrap { display: grid; grid-template-columns: 1.5fr 0.85fr; gap: clamp(2rem,4vw,4rem); padding: clamp(1.5rem,3vw,2.5rem) var(--gutter) 0; max-width: 1380px; margin: 0 auto; align-items: start; }
+@media (max-width: 900px){ .page-cart .cart-wrap { grid-template-columns: 1fr; } }
+
+.page-cart .cart-head { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--hairline); padding-bottom: 1.2rem; margin-bottom: 0.5rem; }
+.page-cart .cart-head h1 { font-family: var(--serif-display); font-size: var(--t-h2); }
+.page-cart .cart-head .n { font-size: 0.72rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }
+
+/* line item */
+.page-cart .line { display: grid; grid-template-columns: 116px 1fr auto; gap: 1.4rem; padding: 1.8rem 0; border-bottom: 1px solid var(--hairline); }
+@media (max-width: 560px){ .page-cart .line { grid-template-columns: 92px 1fr; } .page-cart .line .price-col { grid-column: 2; text-align: left; } }
+.page-cart .line .img-slot { width: 116px; aspect-ratio: 3/4; }
+@media (max-width: 560px){ .page-cart .line .img-slot { width: 92px; } }
+.page-cart .line .nm { font-family: var(--serif-display); font-size: 1.15rem; line-height: 1.2; }
+.page-cart .line .attrs { margin: 0.6rem 0 0; display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--t-sm); color: var(--fg-muted); }
+.page-cart .line .attrs .tag { display: inline-block; font-size: 0.58rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold); border: 1px solid var(--hairline-gold); padding: 0.25em 0.7em; border-radius: 999px; margin-top: 0.5rem; align-self: flex-start; }
+.page-cart .line .controls { display: flex; align-items: center; gap: 1.4rem; margin-top: 1rem; }
+.page-cart .line .controls .rm { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); background: none; border: 0; cursor: pointer; border-bottom: 1px solid var(--hairline); padding-bottom: 2px; transition: color var(--dur) var(--ease); }
+.page-cart .line .controls .rm:hover { color: var(--gold); }
+.page-cart .line .price-col { text-align: right; font-family: var(--serif-soft); font-size: 1.3rem; color: var(--forest-700); white-space: nowrap; }
+
+.page-cart .cart-foot { display: flex; justify-content: space-between; align-items: center; padding: 1.6rem 0; }
+.page-cart .cart-foot a { font-size: 0.72rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink); border-bottom: 1px solid var(--gold); padding-bottom: 4px; }
+.page-cart .cart-foot a:hover { color: var(--gold); }
+
+/* summary */
+.page-cart .summary { background: var(--celadon-50); border: 1px solid var(--hairline); padding: 1.8rem; position: sticky; top: 96px; }
+.page-cart .summary h2 { font-family: var(--serif-display); font-size: 1.3rem; margin: 0 0 1.4rem; }
+.page-cart .sline { display: flex; justify-content: space-between; font-size: var(--t-sm); color: var(--ink-soft); padding: 0.55rem 0; }
+.page-cart .sline.muted { color: var(--fg-muted); }
+.page-cart .sline .free { color: var(--forest-700); }
+.page-cart .summary .sdiv { height: 1px; background: var(--hairline); margin: 1rem 0; }
+.page-cart .stotal { display: flex; justify-content: space-between; align-items: baseline; margin: 0.4rem 0 0.3rem; }
+.page-cart .stotal .l { font-size: 0.78rem; letter-spacing: var(--track-wide); text-transform: uppercase; }
+.page-cart .stotal .v { font-family: var(--serif-soft); font-size: 1.7rem; color: var(--forest-700); }
+.page-cart .summary .vat { font-size: 0.68rem; color: var(--fg-muted); margin-bottom: 1.4rem; }
+.page-cart .promo { display: flex; gap: 0.5rem; margin: 1.2rem 0 1.4rem; }
+.page-cart .promo input { flex: 1; border: 1px solid var(--hairline); background: var(--paper); padding: 0.75em 0.9em; font-family: var(--sans); font-size: 0.82rem; color: var(--ink); }
+.page-cart .promo input:focus { outline: none; border-color: var(--gold); }
+.page-cart .promo button { background: none; border: 1px solid var(--hairline-gold); padding: 0 1.1em; font-size: 0.64rem; letter-spacing: var(--track-wide); text-transform: uppercase; cursor: pointer; transition: all var(--dur) var(--ease); }
+.page-cart .promo button:hover { background: var(--celadon); }
+.page-cart .summary .reassure { display: flex; gap: 0.6rem; align-items: flex-start; margin-top: 1.2rem; font-size: 0.7rem; color: var(--fg-muted); line-height: 1.5; }
+.page-cart .summary .reassure .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--gold); margin-top: 0.45rem; flex: none; }

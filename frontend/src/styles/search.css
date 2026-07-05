@@ -1,0 +1,16 @@
+/* Search — ported from Search.html inline styles */
+.page-search .search-band { padding: clamp(2.5rem,6vw,5rem) var(--gutter) clamp(1.5rem,3vw,2.5rem); text-align: center; }
+.page-search .search-band .eyebrow { display: block; margin-bottom: 1.4rem; }
+.page-search .search-box { max-width: 620px; margin: 0 auto; display: flex; align-items: center; gap: 1rem; border-bottom: 1px solid var(--ink); padding-bottom: 0.6rem; }
+.page-search .search-box input { flex: 1; border: 0; background: none; font-family: var(--serif-soft); font-size: clamp(1.6rem,3.5vw,2.4rem); font-style: italic; color: var(--ink); min-width: 0; }
+.page-search .search-box input::placeholder { color: var(--sage-500); }
+.page-search .search-box input:focus { outline: none; }
+.page-search .search-box .ic { color: var(--gold); font-size: 1.3rem; }
+.page-search .suggest { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; margin-top: 1.8rem; }
+.page-search .suggest .lbl { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); align-self: center; margin-right: 0.4rem; }
+
+.page-search .results { padding: clamp(1.5rem,3vw,2.5rem) var(--gutter) clamp(3rem,6vw,5rem); max-width: 1480px; margin: 0 auto; }
+.page-search .results-head { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--hairline); padding-bottom: 1.2rem; margin-bottom: clamp(1.5rem,3vw,2.2rem); }
+.page-search .results-head h2 { font-family: var(--serif-display); font-size: var(--t-h3); margin: 0; }
+.page-search .results-head h2 em { font-style: italic; color: var(--gold); }
+.page-search .results-head .count { font-size: 0.72rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }

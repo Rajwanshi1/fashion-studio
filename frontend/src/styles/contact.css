@@ -1,0 +1,26 @@
+/* Contact — ported from Contact.html inline styles */
+.page-contact .ct { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 0; max-width: 1320px; margin: 0 auto; }
+@media (max-width: 880px){ .page-contact .ct { grid-template-columns: 1fr; } }
+.page-contact .ct-aside { background: var(--forest-800); color: var(--celadon-100); padding: clamp(2.5rem,5vw,4rem) clamp(1.8rem,4vw,3.5rem); }
+.page-contact .ct-aside .eyebrow { color: var(--gold-soft); display: block; margin-bottom: 1.2rem; }
+.page-contact .ct-aside h1 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: clamp(2.2rem,4vw,3.2rem); line-height: 1.1; margin: 0 0 1.4rem; }
+.page-contact .ct-aside > p { color: var(--celadon-200); font-size: var(--t-sm); max-width: 36ch; margin-bottom: 2.5rem; }
+.page-contact .ct-block { padding: 1.4rem 0; border-top: 1px solid rgba(228,212,180,0.2); }
+.page-contact .ct-block h4 { font-size: 0.64rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold-soft); margin: 0 0 0.7rem; }
+.page-contact .ct-block p { font-size: var(--t-sm); color: var(--celadon-100); margin: 0; line-height: 1.6; }
+.page-contact .ct-block a { color: var(--celadon-100); border-bottom: 1px solid rgba(228,212,180,0.3); }
+.page-contact .ct-block a:hover { color: var(--gold-pale); }
+
+.page-contact .ct-form { padding: clamp(2.5rem,5vw,4rem) clamp(1.8rem,4vw,3.5rem); }
+.page-contact .ct-form .fh { margin-bottom: 1.8rem; }
+.page-contact .ct-form .fh h2 { font-family: var(--serif-display); font-size: var(--t-h3); margin: 0 0 0.5rem; }
+.page-contact .ct-form .fh p { color: var(--fg-muted); font-size: var(--t-sm); }
+.page-contact .ct-tabs { display: flex; gap: 0.6rem; margin-bottom: 1.8rem; }
+.page-contact .ct-tab { flex: 1; padding: 0.9em; border: 1px solid var(--hairline); background: none; font-family: var(--sans); font-size: 0.7rem; letter-spacing: var(--track-wide); text-transform: uppercase; cursor: pointer; transition: all var(--dur) var(--ease); }
+.page-contact .ct-tab.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.page-contact .ct-form .submit { margin-top: 0.8rem; }
+.page-contact .ok { display: none; text-align: center; padding: 2rem; background: var(--celadon-50); border: 1px solid var(--hairline-gold); margin-top: 1rem; }
+.page-contact .ok.show { display: block; }
+.page-contact .ok .s { color: var(--gold); font-size: 1.6rem; }
+.page-contact .ok h3 { font-family: var(--serif-display); font-size: 1.3rem; margin: 0.6rem 0 0.4rem; }
+.page-contact .ok p { color: var(--fg-muted); font-size: var(--t-sm); }

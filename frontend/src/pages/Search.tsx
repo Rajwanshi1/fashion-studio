@@ -1,0 +1,110 @@
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { api } from '../lib/api';
+import type { ProductsResponse, ProductSummary } from '../lib/types';
+import Shop from '../components/Shop';
+import ProductCard from '../components/ProductCard';
+import Reveal from '../components/Reveal';
+import Ambient from '../components/Ambient';
+import '../styles/search.css';
+
+const POPULAR = ['Lehenga', 'Anarkali', 'Bridal', 'Sage', 'Made to Measure'];
+
+export default function Search() {
+  const [params, setParams] = useSearchParams();
+  const [query, setQuery] = useState(params.get('q') ?? '');
+  const [results, setResults] = useState<ProductSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searched, setSearched] = useState('');
+
+  // Live results — debounced fetch.
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      setTotal(0);
+      setSearched('');
+      setError(null);
+      return;
+    }
+    setLoading(true);
+    const t = setTimeout(() => {
+      api
+        .get<ProductsResponse>(`/api/products?search=${encodeURIComponent(q)}&page=1&limit=12`)
+        .then((d) => {
+          setResults(d.items);
+          setTotal(d.total);
+          setSearched(q);
+          setError(null);
+        })
+        .catch((e: { message?: string }) => {
+          setError(e.message ?? 'Search is unavailable right now.');
+          setResults([]);
+          setSearched(q);
+        })
+        .finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const choose = (q: string) => {
+    setQuery(q);
+    const next = new URLSearchParams(params);
+    next.set('q', q);
+    setParams(next, { replace: true });
+  };
+
+  return (
+    <Shop page="page-search">
+      <section className="search-band">
+        <span className="eyebrow">Find Your Piece</span>
+        <div className="search-box">
+          <span className="ic">⌕</span>
+          <input
+            type="text"
+            aria-label="Search"
+            placeholder="sage lehenga"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <div className="suggest">
+          <span className="lbl">Popular</span>
+          {POPULAR.map((p) => (
+            <button className="chip" key={p} onClick={() => choose(p)}>
+              {p}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {searched && (
+        <section className="results">
+          <div className="results-head">
+            <h2>
+              Results for <em>"{searched}"</em>
+            </h2>
+            <span className="count">
+              {loading ? 'Searching…' : `${total} ${total === 1 ? 'Piece' : 'Pieces'}`}
+            </span>
+          </div>
+          {error ? (
+            <p className="api-note err">{error}</p>
+          ) : results.length === 0 && !loading ? (
+            <p className="api-note">Nothing found — try one of the popular searches above.</p>
+          ) : (
+            <div className="pgrid cols-4">
+              {results.map((p) => (
+                <ProductCard key={p.id} product={p} fav={false} quick={false} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+      <Reveal watch={results.length + (searched ? 1 : 0)} />
+      <Ambient watch={results.length} />
+    </Shop>
+  );
+}

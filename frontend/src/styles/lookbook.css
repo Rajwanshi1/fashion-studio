@@ -1,0 +1,38 @@
+/* Lookbook — ported from Lookbook.html inline styles */
+.page-lookbook { background: var(--forest-800); color: var(--celadon-100); min-height: 100vh; }
+.page-lookbook .lb-cover { position: relative; height: min(94vh, 900px); overflow: hidden; display: grid; place-items: center; text-align: center; }
+.page-lookbook .lb-cover .img-slot { position: absolute; inset: 0; width: 100%; height: 100%; }
+.page-lookbook .lb-cover::after { content: ''; position: absolute; inset: 0; background: rgba(35,43,38,0.4); z-index: 2; }
+.page-lookbook .lb-cover .cc { position: relative; z-index: 3; color: #fff; padding: 2rem; }
+.page-lookbook .lb-cover .masthead { font-family: var(--serif-display); font-weight: 500; font-size: clamp(3rem,12vw,10rem); line-height: 0.88; letter-spacing: 0.02em; text-transform: uppercase; }
+.page-lookbook .lb-cover .sub { display: flex; gap: 1.4rem; justify-content: center; margin-top: 1.4rem; font-size: 0.7rem; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--gold-pale); }
+.page-lookbook .lb-cover .scroll { position: absolute; bottom: 1.6rem; left: 0; right: 0; z-index: 3; font-size: 0.62rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: rgba(255,255,255,0.7); }
+.page-lookbook .lb-cover::after, .page-lookbook .lb-cover .cc, .page-lookbook .lb-cover .scroll { pointer-events: none; }
+
+.page-lookbook .lb { padding: clamp(3rem,7vw,6rem) var(--gutter); max-width: 1400px; margin: 0 auto; display: grid; gap: clamp(2.5rem,6vw,5rem); }
+
+/* spread variants */
+.page-lookbook .spread { display: grid; gap: clamp(1.2rem,3vw,2.2rem); align-items: center; }
+.page-lookbook .spread.duo { grid-template-columns: 1fr 1fr; }
+.page-lookbook .spread.offset { grid-template-columns: 1.3fr 0.7fr; }
+.page-lookbook .spread.text-left { grid-template-columns: 0.8fr 1.2fr; }
+@media (max-width: 760px){ .page-lookbook .spread.duo, .page-lookbook .spread.offset, .page-lookbook .spread.text-left { grid-template-columns: 1fr; } }
+.page-lookbook .spread .img-slot { width: 100%; }
+.page-lookbook .ar45 { aspect-ratio: 4/5; }
+.page-lookbook .ar34 { aspect-ratio: 3/4; }
+.page-lookbook .ar11 { aspect-ratio: 1/1; }
+.page-lookbook .ar54 { aspect-ratio: 5/4; }
+
+.page-lookbook .look-no { font-family: var(--serif-display); font-size: 1rem; color: var(--gold-soft); letter-spacing: var(--track-wide); }
+.page-lookbook .caption { padding: 1rem 0; }
+.page-lookbook .caption h3 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: clamp(1.6rem,3vw,2.4rem); line-height: 1.2; margin: 0.8rem 0; }
+.page-lookbook .caption p { color: var(--celadon-200); font-size: var(--t-sm); max-width: 38ch; margin-bottom: 1.2rem; }
+.page-lookbook .caption .shop-look { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold-pale); border-bottom: 1px solid var(--gold-soft); padding-bottom: 4px; }
+.page-lookbook .caption .shop-look:hover { color: #fff; }
+
+.page-lookbook .pull { text-align: center; max-width: 760px; margin: clamp(1rem,3vw,2rem) auto; }
+.page-lookbook .pull blockquote { margin: 0; font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: clamp(1.8rem,4vw,3rem); line-height: 1.3; }
+.page-lookbook .pull cite { display: block; margin-top: 1.4rem; font-family: var(--sans); font-style: normal; font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold-soft); }
+
+/* footer override on dark */
+.page-lookbook .foot { background: var(--ink); margin-top: 0; }

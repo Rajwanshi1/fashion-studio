@@ -1,0 +1,29 @@
+/* ============================================================
+   TANVI AGNIHOTRY — App glue styles (ImageSlot internals,
+   Razorpay test-mode modal, small state helpers)
+   ============================================================ */
+
+/* ---- ImageSlot rendering (visual replica of <image-slot> empty state) ---- */
+.img-slot { display: flex; align-items: center; justify-content: center; text-align: center; padding: 0.6rem; overflow: hidden; user-select: none; }
+img.img-slot { object-fit: cover; padding: 0; }
+
+/* ---- Loading / error notes ---- */
+.api-note { padding: 2rem var(--gutter); text-align: center; color: var(--fg-muted); font-size: var(--t-sm); }
+.api-note.err { color: var(--gold); }
+
+/* ---- Razorpay · Test Mode masked modal ---- */
+.rzp-backdrop { position: fixed; inset: 0; background: rgba(35,43,38,0.55); z-index: 400; display: grid; place-items: center; padding: 1rem; }
+.rzp { width: min(420px, 96vw); background: var(--paper); border-radius: var(--edge); box-shadow: 0 40px 80px -30px rgba(30,38,32,0.55); overflow: hidden; }
+.rzp-head { display: flex; align-items: center; justify-content: space-between; padding: 1.1rem 1.4rem; background: var(--ink); color: var(--paper); }
+.rzp-head .brand { font-family: var(--sans); font-weight: 400; font-size: 0.95rem; letter-spacing: 0.04em; }
+.rzp-head .mode { font-size: 0.56rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--forest-800); background: var(--gold-pale); border-radius: 999px; padding: 0.4em 0.9em; }
+.rzp-head .x { background: none; border: 0; color: var(--celadon-100); font-size: 1.1rem; cursor: pointer; line-height: 1; }
+.rzp-body { padding: 1.4rem; }
+.rzp-note { background: var(--celadon-50); border: 1px solid var(--hairline); padding: 0.8rem 1rem; font-size: 0.7rem; color: var(--ink-soft); letter-spacing: 0.04em; margin-bottom: 1.1rem; }
+.rzp-note strong { color: var(--gold); font-weight: 500; }
+.rzp-row { display: flex; justify-content: space-between; font-size: var(--t-sm); color: var(--ink-soft); padding: 0.45rem 0; }
+.rzp-row .v { color: var(--ink); }
+.rzp-amount { display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid var(--hairline); margin-top: 0.6rem; padding-top: 0.9rem; }
+.rzp-amount .l { font-size: 0.7rem; letter-spacing: var(--track-wide); text-transform: uppercase; }
+.rzp-amount .v { font-family: var(--serif-soft); font-size: 1.5rem; color: var(--forest-700); }
+.rzp-actions { display: grid; gap: 0.6rem; padding: 0 1.4rem 1.4rem; }

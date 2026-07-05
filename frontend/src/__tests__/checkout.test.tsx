@@ -1,0 +1,101 @@
+import { describe, expect, it } from 'vitest';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { mockFetch, ORDER, renderApp, seedCart } from './helpers';
+
+const PAYMENT = {
+  paymentId: 'pay1',
+  providerOrderId: 'order_MOCK123',
+  keyId: 'rzp_test_MASKED',
+  amount: 18400000,
+  currency: 'INR',
+  mock: true,
+};
+
+function checkoutRoutes(url: string, init?: RequestInit) {
+  const method = init?.method ?? 'GET';
+  if (url.endsWith('/api/orders') && method === 'POST') return ORDER;
+  if (url.includes('/api/payments/checkout')) return PAYMENT;
+  if (url.includes('/api/payments/confirm')) return { ok: true };
+  if (url.includes('/api/orders/TA-2026-04817')) return { ...ORDER, status: 'paid' };
+  if (url.includes('/api/categories')) return [];
+  if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+  return undefined;
+}
+
+async function fillForm(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText('Email Address'), 'aanya@example.com');
+  await user.type(screen.getByLabelText('Mobile Number'), '+91 90000 00000');
+  await user.type(screen.getByLabelText('First Name'), 'Aanya');
+  await user.type(screen.getByLabelText('Last Name'), 'Mehra');
+  await user.type(screen.getByLabelText('Address'), '12 Sea Breeze, Altamount Road');
+  await user.type(screen.getByLabelText('City'), 'Mumbai');
+  await user.type(screen.getByLabelText('PIN Code'), '400026');
+}
+
+describe('checkout', () => {
+  it('happy path: place order → mock Razorpay → success → confirmation', async () => {
+    seedCart();
+    const fetchMock = mockFetch(checkoutRoutes);
+    renderApp('/checkout');
+
+    expect(screen.getByText('Secure Checkout')).toBeInTheDocument();
+    expect(screen.getByText('Order Summary')).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await fillForm(user);
+    await user.click(screen.getByRole('button', { name: 'Place Order · ₹1,84,000' }));
+
+    // Masked Razorpay test-mode modal opens.
+    const dialog = await screen.findByRole('dialog', { name: 'Razorpay · Test Mode' });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText('rzp_test_MASKED')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Pay ₹1,84,000' }));
+
+    // Confirmation page.
+    expect(await screen.findByText('Thank you, Aanya.')).toBeInTheDocument();
+    expect(screen.getByText('TA-2026-04817')).toBeInTheDocument();
+    expect(screen.getByText('Total Paid')).toBeInTheDocument();
+
+    // Cart was cleared and the payment was confirmed as success.
+    expect(JSON.parse(localStorage.getItem('ta.cart') ?? '[]')).toHaveLength(0);
+    const confirmCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes('/api/payments/confirm'),
+    );
+    expect(confirmCall).toBeTruthy();
+    expect(String(confirmCall?.[1]?.body)).toContain('"outcome":"success"');
+  });
+
+  it('failure path: simulate failure → retryable error state', async () => {
+    seedCart();
+    const fetchMock = mockFetch(checkoutRoutes);
+    renderApp('/checkout');
+
+    const user = userEvent.setup();
+    await fillForm(user);
+    await user.click(screen.getByRole('button', { name: 'Place Order · ₹1,84,000' }));
+
+    await screen.findByRole('dialog', { name: 'Razorpay · Test Mode' });
+    await user.click(screen.getByRole('button', { name: 'Simulate failure' }));
+
+    // Modal closes; retryable error banner appears; cart is intact.
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Razorpay · Test Mode' })).not.toBeInTheDocument(),
+    );
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Payment failed.');
+    expect(JSON.parse(localStorage.getItem('ta.cart') ?? '[]')).toHaveLength(1);
+
+    // Retry re-opens the masked modal via a fresh payments/checkout call.
+    const checkoutCallsBefore = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).includes('/api/payments/checkout'),
+    ).length;
+    await user.click(screen.getByRole('button', { name: 'Retry Payment' }));
+    await screen.findByRole('dialog', { name: 'Razorpay · Test Mode' });
+    const checkoutCallsAfter = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).includes('/api/payments/checkout'),
+    ).length;
+    expect(checkoutCallsAfter).toBe(checkoutCallsBefore + 1);
+  });
+});

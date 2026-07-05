@@ -1,0 +1,29 @@
+/* Size Guide — ported from Size Guide.html inline styles */
+.page-sizeguide .sg { max-width: 1040px; margin: 0 auto; padding: 0 var(--gutter) clamp(3rem,6vw,5rem); }
+.page-sizeguide .sg-intro { text-align: center; max-width: 56ch; margin: 0 auto clamp(2rem,4vw,3rem); color: var(--fg-muted); font-size: var(--t-sm); }
+
+.page-sizeguide .tabs { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-bottom: 2rem; }
+.page-sizeguide .tab { padding: 0.7em 1.4em; border: 1px solid var(--hairline); background: none; font-family: var(--sans); font-size: 0.7rem; letter-spacing: var(--track-wide); text-transform: uppercase; cursor: pointer; transition: all var(--dur) var(--ease); }
+.page-sizeguide .tab.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+.page-sizeguide .table-wrap { overflow-x: auto; border: 1px solid var(--hairline); -webkit-overflow-scrolling: touch; }
+.page-sizeguide table.size { width: 100%; min-width: 520px; border-collapse: collapse; }
+.page-sizeguide table.size th, .page-sizeguide table.size td { padding: 0.95rem 1.1rem; text-align: center; font-size: 0.86rem; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+.page-sizeguide table.size thead th { background: var(--celadon-50); font-family: var(--sans); font-size: 0.62rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold); }
+.page-sizeguide table.size tbody th { font-family: var(--serif-display); font-size: 1rem; background: var(--paper); text-align: left; }
+.page-sizeguide table.size tbody tr:last-child td, .page-sizeguide table.size tbody tr:last-child th { border-bottom: 0; }
+.page-sizeguide .swipe-hint { font-size: 0.64rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); text-align: center; margin-top: 0.8rem; }
+
+.page-sizeguide .measure { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: clamp(2rem,5vw,4rem); align-items: center; margin-top: clamp(3rem,6vw,5rem); }
+@media (max-width: 760px){ .page-sizeguide .measure { grid-template-columns: 1fr; } }
+.page-sizeguide .measure .img-slot { width: 100%; aspect-ratio: 3/4; }
+.page-sizeguide .measure .eyebrow { display: block; margin-bottom: 1rem; }
+.page-sizeguide .measure h2 { font-family: var(--serif-display); font-size: var(--t-h3); margin: 0 0 1.4rem; }
+.page-sizeguide .mstep { display: flex; gap: 1rem; padding: 0.9rem 0; border-top: 1px solid var(--hairline); }
+.page-sizeguide .mstep .n { font-family: var(--serif-display); color: var(--gold-soft); font-size: 1.2rem; flex: none; }
+.page-sizeguide .mstep .mt { font-size: 0.92rem; }
+.page-sizeguide .mstep .md { font-size: var(--t-sm); color: var(--fg-muted); margin-top: 0.2rem; }
+
+.page-sizeguide .mto-cta { text-align: center; background: var(--celadon-50); border: 1px solid var(--hairline); padding: clamp(2rem,4vw,3rem); margin-top: clamp(3rem,6vw,4rem); }
+.page-sizeguide .mto-cta h2 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: var(--t-h3); margin: 0 0 0.8rem; }
+.page-sizeguide .mto-cta p { color: var(--fg-muted); font-size: var(--t-sm); max-width: 48ch; margin: 0 auto 1.6rem; }

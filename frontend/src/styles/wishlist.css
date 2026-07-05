@@ -1,0 +1,11 @@
+/* Wishlist — ported from Wishlist.html inline styles */
+.page-wishlist .wl { padding: 0 var(--gutter) clamp(3rem,6vw,5rem); max-width: 1480px; margin: 0 auto; }
+.page-wishlist .wl .pcard .m { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.page-wishlist .wl .pcard .actions { display: flex; flex-direction: column; gap: 0.5rem; padding-top: 1rem; }
+.page-wishlist .wl .pcard .actions button { font-size: 0.62rem; letter-spacing: var(--track-wide); text-transform: uppercase; background: none; border: 0; cursor: pointer; color: var(--ink); border-bottom: 1px solid var(--hairline); padding: 0 0 3px; align-self: flex-start; transition: color var(--dur) var(--ease); }
+.page-wishlist .wl .pcard .actions button:hover { color: var(--gold); }
+.page-wishlist .wl .pcard .actions .rm { color: var(--fg-muted); }
+.page-wishlist .empty { text-align: center; padding: clamp(3rem,8vw,6rem) var(--gutter); }
+.page-wishlist .empty h2 { font-family: var(--serif-display); font-size: var(--t-h3); margin: 1rem 0 0.6rem; }
+.page-wishlist .empty p { color: var(--fg-muted); margin-bottom: 1.8rem; }
+.page-wishlist .empty .heart { font-size: 2rem; color: var(--gold-soft); }

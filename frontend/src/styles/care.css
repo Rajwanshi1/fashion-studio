@@ -1,0 +1,18 @@
+/* Client Care — ported from Client Care.html inline styles */
+.page-care .cc-wrap { max-width: 1040px; margin: 0 auto; padding: 0 var(--gutter) clamp(3rem,6vw,5rem); }
+.page-care .cc-quick { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); margin-bottom: clamp(2.5rem,5vw,4rem); }
+@media (max-width: 760px){ .page-care .cc-quick { grid-template-columns: 1fr 1fr; } }
+.page-care .cc-quick a { background: var(--paper); padding: 1.6rem 1.4rem; text-align: center; transition: background var(--dur) var(--ease); }
+.page-care .cc-quick a:hover { background: var(--celadon-50); }
+.page-care .cc-quick .t { font-family: var(--serif-display); font-size: 1.05rem; margin-bottom: 0.3rem; }
+.page-care .cc-quick .d { font-size: 0.68rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold); }
+
+.page-care .faq-section { margin-bottom: clamp(2rem,4vw,3rem); }
+.page-care .faq-section > h2 { font-family: var(--serif-display); font-size: var(--t-h3); margin: 0 0 0.6rem; }
+.page-care .faq-section > .lead { color: var(--fg-muted); font-size: var(--t-sm); margin-bottom: 1rem; }
+
+.page-care .cc-help { text-align: center; background: var(--forest-800); color: var(--celadon-100); padding: clamp(2.5rem,5vw,3.5rem) var(--gutter); margin-top: clamp(2rem,4vw,3rem); }
+.page-care .cc-help .eyebrow { color: var(--gold-soft); display: block; margin-bottom: 1rem; }
+.page-care .cc-help h2 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: var(--t-h3); margin: 0 0 1.4rem; }
+.page-care .cc-help .btn-line { color: var(--celadon-100); border-color: var(--gold-soft); }
+.page-care .cc-help .btn-line:hover { color: var(--gold-soft); }
