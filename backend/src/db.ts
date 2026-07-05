@@ -1,4 +1,5 @@
 import { Pool, PoolClient } from 'pg';
+import { TxRunner } from './types';
 
 export function createPool(databaseUrl: string): Pool {
   return new Pool({ connectionString: databaseUrl, max: 10 });
@@ -21,4 +22,9 @@ export async function withTransaction<T>(
   } finally {
     client.release();
   }
+}
+
+/** Injectable transaction runner for services (keeps pg out of the app layer). */
+export function makeTxRunner(pool: Pool): TxRunner {
+  return (fn) => withTransaction(pool, (client) => fn(client));
 }

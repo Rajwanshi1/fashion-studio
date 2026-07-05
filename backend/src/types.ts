@@ -127,6 +127,14 @@ export interface Payment {
   createdAt: string;
 }
 
+/**
+ * Opaque transaction handle. The real runner passes a pg PoolClient; fakes pass
+ * anything. Repos cast it back — services never see pg types.
+ */
+export type Tx = unknown;
+
+export type TxRunner = <T>(fn: (tx: Tx) => Promise<T>) => Promise<T>;
+
 /** Typed domain error the HTTP layer maps to status codes. */
 export class DomainError extends Error {
   constructor(

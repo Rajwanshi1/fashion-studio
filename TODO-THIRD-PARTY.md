@@ -6,6 +6,14 @@ masked or stubbed so the platform works end-to-end without them.
 ## 1. Razorpay (payments) — MASKED
 Currently `MockRazorpayProvider` in `backend/src/services/payments.service.ts` and a
 "Razorpay · Test Mode" modal in the storefront checkout simulate the full flow.
+
+> **SECURITY — BLOCKING FOR GO-LIVE:** in mock mode `POST /api/payments/confirm` trusts a
+> client-supplied `outcome` field. That is acceptable ONLY while no real payments exist.
+> The Razorpay integration below MUST replace it with server-side signature verification
+> (`HMAC_SHA256(razorpay_order_id + "|" + razorpay_payment_id, key_secret)`) and a
+> signature-verified webhook. Never ship to production with the mock provider enabled —
+> gate it: refuse to boot with `PAYMENT_PROVIDER=mock` when `NODE_ENV=production`.
+
 To go live:
 - [ ] Create Razorpay account, get `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET`
 - [ ] Implement `RazorpayProvider` (create order via Orders API, verify payment signature

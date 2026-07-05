@@ -1,0 +1,457 @@
+import bcrypt from 'bcryptjs';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { createApp } from '../src/app';
+import { FakePaymentProvider, Fakes, fakeTx, makeFakes, seedCatalog } from './fakes';
+
+const SECRET = 'api-test-secret';
+
+const post = (body: unknown, token?: string) => ({
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  body: JSON.stringify(body),
+});
+const withMethod = (method: string, body?: unknown, token?: string) => ({
+  method,
+  headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+});
+const bearer = (token: string) => ({ headers: { Authorization: `Bearer ${token}` } });
+
+const CUSTOMER = {
+  email: 'guest@example.com',
+  phone: '+91 98765 43210',
+  firstName: 'Guest',
+  lastName: 'Shopper',
+  addressLine1: '12 Marine Drive',
+  city: 'Mumbai',
+  state: 'Maharashtra',
+  pincode: '400001',
+  country: 'India',
+};
+
+describe('API', () => {
+  let app: ReturnType<typeof createApp>;
+  let f: Fakes;
+  let seeded: Awaited<ReturnType<typeof seedCatalog>>;
+  let adminToken: string;
+
+  const sageM = () => seeded.sage.variants[0]; // stock 3
+  const mossS = () => seeded.moss.variants[0]; // stock 1
+
+  async function registerCustomer(email = 'aanya@example.com') {
+    const res = await app.request('/api/auth/register', post({ email, password: 'Aanya@2026', firstName: 'Aanya', lastName: 'Mehra' }));
+    expect(res.status).toBe(201);
+    return res.json() as Promise<{ token: string; user: { id: string; email: string } }>;
+  }
+
+  async function placeOrder(items: { variantId: string; quantity: number }[], token?: string) {
+    const res = await app.request('/api/orders', post({ customer: CUSTOMER, deliveryMethod: 'standard', items }, token));
+    expect(res.status).toBe(201);
+    return res.json() as Promise<any>;
+  }
+
+  beforeEach(async () => {
+    f = makeFakes();
+    seeded = await seedCatalog(f.products);
+    await f.users.create({
+      email: 'admin@tanviagnihotry.com',
+      passwordHash: await bcrypt.hash('TanviAdmin@2026', 4),
+      firstName: 'Tanvi',
+      lastName: 'Agnihotry',
+      role: 'admin',
+    });
+    app = createApp({
+      repos: f,
+      paymentProvider: new FakePaymentProvider(),
+      jwtSecret: SECRET,
+      corsOrigins: ['http://localhost:5173'],
+      runInTransaction: fakeTx,
+    });
+    const login = await app.request('/api/auth/login', post({ email: 'admin@tanviagnihotry.com', password: 'TanviAdmin@2026' }));
+    adminToken = (await login.json()).token;
+  });
+
+  describe('health & errors', () => {
+    it('GET /api/health', async () => {
+      const res = await app.request('/api/health');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ status: 'ok' });
+    });
+
+    it('unknown routes return {error} 404', async () => {
+      const res = await app.request('/api/nope');
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: 'Not found' });
+    });
+  });
+
+  describe('auth', () => {
+    it('registers, returns 201 {token,user} without passwordHash', async () => {
+      const { token, user } = await registerCustomer();
+      expect(token).toBeTruthy();
+      expect(user).toMatchObject({ email: 'aanya@example.com', firstName: 'Aanya', role: 'customer' });
+      expect(user).not.toHaveProperty('passwordHash');
+    });
+
+    it('409 on duplicate email', async () => {
+      await registerCustomer();
+      const res = await app.request('/api/auth/register', post({ email: 'aanya@example.com', password: 'Other@2026', firstName: 'X' }));
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toMatch(/already exists/);
+    });
+
+    it('400 with {error:string} on invalid register bodies', async () => {
+      for (const body of [
+        { email: 'not-an-email', password: 'Aanya@2026', firstName: 'A' },
+        { email: 'a@b.com', password: 'short', firstName: 'A' },
+        { email: 'a@b.com', password: 'Aanya@2026' },
+      ]) {
+        const res = await app.request('/api/auth/register', post(body));
+        expect(res.status).toBe(400);
+        expect(typeof (await res.json()).error).toBe('string');
+      }
+    });
+
+    it('logs in and rejects bad credentials with 401', async () => {
+      await registerCustomer();
+      const ok = await app.request('/api/auth/login', post({ email: 'aanya@example.com', password: 'Aanya@2026' }));
+      expect(ok.status).toBe(200);
+      expect((await ok.json()).user.email).toBe('aanya@example.com');
+      const bad = await app.request('/api/auth/login', post({ email: 'aanya@example.com', password: 'nope-wrong' }));
+      expect(bad.status).toBe(401);
+    });
+
+    it('GET /api/auth/me requires a valid Bearer token', async () => {
+      expect((await app.request('/api/auth/me')).status).toBe(401);
+      expect((await app.request('/api/auth/me', bearer('garbage'))).status).toBe(401);
+      const { token, user } = await registerCustomer();
+      const res = await app.request('/api/auth/me', bearer(token));
+      expect(res.status).toBe(200);
+      expect((await res.json()).user).toEqual(user);
+    });
+  });
+
+  describe('catalog', () => {
+    it('lists categories with product counts', async () => {
+      const res = await app.request('/api/categories');
+      expect(res.status).toBe(200);
+      const cats = await res.json();
+      expect(cats.map((c: any) => c.slug)).toEqual(['lehenga-sets', 'gowns']);
+      expect(cats[0].productCount).toBe(2);
+    });
+
+    it('lists products as {items,total,page,pages}, excluding inactive', async () => {
+      const res = await app.request('/api/products');
+      const body = await res.json();
+      expect(body).toMatchObject({ total: 3, page: 1, pages: 1 });
+      expect(body.items.map((p: any) => p.slug)).not.toContain('archived-lehenga');
+    });
+
+    it('supports category, search, sort and pagination query params', async () => {
+      const cat = await (await app.request('/api/products?category=gowns')).json();
+      expect(cat.items.map((p: any) => p.slug)).toEqual(['moss-tissue-draped-gown']);
+
+      const search = await (await app.request('/api/products?search=sequin')).json();
+      expect(search.items.map((p: any) => p.slug)).toEqual(['sage-sequin-jacket-lehenga']);
+
+      const sorted = await (await app.request('/api/products?sort=price_asc')).json();
+      expect(sorted.items.map((p: any) => p.price)).toEqual([9600000, 16800000, 18400000]);
+
+      const paged = await (await app.request('/api/products?limit=2&page=2')).json();
+      expect(paged.items).toHaveLength(1);
+      expect(paged).toMatchObject({ page: 2, pages: 2, total: 3 });
+    });
+
+    it('rejects an invalid sort with 400', async () => {
+      expect((await app.request('/api/products?sort=zalgo')).status).toBe(400);
+    });
+
+    it('returns product detail with variants and related', async () => {
+      const res = await app.request('/api/products/sage-sequin-jacket-lehenga');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.name).toBe('Sage Sequin Jacket Lehenga');
+      expect(body.variants.map((v: any) => v.size)).toEqual(['M', 'Custom']);
+      expect(body.related.map((p: any) => p.slug)).toEqual(['celadon-tissue-draped-lehenga']);
+    });
+
+    it('404s unknown and inactive product slugs', async () => {
+      expect((await app.request('/api/products/ghost')).status).toBe(404);
+      expect((await app.request('/api/products/archived-lehenga')).status).toBe(404);
+    });
+  });
+
+  describe('orders', () => {
+    it('creates a guest order priced server-side', async () => {
+      const order = await placeOrder([{ variantId: sageM().id, quantity: 2 }]);
+      expect(order.orderNumber).toMatch(/^TA-2026-\d{5}$/);
+      expect(order).toMatchObject({ status: 'pending_payment', subtotal: 36800000, deliveryFee: 0, total: 36800000, userId: null });
+    });
+
+    it('409 on insufficient stock', async () => {
+      const res = await app.request('/api/orders', post({ customer: CUSTOMER, deliveryMethod: 'standard', items: [{ variantId: mossS().id, quantity: 5 }] }));
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toMatch(/stock/i);
+    });
+
+    it('400 on empty items and invalid bodies', async () => {
+      const empty = await app.request('/api/orders', post({ customer: CUSTOMER, deliveryMethod: 'standard', items: [] }));
+      expect(empty.status).toBe(400);
+      const invalid = await app.request('/api/orders', post({ customer: { ...CUSTOMER, email: 'nope' }, deliveryMethod: 'standard', items: [{ variantId: sageM().id, quantity: 1 }] }));
+      expect(invalid.status).toBe(400);
+    });
+
+    it('charges priority delivery', async () => {
+      const res = await app.request('/api/orders', post({ customer: CUSTOMER, deliveryMethod: 'priority', items: [{ variantId: sageM().id, quantity: 1 }] }));
+      const order = await res.json();
+      expect(order.deliveryFee).toBe(250000);
+      expect(order.total).toBe(18400000 + 250000);
+    });
+
+    it('attaches userId for Bearer orders and lists them under /api/me/orders', async () => {
+      const { token, user } = await registerCustomer();
+      const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }], token);
+      expect(order.userId).toBe(user.id);
+      const res = await app.request('/api/me/orders', bearer(token));
+      expect(res.status).toBe(200);
+      const list = await res.json();
+      expect(list).toHaveLength(1);
+      expect(list[0].id).toBe(order.id);
+    });
+
+    it('GET /api/me/orders requires auth', async () => {
+      expect((await app.request('/api/me/orders')).status).toBe(401);
+    });
+
+    it('guest tracking requires matching ?email=, matching Bearer, and never leaks', async () => {
+      const { token } = await registerCustomer();
+      const stranger = await registerCustomer('rhea@example.com');
+      const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }], token);
+
+      expect((await app.request(`/api/orders/${order.orderNumber}?email=guest@example.com`)).status).toBe(200);
+      expect((await app.request(`/api/orders/${order.orderNumber}`, bearer(token))).status).toBe(200);
+      expect((await app.request(`/api/orders/${order.orderNumber}`)).status).toBe(404);
+      expect((await app.request(`/api/orders/${order.orderNumber}?email=wrong@example.com`)).status).toBe(404);
+      expect((await app.request(`/api/orders/${order.orderNumber}`, bearer(stranger.token))).status).toBe(404);
+      expect((await app.request('/api/orders/TA-2026-99999?email=guest@example.com')).status).toBe(404);
+    });
+  });
+
+  describe('payments', () => {
+    it('checkout returns the masked Razorpay payload', async () => {
+      const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
+      const res = await app.request('/api/payments/checkout', post({ orderId: order.id }));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        paymentId: expect.any(String),
+        providerOrderId: expect.stringMatching(/^order_MOCK/),
+        keyId: 'rzp_test_MASKED',
+        amount: order.total,
+        currency: 'INR',
+        mock: true,
+      });
+    });
+
+    it('404 for checkout on unknown order, 400 for bad confirm outcome', async () => {
+      expect((await app.request('/api/payments/checkout', post({ orderId: 'ghost' }))).status).toBe(404);
+      expect((await app.request('/api/payments/confirm', post({ paymentId: 'x', outcome: 'maybe' }))).status).toBe(400);
+      expect((await app.request('/api/payments/confirm', post({ paymentId: 'ghost', outcome: 'success' }))).status).toBe(404);
+    });
+
+    it('confirm success captures payment and marks order paid', async () => {
+      const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
+      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: order.id }))).json();
+      const res = await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.payment.status).toBe('captured');
+      expect(body.payment.providerPaymentId).toMatch(/^pay_MOCK/);
+      expect(body.order.status).toBe('paid');
+      const tracked = await (await app.request(`/api/orders/${order.orderNumber}?email=guest@example.com`)).json();
+      expect(tracked.status).toBe('paid');
+    });
+
+    it('confirm failure leaves the order retryable', async () => {
+      const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
+      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: order.id }))).json();
+      const res = await app.request('/api/payments/confirm', post({ paymentId, outcome: 'failure' }));
+      const body = await res.json();
+      expect(body.payment.status).toBe('failed');
+      expect(body.order.status).toBe('pending_payment');
+      // retry via a fresh checkout succeeds
+      const retry = await (await app.request('/api/payments/checkout', post({ orderId: order.id }))).json();
+      const done = await (await app.request('/api/payments/confirm', post({ paymentId: retry.paymentId, outcome: 'success' }))).json();
+      expect(done.order.status).toBe('paid');
+    });
+
+    it('second confirm is idempotent; checkout after capture is 409', async () => {
+      const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
+      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: order.id }))).json();
+      const first = await (await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }))).json();
+      const again = await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }));
+      expect(again.status).toBe(200);
+      expect((await again.json()).payment).toEqual(first.payment);
+      expect((await app.request('/api/payments/checkout', post({ orderId: order.id }))).status).toBe(409);
+    });
+  });
+
+  describe('wishlist', () => {
+    it('requires auth', async () => {
+      expect((await app.request('/api/me/wishlist')).status).toBe(401);
+      expect((await app.request('/api/me/wishlist/x', withMethod('PUT'))).status).toBe(401);
+      expect((await app.request('/api/me/wishlist/x', withMethod('DELETE'))).status).toBe(401);
+    });
+
+    it('adds (idempotently), lists and removes products', async () => {
+      const { token } = await registerCustomer();
+      const added = await app.request(`/api/me/wishlist/${seeded.sage.id}`, withMethod('PUT', undefined, token));
+      expect(added.status).toBe(200);
+      expect((await added.json()).map((p: any) => p.slug)).toEqual(['sage-sequin-jacket-lehenga']);
+
+      await app.request(`/api/me/wishlist/${seeded.sage.id}`, withMethod('PUT', undefined, token));
+      await app.request(`/api/me/wishlist/${seeded.moss.id}`, withMethod('PUT', undefined, token));
+      const list = await (await app.request('/api/me/wishlist', bearer(token))).json();
+      expect(list).toHaveLength(2);
+      expect(list[0].slug).toBe('moss-tissue-draped-gown'); // newest first
+
+      const removed = await app.request(`/api/me/wishlist/${seeded.sage.id}`, withMethod('DELETE', undefined, token));
+      expect((await removed.json()).map((p: any) => p.slug)).toEqual(['moss-tissue-draped-gown']);
+    });
+
+    it('404s adding an unknown product and isolates users', async () => {
+      const { token } = await registerCustomer();
+      expect((await app.request('/api/me/wishlist/ghost', withMethod('PUT', undefined, token))).status).toBe(404);
+      const other = await registerCustomer('rhea@example.com');
+      await app.request(`/api/me/wishlist/${seeded.sage.id}`, withMethod('PUT', undefined, token));
+      expect(await (await app.request('/api/me/wishlist', bearer(other.token))).json()).toEqual([]);
+    });
+  });
+
+  describe('admin', () => {
+    it('guards every admin route: 401 anonymous, 403 customer', async () => {
+      const { token: customerToken } = await registerCustomer();
+      for (const [path, init] of [
+        ['/api/admin/summary', undefined],
+        ['/api/admin/products', undefined],
+        ['/api/admin/orders', undefined],
+        ['/api/admin/payments', undefined],
+      ] as const) {
+        expect((await app.request(path, init)).status).toBe(401);
+        expect((await app.request(path, bearer(customerToken))).status).toBe(403);
+      }
+    });
+
+    it('lists all products including inactive ones', async () => {
+      const res = await app.request('/api/admin/products', bearer(adminToken));
+      expect(res.status).toBe(200);
+      const items = await res.json();
+      expect(items.map((p: any) => p.slug)).toContain('archived-lehenga');
+      expect(items[0].variants.length).toBeGreaterThan(0);
+      expect(items[0]).toHaveProperty('active');
+      expect(items[0]).toHaveProperty('categorySlug');
+    });
+
+    it('creates and updates products, sets variant stock', async () => {
+      const created = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categoryId: seeded.gowns.id,
+          slug: 'fern-pleated-tissue-gown',
+          name: 'Fern Pleated Tissue Gown',
+          price: 11200000,
+          color: 'Fern',
+          flag: 'new',
+          variants: [{ size: 'M', stock: 4 }],
+        }, adminToken),
+      );
+      expect(created.status).toBe(201);
+      const product = await created.json();
+      expect(product).toMatchObject({ slug: 'fern-pleated-tissue-gown', categorySlug: 'gowns', flag: 'new' });
+
+      const updated = await app.request(`/api/admin/products/${product.id}`, withMethod('PUT', { price: 11800000, active: false }, adminToken));
+      expect(updated.status).toBe(200);
+      expect(await updated.json()).toMatchObject({ price: 11800000, active: false });
+
+      const variantId = product.variants[0].id;
+      const patched = await app.request(`/api/admin/variants/${variantId}`, withMethod('PATCH', { stock: 9 }, adminToken));
+      expect(patched.status).toBe(200);
+      expect(await patched.json()).toMatchObject({ id: variantId, stock: 9 });
+
+      expect((await app.request('/api/admin/products/ghost', withMethod('PUT', { price: 1 }, adminToken))).status).toBe(404);
+      expect((await app.request('/api/admin/variants/ghost', withMethod('PATCH', { stock: 1 }, adminToken))).status).toBe(404);
+      expect((await app.request(`/api/admin/variants/${variantId}`, withMethod('PATCH', { stock: -2 }, adminToken))).status).toBe(400);
+      expect((await app.request('/api/admin/products', withMethod('POST', { categoryId: 'ghost', slug: 'x', name: 'X', price: 1 }, adminToken))).status).toBe(404);
+    });
+
+    it('lists and filters orders, walks status transitions, cancel restocks', async () => {
+      const a = await placeOrder([{ variantId: sageM().id, quantity: 2 }]);
+      const b = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
+
+      const all = await (await app.request('/api/admin/orders', bearer(adminToken))).json();
+      expect(all).toHaveLength(2);
+      const filtered = await (await app.request('/api/admin/orders?status=pending_payment', bearer(adminToken))).json();
+      expect(filtered).toHaveLength(2);
+      expect((await app.request('/api/admin/orders?status=bogus', bearer(adminToken))).status).toBe(400);
+
+      const paid = await app.request(`/api/admin/orders/${a.id}`, withMethod('PATCH', { status: 'paid' }, adminToken));
+      expect(paid.status).toBe(200);
+      expect((await paid.json()).status).toBe('paid');
+      const bad = await app.request(`/api/admin/orders/${a.id}`, withMethod('PATCH', { status: 'delivered' }, adminToken));
+      expect(bad.status).toBe(400);
+      expect((await app.request('/api/admin/orders/ghost', withMethod('PATCH', { status: 'paid' }, adminToken))).status).toBe(404);
+
+      // cancel restocks: stock was 3 - 2 - 1 = 0; cancelling b (qty 1) returns it to 1
+      const cancelled = await app.request(`/api/admin/orders/${b.id}`, withMethod('PATCH', { status: 'cancelled' }, adminToken));
+      expect((await cancelled.json()).status).toBe('cancelled');
+      const products = await (await app.request('/api/admin/products', bearer(adminToken))).json();
+      const sage = products.find((p: any) => p.slug === 'sage-sequin-jacket-lehenga');
+      expect(sage.variants.find((v: any) => v.size === 'M').stock).toBe(1);
+    });
+
+    it('lists payments with orderNumber', async () => {
+      const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
+      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: order.id }))).json();
+      await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }));
+      const res = await app.request('/api/admin/payments', bearer(adminToken));
+      expect(res.status).toBe(200);
+      const payments = await res.json();
+      expect(payments).toHaveLength(1);
+      expect(payments[0]).toMatchObject({ status: 'captured', orderNumber: order.orderNumber, currency: 'INR' });
+    });
+
+    it('summary reports activeOrders, revenue, pendingPayments, lowStock and recentOrders', async () => {
+      const paidOrder = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
+      await placeOrder([{ variantId: sageM().id, quantity: 2 }]); // stays pending
+      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: paidOrder.id }))).json();
+      await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }));
+
+      const res = await app.request('/api/admin/summary', bearer(adminToken));
+      expect(res.status).toBe(200);
+      const summary = await res.json();
+      expect(summary.activeOrders).toBe(1);
+      expect(summary.pendingPayments).toBe(1);
+      expect(summary.revenue).toBe(paidOrder.total);
+      // moss S has stock 1 (<=2); Custom sizes and inactive products are excluded
+      expect(summary.lowStock).toContainEqual({
+        productId: seeded.moss.id,
+        productName: 'Moss Tissue Draped Gown',
+        size: 'S',
+        stock: 1,
+      });
+      expect(summary.lowStock.every((r: any) => r.size !== 'Custom')).toBe(true);
+      expect(summary.lowStock.map((r: any) => r.productId)).not.toContain(seeded.inactive.id);
+      // sage M is at 0 after the two orders above
+      expect(summary.lowStock).toContainEqual(expect.objectContaining({ productId: seeded.sage.id, size: 'M', stock: 0 }));
+      expect(summary.recentOrders).toHaveLength(2);
+      expect(summary.recentOrders[0]).toMatchObject({
+        orderNumber: expect.stringMatching(/^TA-2026-\d{5}$/),
+        itemsCount: 2,
+        status: 'pending_payment',
+        firstName: 'Guest',
+      });
+      expect(summary.recentOrders[0]).toHaveProperty('id');
+      expect(summary.recentOrders[0]).toHaveProperty('createdAt');
+      expect(summary.recentOrders[0]).toHaveProperty('total');
+    });
+  });
+});
