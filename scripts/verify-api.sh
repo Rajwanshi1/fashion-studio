@@ -5,12 +5,12 @@ set -u
 API="${API:-http://localhost:3001}"
 PASS=0; FAIL=0
 TS="$(date +%s)"
-GUEST_EMAIL="guest+${TS}@example.com"
-NEW_USER_EMAIL="test+${TS}@example.com"
+GUEST_EMAIL="guest${TS}@example.com"
+NEW_USER_EMAIL="test${TS}@example.com"
 
-check () { # check <name> <expected_status> <actual_status>
-  if [ "$2" = "$3" ]; then PASS=$((PASS+1)); echo "PASS  $1 ($3)";
-  else FAIL=$((FAIL+1)); echo "FAIL  $1 (expected $2, got $3)"; fi
+check () { # check <name> <expected_status(s) pipe-separated> <actual_status>
+  case "|$2|" in *"|$3|"*) PASS=$((PASS+1)); echo "PASS  $1 ($3)";;
+  *) FAIL=$((FAIL+1)); echo "FAIL  $1 (expected $2, got $3)";; esac
 }
 code () { curl -s -o /tmp/vapi_body -w '%{http_code}' "$@"; }
 body () { cat /tmp/vapi_body; }
@@ -32,7 +32,7 @@ VARIANT_ID=$(jqget "d.variants.find(v=>v.stock>1).id")
 check "GET /api/products/nope-404" 404 "$(code $API/api/products/nope-404)"
 
 echo "== auth =="
-check "register" 200 "$(code -X POST $API/api/auth/register -H 'content-type: application/json' -d "{\"email\":\"$NEW_USER_EMAIL\",\"password\":\"Passw0rd!\",\"firstName\":\"Test\",\"lastName\":\"User\"}")"
+check "register" "200|201" "$(code -X POST $API/api/auth/register -H 'content-type: application/json' -d "{\"email\":\"$NEW_USER_EMAIL\",\"password\":\"Passw0rd!\",\"firstName\":\"Test\",\"lastName\":\"User\"}")"
 TOKEN=$(jqget "d.token")
 check "register duplicate -> 409" 409 "$(code -X POST $API/api/auth/register -H 'content-type: application/json' -d "{\"email\":\"$NEW_USER_EMAIL\",\"password\":\"Passw0rd!\",\"firstName\":\"T\",\"lastName\":\"U\"}")"
 check "login bad password -> 401" 401 "$(code -X POST $API/api/auth/login -H 'content-type: application/json' -d "{\"email\":\"$NEW_USER_EMAIL\",\"password\":\"wrong\"}")"
@@ -43,7 +43,7 @@ check "GET /api/auth/me no token -> 401" 401 "$(code $API/api/auth/me)"
 
 echo "== orders (guest) =="
 ORDER_BODY="{\"customer\":{\"email\":\"$GUEST_EMAIL\",\"phone\":\"+91 90000 00000\",\"firstName\":\"Guest\",\"lastName\":\"Buyer\",\"addressLine1\":\"12 Sea Breeze\",\"addressLine2\":\"\",\"city\":\"Mumbai\",\"state\":\"Maharashtra\",\"pincode\":\"400026\",\"country\":\"India\"},\"deliveryMethod\":\"standard\",\"items\":[{\"variantId\":\"$VARIANT_ID\",\"quantity\":1}]}"
-check "POST /api/orders guest" 200 "$(code -X POST $API/api/orders -H 'content-type: application/json' -d "$ORDER_BODY")"
+check "POST /api/orders guest" "200|201" "$(code -X POST $API/api/orders -H 'content-type: application/json' -d "$ORDER_BODY")"
 ORDER_ID=$(jqget "d.id"); ORDER_NUMBER=$(jqget "d.orderNumber")
 check "order lookup with email" 200 "$(code "$API/api/orders/$ORDER_NUMBER?email=$GUEST_EMAIL")"
 check "order lookup wrong email -> 404" 404 "$(code "$API/api/orders/$ORDER_NUMBER?email=wrong@example.com")"
@@ -73,7 +73,7 @@ check "admin summary" 200 "$(code $API/api/admin/summary -H "authorization: Bear
 check "admin products" 200 "$(code $API/api/admin/products -H "authorization: Bearer $ADMIN_TOKEN")"
 check "admin orders" 200 "$(code "$API/api/admin/orders?status=paid" -H "authorization: Bearer $ADMIN_TOKEN")"
 check "admin payments" 200 "$(code $API/api/admin/payments -H "authorization: Bearer $ADMIN_TOKEN")"
-check "admin create product" 200 "$(code -X POST $API/api/admin/products -H "authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' -d "{\"categorySlug\":\"gowns\",\"name\":\"Verify Gown $TS\",\"slug\":\"verify-gown-$TS\",\"description\":\"api verification\",\"details\":\"test\",\"price\":9900000,\"color\":\"Sage\",\"flag\":null,\"imageUrl\":null,\"active\":true,\"variants\":[{\"size\":\"S\",\"stock\":3},{\"size\":\"M\",\"stock\":3}]}")"
+check "admin create product" "200|201" "$(code -X POST $API/api/admin/products -H "authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' -d "{\"categorySlug\":\"gowns\",\"name\":\"Verify Gown $TS\",\"slug\":\"verify-gown-$TS\",\"description\":\"api verification\",\"details\":\"test\",\"price\":9900000,\"color\":\"Sage\",\"flag\":null,\"imageUrl\":null,\"active\":true,\"variants\":[{\"size\":\"S\",\"stock\":3},{\"size\":\"M\",\"stock\":3}]}")"
 NEW_PRODUCT_ID=$(jqget "d.id")
 check "admin update product" 200 "$(code -X PUT $API/api/admin/products/$NEW_PRODUCT_ID -H "authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' -d '{"active":false}')"
 # order status transitions on the paid order

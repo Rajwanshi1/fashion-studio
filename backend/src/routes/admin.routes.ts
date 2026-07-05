@@ -21,8 +21,10 @@ const ORDER_STATUSES = [
 
 const flagSchema = z.enum(['bestseller', 'new']).nullable();
 
-const createProductSchema = z.object({
-  categoryId: z.string().min(1),
+const productBaseSchema = z.object({
+  // The category can be referenced by id or by slug (the admin UI knows slugs).
+  categoryId: z.string().min(1).optional(),
+  categorySlug: z.string().min(1).optional(),
   slug: z.string().min(1),
   name: z.string().min(1),
   description: z.string().optional(),
@@ -35,7 +37,11 @@ const createProductSchema = z.object({
   variants: z.array(z.object({ size: z.string().min(1), stock: z.number().int().min(0) })).optional(),
 });
 
-const updateProductSchema = createProductSchema.omit({ variants: true }).partial();
+const createProductSchema = productBaseSchema.refine((v) => v.categoryId || v.categorySlug, {
+  message: 'categoryId or categorySlug is required',
+});
+
+const updateProductSchema = productBaseSchema.omit({ variants: true }).partial();
 
 export interface AdminDeps {
   products: ProductsRepo;
@@ -50,6 +56,14 @@ const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['paid', 'in_atelier', 'quality_che
 export function adminRoutes(deps: AdminDeps) {
   const r = new Hono<AuthEnv>();
   r.use('*', requireAuth(deps.jwtSecret), requireAdmin);
+
+  /** Resolve categorySlug → categoryId; returns undefined when the slug is unknown. */
+  async function resolveCategoryId(body: { categoryId?: string; categorySlug?: string }): Promise<string | undefined> {
+    if (body.categoryId) return body.categoryId;
+    if (!body.categorySlug) return undefined;
+    const categories = await deps.products.listCategories();
+    return categories.find((cat) => cat.slug === body.categorySlug)?.id;
+  }
 
   r.get('/summary', async (c) => {
     const [products, orders] = await Promise.all([deps.products.listAllProducts(), deps.orders.listAdmin()]);
@@ -84,11 +98,20 @@ export function adminRoutes(deps: AdminDeps) {
   r.get('/products', async (c) => c.json(await deps.products.listAllProducts()));
 
   r.post('/products', zValidator('json', createProductSchema, zodHook), async (c) => {
-    return c.json(await deps.products.createProduct(c.req.valid('json')), 201);
+    const { categorySlug, ...body } = c.req.valid('json');
+    const categoryId = await resolveCategoryId({ categoryId: body.categoryId, categorySlug });
+    if (!categoryId) return c.json({ error: 'Category not found' }, 404);
+    return c.json(await deps.products.createProduct({ ...body, categoryId }), 201);
   });
 
   r.put('/products/:id', zValidator('json', updateProductSchema, zodHook), async (c) => {
-    const product = await deps.products.updateProduct(c.req.param('id'), c.req.valid('json'));
+    const { categorySlug, ...body } = c.req.valid('json');
+    if (categorySlug) {
+      const categoryId = await resolveCategoryId({ categoryId: body.categoryId, categorySlug });
+      if (!categoryId) return c.json({ error: 'Category not found' }, 404);
+      body.categoryId = categoryId;
+    }
+    const product = await deps.products.updateProduct(c.req.param('id'), body);
     if (!product) return c.json({ error: 'Product not found' }, 404);
     return c.json(product);
   });

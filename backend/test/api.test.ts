@@ -83,6 +83,18 @@ describe('API', () => {
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: 'Not found' });
     });
+
+    it('malformed JSON bodies return 400 {error}, not 500', async () => {
+      for (const path of ['/api/auth/register', '/api/orders', '/api/payments/confirm']) {
+        const res = await app.request(path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{"broken":',
+        });
+        expect(res.status).toBe(400);
+        expect(typeof (await res.json()).error).toBe('string');
+      }
+    });
   });
 
   describe('auth', () => {
@@ -381,6 +393,30 @@ describe('API', () => {
       expect((await app.request('/api/admin/variants/ghost', withMethod('PATCH', { stock: 1 }, adminToken))).status).toBe(404);
       expect((await app.request(`/api/admin/variants/${variantId}`, withMethod('PATCH', { stock: -2 }, adminToken))).status).toBe(400);
       expect((await app.request('/api/admin/products', withMethod('POST', { categoryId: 'ghost', slug: 'x', name: 'X', price: 1 }, adminToken))).status).toBe(404);
+    });
+
+    it('creates products by categorySlug as well as categoryId', async () => {
+      const created = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categorySlug: 'gowns',
+          slug: 'verify-gown',
+          name: 'Verify Gown',
+          price: 9900000,
+          color: 'Sage',
+          flag: null,
+          imageUrl: null,
+          active: true,
+          variants: [{ size: 'S', stock: 3 }, { size: 'M', stock: 3 }],
+        }, adminToken),
+      );
+      expect(created.status).toBe(201);
+      expect(await created.json()).toMatchObject({ slug: 'verify-gown', categorySlug: 'gowns' });
+
+      const unknownSlug = await app.request('/api/admin/products', withMethod('POST', { categorySlug: 'nope', slug: 'y', name: 'Y', price: 1 }, adminToken));
+      expect(unknownSlug.status).toBe(404);
+      const missingBoth = await app.request('/api/admin/products', withMethod('POST', { slug: 'z', name: 'Z', price: 1 }, adminToken));
+      expect(missingBoth.status).toBe(400);
     });
 
     it('lists and filters orders, walks status transitions, cancel restocks', async () => {

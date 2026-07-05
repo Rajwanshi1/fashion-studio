@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { HTTPException } from 'hono/http-exception';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { OrdersRepo } from './data/orders.repo';
 import type { PaymentsRepo } from './data/payments.repo';
 import type { ProductsRepo, WishlistRepo } from './data/products.repo';
@@ -52,6 +54,11 @@ export function createApp(deps: AppDeps) {
 
   app.onError((err, c) => {
     if (err instanceof DomainError) return c.json({ error: err.message }, DOMAIN_STATUS[err.code]);
+    // e.g. hono's 400 "Malformed JSON in request body" — keep its status but
+    // normalize the body to the contract's { error: string } shape.
+    if (err instanceof HTTPException) {
+      return c.json({ error: err.message || 'Bad request' }, err.status as ContentfulStatusCode);
+    }
     console.error(err);
     return c.json({ error: 'Internal server error' }, 500);
   });
