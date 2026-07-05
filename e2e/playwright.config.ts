@@ -18,6 +18,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
-    { name: 'mobile', use: { ...devices['Pixel 7'] } },
+    // Mobile runs only the core purchase journey (spec 1), tagged @mobile.
+    { name: 'mobile', use: { ...devices['Pixel 7'] }, grep: /@mobile/ },
   ],
 });
