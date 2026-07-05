@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../components/Toast';
@@ -6,10 +6,48 @@ import ImageSlot from '../components/ImageSlot';
 import Reveal from '../components/Reveal';
 import '../styles/auth.css';
 
+// Minimal Google Identity Services surface — we deliberately avoid the
+// @types/google.accounts dependency and declare only what we call.
+interface GoogleCredentialResponse {
+  credential: string;
+}
+
+interface GoogleIdConfiguration {
+  client_id: string;
+  callback: (response: GoogleCredentialResponse) => void;
+}
+
+interface GsiButtonConfiguration {
+  type?: 'standard' | 'icon';
+  theme?: 'outline' | 'filled_blue' | 'filled_black';
+  size?: 'large' | 'medium' | 'small';
+  text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
+  width?: number;
+  logo_alignment?: 'left' | 'center';
+}
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: GoogleIdConfiguration) => void;
+          renderButton: (parent: HTMLElement, options: GsiButtonConfiguration) => void;
+        };
+      };
+    };
+  }
+}
+
+const GSI_SRC = 'https://accounts.google.com/gsi/client';
+
 export default function Login() {
-  const { login, register } = useAuth();
+  const { login, loginWithGoogle, register } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  const googleClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) || undefined;
+  const googleSlotRef = useRef<HTMLDivElement | null>(null);
 
   const [tab, setTab] = useState<'signin' | 'register'>('signin');
   const [busy, setBusy] = useState(false);
@@ -35,6 +73,54 @@ export default function Login() {
       setBusy(false);
     }
   };
+
+  useEffect(() => {
+    if (!googleClientId) return;
+    let cancelled = false;
+
+    const init = () => {
+      const gsi = window.google?.accounts.id;
+      const slot = googleSlotRef.current;
+      if (cancelled || !gsi || !slot) return;
+      gsi.initialize({
+        client_id: googleClientId,
+        callback: (response) => {
+          void (async () => {
+            setBusy(true);
+            setError(null);
+            try {
+              await loginWithGoogle(response.credential);
+              navigate('/account');
+            } catch (err) {
+              setError((err as { message?: string }).message ?? 'Unable to sign in with Google.');
+            } finally {
+              setBusy(false);
+            }
+          })();
+        },
+      });
+      gsi.renderButton(slot, { theme: 'outline', size: 'large', text: 'continue_with' });
+    };
+
+    if (window.google?.accounts.id) {
+      init();
+      return;
+    }
+
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${GSI_SRC}"]`);
+    const script = existing ?? document.createElement('script');
+    if (!existing) {
+      script.src = GSI_SRC;
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+    script.addEventListener('load', init);
+    return () => {
+      cancelled = true;
+      script.removeEventListener('load', init);
+    };
+  }, [googleClientId, loginWithGoogle, navigate]);
 
   const onRegister = async (e: FormEvent) => {
     e.preventDefault();
@@ -201,14 +287,20 @@ export default function Login() {
 
           <div className="auth-or">or continue with</div>
           <div className="social-row">
-            <button type="button" onClick={() => showToast('Google sign-in — coming soon')}>
-              Google
-            </button>
+            {googleClientId ? (
+              <div className="google-slot" ref={googleSlotRef} aria-label="Sign in with Google" />
+            ) : (
+              <button type="button" onClick={() => showToast('Google sign-in — setup pending')}>
+                Google
+              </button>
+            )}
             <button type="button" onClick={() => showToast('Apple sign-in — coming soon')}>
               Apple
             </button>
           </div>
-          <p className="soon">Social sign-in — coming soon</p>
+          <p className="soon">
+            {googleClientId ? 'Apple sign-in — coming soon' : 'Social sign-in — coming soon'}
+          </p>
           <div className="back-home">
             <Link to="/">← Back to Tanvi Agnihotry</Link>
           </div>
