@@ -208,6 +208,22 @@ table.data { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 }
 .btn-outline:hover { background: var(--celadon); border-color: transparent; }
 .btn-buy.fit, .btn-outline.fit { width: auto; padding-inline: 2.4em; }
+.ulink {
+  background: none;
+  border: 0;
+  padding: 0 0 2px;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--gold);
+  border-bottom: 1px solid var(--hairline-gold);
+  transition: color var(--dur) var(--ease);
+  white-space: nowrap;
+}
+.ulink:hover { color: var(--forest-700); }
+.ulink:disabled { color: var(--fg-muted); border-bottom-color: var(--hairline); cursor: not-allowed; }
 
 /* ---- Forms (identical to shop.css) ---- */
 .field { margin-bottom: 1rem; }

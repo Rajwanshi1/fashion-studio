@@ -10,6 +10,19 @@ export interface PublicUser {
   role: Role;
 }
 
+export type AuthProvider = 'password' | 'google';
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+  authProvider: AuthProvider;
+  createdAt: string;
+  ordersCount: number;
+}
+
 export interface Category {
   id: string;
   slug: string;

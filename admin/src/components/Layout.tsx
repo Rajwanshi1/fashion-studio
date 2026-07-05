@@ -34,6 +34,9 @@ export default function Layout() {
           <NavLink to="/payments" className={navClass}>
             Payments
           </NavLink>
+          <NavLink to="/users" className={navClass}>
+            Users
+          </NavLink>
         </nav>
         <div className="side-foot">
           {user && (
