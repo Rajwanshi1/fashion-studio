@@ -1,0 +1,346 @@
+/* ============================================================
+   TANVI AGNIHOTRY — Atelier Admin chrome
+   Extends brand.css tokens: ink sidebar, paper canvas,
+   hairline tables, gold caps, storefront badges/buttons/forms.
+   ============================================================ */
+
+/* ---- Shell ---- */
+.admin {
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  min-height: 100vh;
+}
+
+/* ---- Sidebar (ink) ---- */
+.side {
+  background: var(--ink);
+  color: var(--celadon-100);
+  display: flex;
+  flex-direction: column;
+  gap: 2.4rem;
+  padding: 2.2rem 1.8rem 1.8rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+.side .brand { text-align: left; }
+.side .wordmark {
+  display: block;
+  font-family: var(--serif-display);
+  font-size: 1.12rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--celadon-50);
+  line-height: 1.35;
+}
+.side .atelier {
+  display: block;
+  margin-top: 0.55rem;
+  font-size: var(--t-eyebrow);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--gold-soft);
+}
+.side nav { display: flex; flex-direction: column; gap: 0.1rem; flex: 1; }
+.side nav a {
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--celadon-100);
+  padding: 0.72rem 0;
+  border-bottom: 1px solid rgba(230, 215, 184, 0.1);
+  transition: color var(--dur) var(--ease);
+}
+.side nav a:hover { color: var(--gold-soft); }
+.side nav a.on { color: var(--gold-soft); }
+.side nav a.on::before { content: '—'; color: var(--gold); margin-right: 0.55rem; }
+.side-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid rgba(230, 215, 184, 0.14);
+}
+.side-foot .who { font-size: 0.72rem; color: var(--celadon-200); letter-spacing: 0.06em; }
+.side-foot .signout {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  padding: 0 0 2px;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--gold-soft);
+  border-bottom: 1px solid var(--hairline-gold);
+  transition: color var(--dur) var(--ease);
+}
+.side-foot .signout:hover { color: var(--gold-pale); }
+
+/* ---- Canvas ---- */
+.canvas {
+  background: var(--paper);
+  padding: clamp(1.6rem, 3.5vw, 3rem) clamp(1.25rem, 3.5vw, 3.2rem) 4.5rem;
+  min-width: 0;
+}
+.page-head-admin { margin-bottom: clamp(1.6rem, 3vw, 2.4rem); }
+.page-head-admin .eyebrow { display: block; margin-bottom: 0.7rem; }
+.page-head-admin h1 { font-family: var(--serif-display); font-size: var(--t-h2); }
+.page-head-admin .sub { margin: 0.7rem 0 0; color: var(--fg-muted); font-size: var(--t-sm); max-width: 60ch; }
+.head-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: clamp(1.6rem, 3vw, 2.4rem);
+}
+.head-row .page-head-admin { margin-bottom: 0; }
+
+.section-label {
+  font-size: 0.6rem;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 2.6rem 0 1.1rem;
+}
+
+/* ---- Stat cards ---- */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+@media (max-width: 1100px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .stats { grid-template-columns: 1fr; } }
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  padding: 1.35rem 1.5rem;
+}
+.stat .k {
+  font-size: 0.58rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.stat .v {
+  font-family: var(--serif-display);
+  font-size: clamp(1.5rem, 2.4vw, 2rem);
+  margin-top: 0.55rem;
+  line-height: 1.1;
+}
+.stat .hint { margin-top: 0.4rem; font-size: 0.72rem; color: var(--fg-muted); }
+
+/* ---- Tables ---- */
+.table-wrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+}
+table.data { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.data th {
+  text-align: left;
+  background: var(--celadon-50);
+  font-size: 0.56rem;
+  font-weight: 400;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--gold);
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.data td {
+  padding: 0.95rem 1.1rem;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: middle;
+  color: var(--ink);
+}
+.data tbody tr:last-child > td { border-bottom: 0; }
+.data th.num, .data td.num { text-align: right; }
+.data td .nm { font-family: var(--serif-display); font-size: 0.95rem; }
+.data td .dim { color: var(--fg-muted); font-size: 0.78rem; }
+.data tbody tr.rowlink { cursor: pointer; transition: background var(--dur) var(--ease); }
+.data tbody tr.rowlink:hover { background: var(--celadon-50); }
+.data td.empty { text-align: center; color: var(--fg-muted); padding: 2.6rem 1rem; font-size: var(--t-sm); }
+.data tr.detail > td { background: var(--celadon-50); padding: 1.4rem 1.1rem; }
+
+/* ---- Status badges (mirrors storefront .badge) ---- */
+.badge {
+  display: inline-block;
+  font-size: 0.58rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  padding: 0.45em 0.9em;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badge.crafting { background: var(--gold-pale); color: var(--forest-800); }
+.badge.delivered { background: var(--celadon-400); color: var(--forest-800); }
+.badge.paid { background: var(--celadon); color: var(--forest-700); }
+.badge.dispatched { background: var(--celadon-200); color: var(--forest-800); }
+.badge.pending { background: none; border: 1px solid var(--hairline); color: var(--ink-soft); }
+.badge.muted { background: var(--celadon-50); color: var(--fg-muted); }
+
+/* ---- Buttons (identical to shop.css) ---- */
+.btn-buy {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.7em;
+  width: 100%; padding: 1.2em 2em;
+  background: var(--ink); color: var(--paper);
+  font-family: var(--sans); font-size: 0.74rem; letter-spacing: var(--track-wide); text-transform: uppercase;
+  border: 0; border-radius: var(--edge); cursor: pointer; transition: background var(--dur) var(--ease);
+}
+.btn-buy:hover { background: var(--forest-700); }
+.btn-buy.gold { background: var(--gold); color: var(--surface); }
+.btn-buy.gold:hover { background: var(--gold-soft); color: var(--forest-800); }
+.btn-buy:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-outline {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.7em;
+  width: 100%; padding: 1.2em 2em;
+  background: none; color: var(--ink);
+  font-family: var(--sans); font-size: 0.74rem; letter-spacing: var(--track-wide); text-transform: uppercase;
+  border: 1px solid var(--hairline-gold); border-radius: var(--edge); cursor: pointer; transition: all var(--dur) var(--ease);
+}
+.btn-outline:hover { background: var(--celadon); border-color: transparent; }
+.btn-buy.fit, .btn-outline.fit { width: auto; padding-inline: 2.4em; }
+
+/* ---- Forms (identical to shop.css) ---- */
+.field { margin-bottom: 1rem; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
+label.lab { display: block; font-size: 0.6rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink-soft); margin-bottom: 0.5rem; }
+.inp { width: 100%; border: 1px solid var(--hairline); border-radius: var(--edge); background: var(--surface); padding: 0.95em 1em; font-family: var(--sans); font-size: 0.92rem; color: var(--ink); transition: border-color var(--dur) var(--ease); }
+.inp::placeholder { color: var(--sage-500); }
+.inp:focus { outline: none; border-color: var(--gold); }
+textarea.inp { resize: vertical; min-height: 120px; }
+select.inp {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--gold) 50%),
+    linear-gradient(135deg, var(--gold) 50%, transparent 50%);
+  background-position: calc(100% - 18px) center, calc(100% - 13px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.check { display: flex; align-items: center; gap: 0.6rem; font-size: var(--t-sm); color: var(--ink-soft); }
+.check input { accent-color: var(--forest-700); width: 15px; height: 15px; }
+
+.form-err {
+  border: 1px solid var(--hairline-gold);
+  background: var(--celadon-50);
+  color: var(--forest-800);
+  border-radius: var(--edge);
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+/* ---- Filter chips (identical to shop.css) ---- */
+.chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.chip { font-size: 0.64rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink); border: 1px solid var(--hairline); border-radius: var(--edge); padding: 0.6em 1.1em; cursor: pointer; background: none; transition: all var(--dur) var(--ease); font-family: var(--sans); }
+.chip:hover { border-color: var(--gold); }
+.chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+/* ---- Toast (identical to shop.css) ---- */
+.toast { position: fixed; right: 20px; bottom: 20px; z-index: 200; background: var(--ink); color: var(--paper); padding: 1rem 1.4rem; border-radius: var(--edge); font-size: 0.76rem; letter-spacing: 0.05em; transform: translateY(160%); transition: transform 360ms var(--ease); display: flex; gap: 0.7rem; align-items: center; }
+.toast.show { transform: none; }
+.toast .g { color: var(--gold-soft); }
+
+/* ---- Login ---- */
+.login-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+  padding: var(--gutter);
+}
+.login-card {
+  width: min(420px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  padding: clamp(2rem, 5vw, 3rem);
+  text-align: center;
+}
+.login-card .eyebrow { display: block; margin-bottom: 1rem; }
+.login-card .wordmark {
+  font-family: var(--serif-display);
+  font-size: 1.4rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+  line-height: 1.35;
+  margin-bottom: 0.4rem;
+}
+.login-card .note { font-size: var(--t-sm); color: var(--fg-muted); margin: 0 0 2rem; }
+.login-card form { text-align: left; }
+.login-card .btn-buy { margin-top: 0.6rem; }
+
+/* ---- Order detail pane ---- */
+.odetail { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 1.6rem; }
+@media (max-width: 880px) { .odetail { grid-template-columns: 1fr; } }
+.odetail h4 {
+  font-size: 0.58rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--gold);
+  font-weight: 400;
+  margin: 0 0 0.8rem;
+}
+.odetail .oitem { display: flex; justify-content: space-between; gap: 1rem; padding: 0.45rem 0; border-bottom: 1px solid var(--hairline); font-size: 0.82rem; }
+.odetail .oitem:last-child { border-bottom: 0; }
+.odetail .oitem .nm { font-family: var(--serif-display); font-size: 0.92rem; }
+.odetail .oitem .x { color: var(--fg-muted); font-size: 0.74rem; margin-top: 0.15rem; }
+.odetail address { font-style: normal; font-size: 0.82rem; color: var(--ink-soft); line-height: 1.7; }
+.odetail .final { font-size: 0.78rem; color: var(--fg-muted); }
+
+/* ---- Variants stock editor ---- */
+.variants-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.8rem; }
+@media (max-width: 880px) { .variants-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 480px) { .variants-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.form-actions { display: flex; gap: 0.8rem; flex-wrap: wrap; margin-top: 1.8rem; }
+.form-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  padding: clamp(1.4rem, 3vw, 2.2rem);
+  max-width: 860px;
+}
+
+/* ---- Loading / error states ---- */
+.state-note { color: var(--fg-muted); font-size: var(--t-sm); padding: 2rem 0; }
+
+/* ---- Responsive: sidebar collapses to a top bar ---- */
+@media (max-width: 820px) {
+  .admin { grid-template-columns: 1fr; }
+  .side {
+    position: static;
+    height: auto;
+    flex-direction: column;
+    gap: 1.1rem;
+    padding: 1.1rem clamp(1.25rem, 4vw, 2rem);
+  }
+  .side .brand { display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap; }
+  .side .atelier { margin-top: 0; }
+  .side nav {
+    flex-direction: row;
+    gap: 1.4rem;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+  }
+  .side nav a { border-bottom: 0; padding: 0.2rem 0; white-space: nowrap; }
+  .side nav a.on::before { content: none; }
+  .side nav a.on { border-bottom: 1px solid var(--gold-soft); }
+  .side-foot {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 0.8rem;
+  }
+}
