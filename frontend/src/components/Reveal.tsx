@@ -10,13 +10,24 @@ const SEL = [
   '.foot-mark', '.news', '.house-cta', '.mto-cta', '.cc-quick',
 ].join(',');
 
+/** Last-resort safety: if an effect run is torn down (unmount, StrictMode
+ *  remount, `watch` change) and no successor run takes over, force-reveal
+ *  whatever is still tagged hidden so content can never be stranded. */
+let orphanTimer: ReturnType<typeof setTimeout> | undefined;
+
 /** Scroll-reveal system (React port of reveal.js): tags key elements
  *  with .rv, raises them with a 90ms stagger on intersection, respects
  *  prefers-reduced-motion and includes a 4s safety reveal. Re-runs when
- *  `watch` changes (e.g. after data loads). Renders nothing. */
+ *  `watch` changes (e.g. after data loads). Renders nothing.
+ *
+ *  Every run re-arms ALL matched elements that are not yet revealed —
+ *  including ones a previous run tagged `.rv` but never got to raise
+ *  (its rAFs/observer are cancelled on cleanup). This is what keeps
+ *  async-mounted content (PDP, Collection, …) from staying at opacity 0. */
 export default function Reveal({ watch }: { watch?: unknown }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    clearTimeout(orphanTimer);
     if (
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -24,8 +35,10 @@ export default function Reveal({ watch }: { watch?: unknown }) {
       return;
     }
 
+    // Anything not yet revealed is (re-)armed; `.rv` alone must never be
+    // treated as "handled" — that is exactly how content got stranded.
     const els = Array.from(document.querySelectorAll<HTMLElement>(SEL)).filter(
-      (el) => !el.classList.contains('rv'),
+      (el) => !el.classList.contains('rv-in'),
     );
     if (els.length === 0) return;
 
@@ -102,8 +115,16 @@ export default function Reveal({ watch }: { watch?: unknown }) {
       clearTimeout(t2);
       rafs.forEach((id) => cancelAnimationFrame(id));
       io?.disconnect();
-      // Never leave content hidden after unmount/re-render.
-      pending.forEach((el) => el.classList.add('rv-in'));
+      // Do NOT force-reveal here: a successor run (StrictMode remount or
+      // `watch` change) re-arms everything still hidden, preserving the
+      // scroll-reveal aesthetic. The orphan timer covers the case where
+      // no successor ever runs.
+      clearTimeout(orphanTimer);
+      orphanTimer = setTimeout(() => {
+        document
+          .querySelectorAll<HTMLElement>('.rv:not(.rv-in)')
+          .forEach((el) => el.classList.add('rv-in'));
+      }, 1500);
     };
   }, [watch]);
 
