@@ -16,6 +16,8 @@ describe('MockRazorpayProvider', () => {
 });
 
 describe('PaymentsService', () => {
+  /** The requester who placed the beforeEach order (guest email rule). */
+  const OWNER = { email: 'guest@example.com' };
   let ordersRepo: FakeOrdersRepo;
   let paymentsRepo: FakePaymentsRepo;
   let provider: FakePaymentProvider;
@@ -45,7 +47,7 @@ describe('PaymentsService', () => {
 
   describe('checkout', () => {
     it('creates a payment in created status for the order total', async () => {
-      const res = await service.checkout(order.id);
+      const res = await service.checkout(order.id, OWNER);
       expect(res).toEqual({
         paymentId: expect.any(String),
         providerOrderId: expect.stringMatching(/^order_MOCK/),
@@ -66,34 +68,34 @@ describe('PaymentsService', () => {
     });
 
     it('throws NOT_FOUND for a missing order', async () => {
-      await expect(service.checkout('ghost')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(service.checkout('ghost', OWNER)).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
 
     it('allows retrying checkout while no payment is captured', async () => {
-      const first = await service.checkout(order.id);
-      const second = await service.checkout(order.id);
+      const first = await service.checkout(order.id, OWNER);
+      const second = await service.checkout(order.id, OWNER);
       expect(second.paymentId).not.toBe(first.paymentId);
       expect(await paymentsRepo.getByOrderId(order.id)).toHaveLength(2);
     });
 
     it('throws PAYMENT_ALREADY_FINAL once a payment is captured', async () => {
-      const { paymentId } = await service.checkout(order.id);
-      await service.confirm(paymentId, 'success');
-      await expect(service.checkout(order.id)).rejects.toMatchObject({ code: 'PAYMENT_ALREADY_FINAL' });
+      const { paymentId } = await service.checkout(order.id, OWNER);
+      await service.confirm(paymentId, 'success', OWNER);
+      await expect(service.checkout(order.id, OWNER)).rejects.toMatchObject({ code: 'PAYMENT_ALREADY_FINAL' });
     });
 
     it('throws PAYMENT_ALREADY_FINAL for orders no longer pending payment (even without a captured row)', async () => {
       await ordersRepo.updateStatus(order.id, 'paid'); // e.g. admin-marked paid
-      await expect(service.checkout(order.id)).rejects.toMatchObject({ code: 'PAYMENT_ALREADY_FINAL' });
+      await expect(service.checkout(order.id, OWNER)).rejects.toMatchObject({ code: 'PAYMENT_ALREADY_FINAL' });
       await ordersRepo.updateStatus(order.id, 'cancelled');
-      await expect(service.checkout(order.id)).rejects.toMatchObject({ code: 'PAYMENT_ALREADY_FINAL' });
+      await expect(service.checkout(order.id, OWNER)).rejects.toMatchObject({ code: 'PAYMENT_ALREADY_FINAL' });
     });
   });
 
   describe('confirm', () => {
     it('success: captures the payment and marks the order paid', async () => {
-      const { paymentId } = await service.checkout(order.id);
-      const res = await service.confirm(paymentId, 'success');
+      const { paymentId } = await service.checkout(order.id, OWNER);
+      const res = await service.confirm(paymentId, 'success', OWNER);
       expect(res.payment.status).toBe('captured');
       expect(res.payment.providerPaymentId).toMatch(/^pay_MOCK/);
       expect(res.order?.status).toBe('paid');
@@ -101,46 +103,103 @@ describe('PaymentsService', () => {
     });
 
     it('failure: fails the payment, order stays pending_payment (retryable)', async () => {
-      const { paymentId } = await service.checkout(order.id);
-      const res = await service.confirm(paymentId, 'failure');
+      const { paymentId } = await service.checkout(order.id, OWNER);
+      const res = await service.confirm(paymentId, 'failure', OWNER);
       expect(res.payment.status).toBe('failed');
       expect(res.payment.providerPaymentId).toBeNull();
       expect(res.order?.status).toBe('pending_payment');
     });
 
     it('a failed payment can be retried to success', async () => {
-      const { paymentId } = await service.checkout(order.id);
-      await service.confirm(paymentId, 'failure');
-      const res = await service.confirm(paymentId, 'success');
+      const { paymentId } = await service.checkout(order.id, OWNER);
+      await service.confirm(paymentId, 'failure', OWNER);
+      const res = await service.confirm(paymentId, 'success', OWNER);
       expect(res.payment.status).toBe('captured');
       expect(res.order?.status).toBe('paid');
     });
 
     it('confirming an already-captured payment is idempotent', async () => {
-      const { paymentId } = await service.checkout(order.id);
-      const first = await service.confirm(paymentId, 'success');
-      const again = await service.confirm(paymentId, 'success');
+      const { paymentId } = await service.checkout(order.id, OWNER);
+      const first = await service.confirm(paymentId, 'success', OWNER);
+      const again = await service.confirm(paymentId, 'success', OWNER);
       expect(again.payment).toEqual(first.payment); // unchanged, same providerPaymentId
       expect(again.order?.status).toBe('paid');
-      const failAttempt = await service.confirm(paymentId, 'failure');
+      const failAttempt = await service.confirm(paymentId, 'failure', OWNER);
       expect(failAttempt.payment.status).toBe('captured'); // failure after capture is a no-op
     });
 
     it('throws NOT_FOUND for an unknown payment', async () => {
-      await expect(service.confirm('ghost', 'success')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(service.confirm('ghost', 'success', OWNER)).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
 
     it('refuses to capture a stale payment once the order left pending_payment', async () => {
-      const a = await service.checkout(order.id);
-      const b = await service.checkout(order.id);
-      await service.confirm(a.paymentId, 'success');
+      const a = await service.checkout(order.id, OWNER);
+      const b = await service.checkout(order.id, OWNER);
+      await service.confirm(a.paymentId, 'success', OWNER);
       await ordersRepo.updateStatus(order.id, 'in_atelier');
       // The stale second payment must not be captured nor reset the order status.
-      await expect(service.confirm(b.paymentId, 'success')).rejects.toMatchObject({
+      await expect(service.confirm(b.paymentId, 'success', OWNER)).rejects.toMatchObject({
         code: 'PAYMENT_ALREADY_FINAL',
       });
       expect((await paymentsRepo.getById(b.paymentId))?.status).toBe('created');
       expect((await ordersRepo.getById(order.id))?.status).toBe('in_atelier');
     });
   });
+
+  describe('requester ownership', () => {
+    it('checkout: rejects a requester that does not own the order with NOT_FOUND', async () => {
+      await expect(service.checkout(order.id, { email: 'stranger@example.com' })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+      await expect(service.checkout(order.id, {})).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(await paymentsRepo.getByOrderId(order.id)).toHaveLength(0); // nothing created
+    });
+
+    it('checkout: allows the guest who placed the order (email match is trimmed + case-insensitive)', async () => {
+      const res = await service.checkout(order.id, { email: '  Guest@Example.COM ' });
+      expect(res.amount).toBe(order.total);
+    });
+
+    it('checkout: matches a signed-in owner by userId, rejects other users', async () => {
+      const products = new FakeProductsRepo();
+      const seeded = await seedCatalog(products);
+      const orders = createOrdersService({ products, orders: ordersRepo, runInTransaction: fakeTx });
+      const userOrder = await orders.createOrder({
+        userId: 'user-7',
+        customer: {
+          email: 'aanya@example.com',
+          firstName: 'Aanya',
+          addressLine1: '5 Altamount Road',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          pincode: '400026',
+        },
+        deliveryMethod: 'standard',
+        items: [{ variantId: seeded.plain.variants[0].id, quantity: 1 }],
+      });
+      const res = await service.checkout(userOrder.id, { userId: 'user-7' });
+      expect(res.amount).toBe(userOrder.total);
+      await expect(service.checkout(userOrder.id, { userId: 'user-8' })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    });
+
+    it('confirm: rejects a requester that does not own the payment’s order, leaving it untouched', async () => {
+      const { paymentId } = await service.checkout(order.id, OWNER);
+      await expect(service.confirm(paymentId, 'success', { email: 'stranger@example.com' })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+      await expect(service.confirm(paymentId, 'success', {})).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect((await paymentsRepo.getById(paymentId))?.status).toBe('created');
+      expect((await ordersRepo.getById(order.id))?.status).toBe('pending_payment');
+    });
+
+    it('confirm: allows the owner by email match', async () => {
+      const { paymentId } = await service.checkout(order.id, OWNER);
+      const res = await service.confirm(paymentId, 'success', { email: 'GUEST@example.com' });
+      expect(res.payment.status).toBe('captured');
+      expect(res.order?.status).toBe('paid');
+    });
+  });
+
 });

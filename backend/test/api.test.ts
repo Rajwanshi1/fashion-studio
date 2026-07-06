@@ -328,7 +328,7 @@ describe('API', () => {
   describe('payments', () => {
     it('checkout returns the masked Razorpay payload', async () => {
       const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
-      const res = await app.request('/api/payments/checkout', post({ orderId: order.id }));
+      const res = await app.request('/api/payments/checkout', post({ orderId: order.id, email: 'guest@example.com' }));
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         paymentId: expect.any(String),
@@ -340,6 +340,37 @@ describe('API', () => {
       });
     });
 
+    it('checkout/confirm require the requester to own the order (guest email rule)', async () => {
+      const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
+      // No credentials and wrong email are indistinguishable from a missing order.
+      expect((await app.request('/api/payments/checkout', post({ orderId: order.id }))).status).toBe(404);
+      expect(
+        (await app.request('/api/payments/checkout', post({ orderId: order.id, email: 'wrong@example.com' }))).status,
+      ).toBe(404);
+      const res = await app.request('/api/payments/checkout', post({ orderId: order.id, email: 'guest@example.com' }));
+      expect(res.status).toBe(200);
+      const { paymentId } = await res.json();
+      expect((await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }))).status).toBe(404);
+      expect(
+        (await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success', email: 'wrong@example.com' }))).status,
+      ).toBe(404);
+      expect(
+        (await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success', email: 'guest@example.com' }))).status,
+      ).toBe(200);
+    });
+
+    it('a signed-in owner pays via their token; other users are rejected', async () => {
+      const { token } = await registerCustomer();
+      const stranger = await registerCustomer('rhea@example.com');
+      const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }], token);
+      expect((await app.request('/api/payments/checkout', post({ orderId: order.id }, stranger.token))).status).toBe(404);
+      const res = await app.request('/api/payments/checkout', post({ orderId: order.id }, token));
+      expect(res.status).toBe(200);
+      const { paymentId } = await res.json();
+      expect((await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }, stranger.token))).status).toBe(404);
+      expect((await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }, token))).status).toBe(200);
+    });
+
     it('404 for checkout on unknown order, 400 for bad confirm outcome', async () => {
       expect((await app.request('/api/payments/checkout', post({ orderId: 'ghost' }))).status).toBe(404);
       expect((await app.request('/api/payments/confirm', post({ paymentId: 'x', outcome: 'maybe' }))).status).toBe(400);
@@ -348,8 +379,8 @@ describe('API', () => {
 
     it('confirm success captures payment and marks order paid', async () => {
       const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
-      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: order.id }))).json();
-      const res = await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }));
+      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: order.id, email: 'guest@example.com' }))).json();
+      const res = await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success', email: 'guest@example.com' }));
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.payment.status).toBe('captured');
@@ -361,25 +392,25 @@ describe('API', () => {
 
     it('confirm failure leaves the order retryable', async () => {
       const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
-      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: order.id }))).json();
-      const res = await app.request('/api/payments/confirm', post({ paymentId, outcome: 'failure' }));
+      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: order.id, email: 'guest@example.com' }))).json();
+      const res = await app.request('/api/payments/confirm', post({ paymentId, outcome: 'failure', email: 'guest@example.com' }));
       const body = await res.json();
       expect(body.payment.status).toBe('failed');
       expect(body.order.status).toBe('pending_payment');
       // retry via a fresh checkout succeeds
-      const retry = await (await app.request('/api/payments/checkout', post({ orderId: order.id }))).json();
-      const done = await (await app.request('/api/payments/confirm', post({ paymentId: retry.paymentId, outcome: 'success' }))).json();
+      const retry = await (await app.request('/api/payments/checkout', post({ orderId: order.id, email: 'guest@example.com' }))).json();
+      const done = await (await app.request('/api/payments/confirm', post({ paymentId: retry.paymentId, outcome: 'success', email: 'guest@example.com' }))).json();
       expect(done.order.status).toBe('paid');
     });
 
     it('second confirm is idempotent; checkout after capture is 409', async () => {
       const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
-      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: order.id }))).json();
-      const first = await (await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }))).json();
-      const again = await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }));
+      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: order.id, email: 'guest@example.com' }))).json();
+      const first = await (await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success', email: 'guest@example.com' }))).json();
+      const again = await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success', email: 'guest@example.com' }));
       expect(again.status).toBe(200);
       expect((await again.json()).payment).toEqual(first.payment);
-      expect((await app.request('/api/payments/checkout', post({ orderId: order.id }))).status).toBe(409);
+      expect((await app.request('/api/payments/checkout', post({ orderId: order.id, email: 'guest@example.com' }))).status).toBe(409);
     });
   });
 
@@ -523,8 +554,8 @@ describe('API', () => {
 
     it('lists payments with orderNumber', async () => {
       const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
-      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: order.id }))).json();
-      await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }));
+      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: order.id, email: 'guest@example.com' }))).json();
+      await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success', email: 'guest@example.com' }));
       const res = await app.request('/api/admin/payments', bearer(adminToken));
       expect(res.status).toBe(200);
       const payments = await res.json();
@@ -580,8 +611,8 @@ describe('API', () => {
     it('summary reports activeOrders, revenue, pendingPayments, lowStock and recentOrders', async () => {
       const paidOrder = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
       await placeOrder([{ variantId: sageM().id, quantity: 2 }]); // stays pending
-      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: paidOrder.id }))).json();
-      await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success' }));
+      const { paymentId } = await (await app.request('/api/payments/checkout', post({ orderId: paidOrder.id, email: 'guest@example.com' }))).json();
+      await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success', email: 'guest@example.com' }));
 
       const res = await app.request('/api/admin/summary', bearer(adminToken));
       expect(res.status).toBe(200);

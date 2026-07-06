@@ -20,12 +20,22 @@ export interface CreateOrderInput {
   items: { variantId: string; quantity: number }[];
 }
 
+/** Who is asking for an order — a signed-in user (JWT) and/or a guest-supplied email. */
+export interface OrderRequester {
+  userId?: string | null;
+  email?: string | null;
+}
+
+/** Guest-tracking ownership rule: the requester's user id or email must match the order. */
+export function requesterOwnsOrder(order: Order, requester: OrderRequester): boolean {
+  const matchesUser = !!requester.userId && order.userId === requester.userId;
+  const matchesEmail = !!requester.email && order.email.toLowerCase() === requester.email.trim().toLowerCase();
+  return matchesUser || matchesEmail;
+}
+
 export interface OrdersService {
   createOrder(input: CreateOrderInput): Promise<Order>;
-  getOrderForRequester(
-    orderNumber: string,
-    requester: { userId?: string | null; email?: string | null },
-  ): Promise<Order>;
+  getOrderForRequester(orderNumber: string, requester: OrderRequester): Promise<Order>;
   listUserOrders(userId: string): Promise<Order[]>;
   cancelOrder(orderId: string): Promise<Order>;
   updateStatus(orderId: string, next: OrderStatus): Promise<Order>;
@@ -127,11 +137,8 @@ export function createOrdersService(deps: {
 
     async getOrderForRequester(orderNumber, requester) {
       const order = await deps.orders.getByNumber(orderNumber);
-      const matchesUser = !!requester.userId && order?.userId === requester.userId;
-      const matchesEmail =
-        !!requester.email && order?.email.toLowerCase() === requester.email.trim().toLowerCase();
       // A non-matching requester gets the same 404 as a missing order — no leaking.
-      if (!order || (!matchesUser && !matchesEmail)) {
+      if (!order || !requesterOwnsOrder(order, requester)) {
         throw new DomainError('NOT_FOUND', 'Order not found');
       }
       return order;

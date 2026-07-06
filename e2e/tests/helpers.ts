@@ -140,13 +140,13 @@ export async function createPaidOrderViaApi(
   const order = (await orderRes.json()) as { id: string; orderNumber: string; total: number };
 
   const payRes = await request.post(`${API}/api/payments/checkout`, {
-    data: { orderId: order.id },
+    data: { orderId: order.id, email },
   });
   expect(payRes.ok(), 'payment checkout should succeed').toBeTruthy();
   const payment = (await payRes.json()) as { paymentId: string };
 
   const confirmRes = await request.post(`${API}/api/payments/confirm`, {
-    data: { paymentId: payment.paymentId, outcome: 'success' },
+    data: { paymentId: payment.paymentId, outcome: 'success', email },
   });
   expect(confirmRes.ok(), 'payment confirm should succeed').toBeTruthy();
 

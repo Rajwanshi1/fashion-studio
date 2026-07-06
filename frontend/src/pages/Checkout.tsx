@@ -69,7 +69,7 @@ export default function Checkout() {
         });
         setOrder(ord);
       }
-      const pay = await api.post<PaymentInit>('/api/payments/checkout', { orderId: ord.id });
+      const pay = await api.post<PaymentInit>('/api/payments/checkout', { orderId: ord.id, email });
       setPayment(pay);
       setFailed(false);
     } catch (e) {
@@ -90,7 +90,7 @@ export default function Checkout() {
     if (!payment || !order) return;
     setBusy(true);
     try {
-      await api.post('/api/payments/confirm', { paymentId: payment.paymentId, outcome: 'success' });
+      await api.post('/api/payments/confirm', { paymentId: payment.paymentId, outcome: 'success', email });
       clear();
       navigate(`/order/${order.orderNumber}?email=${encodeURIComponent(email)}`, {
         state: { order: { ...order, status: 'paid' } },
@@ -109,7 +109,7 @@ export default function Checkout() {
     if (!payment) return;
     setBusy(true);
     try {
-      await api.post('/api/payments/confirm', { paymentId: payment.paymentId, outcome: 'failure' });
+      await api.post('/api/payments/confirm', { paymentId: payment.paymentId, outcome: 'failure', email });
     } catch {
       /* the failure state below covers it */
     } finally {

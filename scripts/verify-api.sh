@@ -51,10 +51,12 @@ check "POST /api/orders empty items -> 400" 400 "$(code -X POST $API/api/orders 
 check "POST /api/orders stock 409" 409 "$(code -X POST $API/api/orders -H 'content-type: application/json' -d "{\"customer\":{\"email\":\"$GUEST_EMAIL\",\"phone\":\"\",\"firstName\":\"G\",\"lastName\":\"B\",\"addressLine1\":\"x\",\"addressLine2\":\"\",\"city\":\"M\",\"state\":\"MH\",\"pincode\":\"400001\",\"country\":\"India\"},\"deliveryMethod\":\"standard\",\"items\":[{\"variantId\":\"$VARIANT_ID\",\"quantity\":99999}]}")"
 
 echo "== payments (masked razorpay) =="
-check "POST /api/payments/checkout" 200 "$(code -X POST $API/api/payments/checkout -H 'content-type: application/json' -d "{\"orderId\":\"$ORDER_ID\"}")"
+check "checkout without owner email -> 404" 404 "$(code -X POST $API/api/payments/checkout -H 'content-type: application/json' -d "{\"orderId\":\"$ORDER_ID\"}")"
+check "POST /api/payments/checkout" 200 "$(code -X POST $API/api/payments/checkout -H 'content-type: application/json' -d "{\"orderId\":\"$ORDER_ID\",\"email\":\"$GUEST_EMAIL\"}")"
 PAYMENT_ID=$(jqget "d.paymentId ?? d.id")
-check "POST /api/payments/confirm success" 200 "$(code -X POST $API/api/payments/confirm -H 'content-type: application/json' -d "{\"paymentId\":\"$PAYMENT_ID\",\"outcome\":\"success\"}")"
-check "confirm idempotent" 200 "$(code -X POST $API/api/payments/confirm -H 'content-type: application/json' -d "{\"paymentId\":\"$PAYMENT_ID\",\"outcome\":\"success\"}")"
+check "confirm without owner email -> 404" 404 "$(code -X POST $API/api/payments/confirm -H 'content-type: application/json' -d "{\"paymentId\":\"$PAYMENT_ID\",\"outcome\":\"success\"}")"
+check "POST /api/payments/confirm success" 200 "$(code -X POST $API/api/payments/confirm -H 'content-type: application/json' -d "{\"paymentId\":\"$PAYMENT_ID\",\"outcome\":\"success\",\"email\":\"$GUEST_EMAIL\"}")"
+check "confirm idempotent" 200 "$(code -X POST $API/api/payments/confirm -H 'content-type: application/json' -d "{\"paymentId\":\"$PAYMENT_ID\",\"outcome\":\"success\",\"email\":\"$GUEST_EMAIL\"}")"
 code "$API/api/orders/$ORDER_NUMBER?email=$GUEST_EMAIL" >/dev/null
 ORDER_STATUS=$(jqget "d.status")
 check "order now paid" paid "$ORDER_STATUS"
