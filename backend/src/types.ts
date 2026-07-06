@@ -151,7 +151,8 @@ export class DomainError extends Error {
       | 'EMPTY_ORDER'
       | 'INVALID_STATUS_TRANSITION'
       | 'PAYMENT_ALREADY_FINAL'
-      | 'NOT_CONFIGURED',
+      | 'NOT_CONFIGURED'
+      | 'INVALID_SOURCE',
     message: string,
   ) {
     super(message);
