@@ -236,25 +236,29 @@ const PRODUCTS: SeedProduct[] = [
 
 const STANDARD_SIZES = ['XS', 'S', 'M', 'L', 'XL'];
 
-const USERS = [
-  {
-    email: 'admin@tanviagnihotry.com',
-    password: 'TanviAdmin@2026',
-    firstName: 'Tanvi',
-    lastName: 'Agnihotry',
-    role: 'admin' as const,
-  },
-  {
-    email: 'aanya@example.com',
-    password: 'Aanya@2026',
-    firstName: 'Aanya',
-    lastName: 'Mehra',
-    role: 'customer' as const,
-  },
-];
+export interface SeedOverrides {
+  adminPassword?: string;
+  customerPassword?: string;
+}
 
 /** Idempotent seed: catalog is skipped when any product exists; users are upsert-checked. */
-export async function seed(pool: Pool): Promise<boolean> {
+export async function seed(pool: Pool, overrides: SeedOverrides = {}): Promise<boolean> {
+  const USERS = [
+    {
+      email: 'admin@tanviagnihotry.com',
+      password: overrides.adminPassword ?? 'TanviAdmin@2026',
+      firstName: 'Tanvi',
+      lastName: 'Agnihotry',
+      role: 'admin' as const,
+    },
+    {
+      email: 'aanya@example.com',
+      password: overrides.customerPassword ?? 'Aanya@2026',
+      firstName: 'Aanya',
+      lastName: 'Mehra',
+      role: 'customer' as const,
+    },
+  ];
   const products = createProductsRepo(pool);
   const users = createUsersRepo(pool);
 

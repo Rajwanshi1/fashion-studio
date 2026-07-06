@@ -23,7 +23,10 @@ async function main() {
   if (applied.length) console.log(`Applied migrations: ${applied.join(', ')}`);
 
   if (config.seedOnStart) {
-    const seeded = await seed(pool);
+    const seeded = await seed(pool, {
+      adminPassword: process.env.SEED_ADMIN_PASSWORD,
+      customerPassword: process.env.SEED_CUSTOMER_PASSWORD,
+    });
     console.log(seeded ? 'Seeded catalog + users' : 'Seed skipped (products already exist)');
   }
 
