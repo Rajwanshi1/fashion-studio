@@ -1,0 +1,274 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: fashion - app layer (ECR, secrets, ASG behind internal ALB)
+Parameters:
+  EnvName:
+    Type: String
+    AllowedValues: [staging, prod]
+  AppInstanceType:
+    Type: String
+    Default: t3.small
+  AppMin:
+    Type: Number
+    Default: 2
+  AppMax:
+    Type: Number
+    Default: 4
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+Resources:
+  EcrRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: fashion-studio-api
+      ImageScanningConfiguration: { ScanOnPush: true }
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"keep last 10","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}'
+  JwtSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'fashion/${EnvName}/jwt-secret'
+      GenerateSecretString: { PasswordLength: 48, ExcludePunctuation: true }
+  SeedAdminSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'fashion/${EnvName}/seed-admin-password'
+      GenerateSecretString: { PasswordLength: 20, ExcludePunctuation: true }
+  SeedCustomerSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'fashion/${EnvName}/seed-customer-password'
+      GenerateSecretString: { PasswordLength: 20, ExcludePunctuation: true }
+  CorsParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/fashion/${EnvName}/cors-origins'
+      Type: String
+      Value: 'http://localhost:5173'
+  ImageTagParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/fashion/${EnvName}/api-image-tag'
+      Type: String
+      Value: bootstrap
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/fashion/${EnvName}/api'
+      RetentionInDays: 30
+  AppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: app-instance
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action: ['ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchCheckLayerAvailability']
+                Resource: !GetAtt EcrRepo.Arn
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref JwtSecret
+                  - !Ref SeedAdminSecret
+                  - !Ref SeedCustomerSecret
+                  - !ImportValue
+                    'Fn::Sub': 'fashion-${EnvName}-db-secret-arn'
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fashion/${EnvName}/*'
+              - Effect: Allow
+                Action: ['logs:CreateLogStream', 'logs:PutLogEvents', 'logs:DescribeLogStreams']
+                Resource: !GetAtt ApiLogGroup.Arn
+  AppInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref AppRole]
+  AppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub 'fashion-${EnvName}-app'
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref AppInstanceType
+        IamInstanceProfile: { Arn: !GetAtt AppInstanceProfile.Arn }
+        SecurityGroupIds:
+          - !ImportValue
+            'Fn::Sub': 'fashion-${EnvName}-app-sg'
+        MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
+        Monitoring: { Enabled: true }
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs: { VolumeSize: 20, VolumeType: gp3, Encrypted: true }
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - { Key: Name, Value: !Sub 'fashion-${EnvName}-app' }
+              - { Key: Project, Value: fashion-studio }
+              - { Key: Env, Value: !Ref EnvName }
+        UserData:
+          Fn::Base64: !Sub
+            - |
+              #!/bin/bash
+              set -uo pipefail
+              exec > /var/log/user-data.log 2>&1
+              dnf -y install docker
+              systemctl enable --now docker
+
+              REGION=${AWS::Region}
+              REPO=${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/fashion-studio-api
+              TAG=$(aws ssm get-parameter --name /fashion/${EnvName}/api-image-tag --region $REGION --query Parameter.Value --output text)
+              aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+              for i in $(seq 1 80); do docker pull $REPO:$TAG && break; echo "image $TAG not ready, retry $i"; sleep 15; done
+
+              DB_PW=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/db-password --region $REGION --query SecretString --output text)
+              JWT=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/jwt-secret --region $REGION --query SecretString --output text)
+              CORS=$(aws ssm get-parameter --name /fashion/${EnvName}/cors-origins --region $REGION --query Parameter.Value --output text)
+              TOK=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+              IID=$(curl -s -H "X-aws-ec2-metadata-token: $TOK" http://169.254.169.254/latest/meta-data/instance-id)
+
+              docker rm -f api 2>/dev/null || true
+              docker run -d --name api --restart always -p 3001:3001 \
+                --log-driver awslogs --log-opt awslogs-region=$REGION \
+                --log-opt awslogs-group=/fashion/${EnvName}/api --log-opt awslogs-stream=$IID \
+                -e NODE_ENV=production -e PORT=3001 \
+                -e DATABASE_URL="postgres://boutique:$DB_PW@${DataIp}:5432/boutique" \
+                -e JWT_SECRET="$JWT" -e CORS_ORIGINS="$CORS" -e SEED_ON_START=false \
+                $REPO:$TAG
+            - DataIp: !ImportValue
+                'Fn::Sub': 'fashion-${EnvName}-data-private-ip'
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub 'fashion-${EnvName}-alb'
+      Scheme: internal
+      Type: application
+      SecurityGroups:
+        - !ImportValue
+          'Fn::Sub': 'fashion-${EnvName}-alb-sg'
+      Subnets:
+        - !ImportValue
+          'Fn::Sub': 'fashion-${EnvName}-private-subnet-a'
+        - !ImportValue
+          'Fn::Sub': 'fashion-${EnvName}-private-subnet-b'
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !ImportValue
+        'Fn::Sub': 'fashion-${EnvName}-vpc'
+      Port: 3001
+      Protocol: HTTP
+      TargetType: instance
+      HealthCheckPath: /api/ready
+      HealthCheckIntervalSeconds: 15
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: '30' }
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - { Type: forward, TargetGroupArn: !Ref TargetGroup }
+  Asg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+    Properties:
+      AutoScalingGroupName: !Sub 'fashion-${EnvName}-app'
+      MinSize: !Ref AppMin
+      MaxSize: !Ref AppMax
+      DesiredCapacity: !Ref AppMin
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 300
+      VPCZoneIdentifier:
+        - !ImportValue
+          'Fn::Sub': 'fashion-${EnvName}-private-subnet-a'
+        - !ImportValue
+          'Fn::Sub': 'fashion-${EnvName}-private-subnet-b'
+      TargetGroupARNs: [!Ref TargetGroup]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref AppLaunchTemplate
+        Version: !GetAtt AppLaunchTemplate.LatestVersionNumber
+      Tags:
+        - { Key: Project, Value: fashion-studio, PropagateAtLaunch: false }
+  CpuScaling:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref Asg
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification: { PredefinedMetricType: ASGAverageCPUUtilization }
+        TargetValue: 60
+  Alb5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: API 5xx spike
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_Target_5XX_Count
+      Dimensions:
+        - { Name: LoadBalancer, Value: !GetAtt Alb.LoadBalancerFullName }
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+  UnhealthyHostsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: targets failing /api/ready
+      Namespace: AWS/ApplicationELB
+      MetricName: UnHealthyHostCount
+      Dimensions:
+        - { Name: LoadBalancer, Value: !GetAtt Alb.LoadBalancerFullName }
+        - { Name: TargetGroup, Value: !GetAtt TargetGroup.TargetGroupFullName }
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+Outputs:
+  AlbArn:
+    Value: !Ref Alb
+    Export: { Name: !Sub 'fashion-${EnvName}-alb-arn' }
+  AlbDns:
+    Value: !GetAtt Alb.DNSName
+    Export: { Name: !Sub 'fashion-${EnvName}-alb-dns' }
+  EcrUri:
+    Value: !GetAtt EcrRepo.RepositoryUri
+    Export: { Name: !Sub 'fashion-${EnvName}-ecr-uri' }
+  AsgName:
+    Value: !Ref Asg
+    Export: { Name: !Sub 'fashion-${EnvName}-asg-name' }
+  JwtSecretArn:
+    Value: !Ref JwtSecret
+    Export: { Name: !Sub 'fashion-${EnvName}-jwt-secret-arn' }
+  SeedAdminSecretArn:
+    Value: !Ref SeedAdminSecret
+    Export: { Name: !Sub 'fashion-${EnvName}-seed-admin-secret-arn' }
+  SeedCustomerSecretArn:
+    Value: !Ref SeedCustomerSecret
+    Export: { Name: !Sub 'fashion-${EnvName}-seed-customer-secret-arn' }
+  ApiLogGroup:
+    Value: !Ref ApiLogGroup
+    Export: { Name: !Sub 'fashion-${EnvName}-api-log-group' }
