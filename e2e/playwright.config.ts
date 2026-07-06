@@ -12,7 +12,7 @@ export default defineConfig({
   workers: 1, // ordered flows share backend state
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:4173',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
