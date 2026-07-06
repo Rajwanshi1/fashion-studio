@@ -79,7 +79,7 @@ export function createApp(deps: AppDeps) {
   app.route('/api/auth', authRoutes(auth, jwtSecret));
   app.route('/api', catalogRoutes(catalog, repos.wishlist, jwtSecret));
   app.route('/api', orderRoutes(orders, jwtSecret));
-  app.route('/api/payments', paymentRoutes(payments));
+  app.route('/api/payments', paymentRoutes(payments, jwtSecret));
   app.route('/api/socials', socialsRoutes(socials, jwtSecret));
   app.route(
     '/api/admin',
