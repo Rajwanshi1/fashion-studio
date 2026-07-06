@@ -7,6 +7,7 @@ import type { PaymentsRepo } from './data/payments.repo';
 import type { ProductsRepo, WishlistRepo } from './data/products.repo';
 import type { ScansRepo } from './data/scans.repo';
 import type { UsersRepo } from './data/users.repo';
+import { rateLimit } from './middleware/rate-limit';
 import { AuthEnv } from './middleware/auth';
 import { adminRoutes } from './routes/admin.routes';
 import { authRoutes } from './routes/auth.routes';
@@ -74,6 +75,8 @@ export function createApp(deps: AppDeps) {
   app.notFound((c) => c.json({ error: 'Not found' }, 404));
 
   app.use('/api/*', cors({ origin: corsOrigins, allowHeaders: ['Content-Type', 'Authorization'] }));
+  app.use('/api/auth/*', rateLimit({ windowMs: 60_000, max: 30 }));
+  app.use('/api/*', rateLimit({ windowMs: 60_000, max: 300 }));
 
   app.get('/api/health', (c) => c.json({ status: 'ok' }));
   app.route('/api/auth', authRoutes(auth, jwtSecret));
