@@ -5,7 +5,7 @@ platform to production. Findings come from three codebase audits (2026-07-06: co
 sweep, backend hardening, frontend/deploy readiness) plus the former `TODO-THIRD-PARTY.md`
 (absorbed here).
 
-**Progress: 0/33 done.**
+**Progress: 0/34 done.**
 
 Suggested order of attack: **P0 security → P0 deploy → P1 → P2.** Every P0 item is
 individually exploitable or breaks the deployed site — never go live with any unchecked.
@@ -161,6 +161,16 @@ individually exploitable or breaks the deployed site — never go live with any 
   `amplify.yml`, each with env vars from #8/#23 and the rewrite from #6); backend
   api+postgres → EC2 via the prod compose overlay (#4); backend `CORS_ORIGINS` must
   include both Amplify domains.
+
+- [ ] **34. Socials link-in-bio page: real content + prod config** *(added 2026-07-06
+  from PR #2, `feat/socials-linktree` — was §8 of the old TODO-THIRD-PARTY.md)* —
+  `socials/src/config.ts` ships guessed placeholders; before printing any QR codes:
+  replace website / "Book an Appointment" URL (currently `https://tanviagnihotry.com`,
+  pending #25); verify or register the Instagram handle (`@tanviagnihotry` is guessed);
+  replace the WhatsApp/phone placeholder (`+91 90000 00000`); add the socials production
+  origin to backend `CORS_ORIGINS` (or scan logging is CORS-blocked); set
+  `VITE_SOCIALS_URL` on the admin Amplify app so generated QRs point at production. Once
+  PR #2 merges, deployment item #26 gains a third Amplify app (`socials`).
 
 ## P2 — Post-launch / nice-to-have
 
