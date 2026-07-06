@@ -5,6 +5,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { OrdersRepo } from './data/orders.repo';
 import type { PaymentsRepo } from './data/payments.repo';
 import type { ProductsRepo, WishlistRepo } from './data/products.repo';
+import type { ScansRepo } from './data/scans.repo';
 import type { UsersRepo } from './data/users.repo';
 import { AuthEnv } from './middleware/auth';
 import { adminRoutes } from './routes/admin.routes';
@@ -12,10 +13,12 @@ import { authRoutes } from './routes/auth.routes';
 import { catalogRoutes } from './routes/catalog.routes';
 import { orderRoutes } from './routes/orders.routes';
 import { paymentRoutes } from './routes/payments.routes';
+import { socialsRoutes } from './routes/socials.routes';
 import { createAuthService, VerifyGoogleToken } from './services/auth.service';
 import { createCatalogService } from './services/catalog.service';
 import { createOrdersService } from './services/orders.service';
 import { createPaymentsService, PaymentProvider } from './services/payments.service';
+import { createSocialsService } from './services/socials.service';
 import { DomainError, TxRunner } from './types';
 
 export interface AppDeps {
@@ -25,6 +28,7 @@ export interface AppDeps {
     wishlist: WishlistRepo;
     orders: OrdersRepo;
     payments: PaymentsRepo;
+    scans: ScansRepo;
   };
   paymentProvider: PaymentProvider;
   /** Masked Google sign-in seam — null/undefined until GOOGLE_CLIENT_ID exists. */
@@ -43,6 +47,7 @@ const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 503> = 
   EMPTY_ORDER: 400,
   INVALID_STATUS_TRANSITION: 400,
   NOT_CONFIGURED: 503,
+  INVALID_SOURCE: 400,
 };
 
 export function createApp(deps: AppDeps) {
@@ -52,6 +57,7 @@ export function createApp(deps: AppDeps) {
   const catalog = createCatalogService({ products: repos.products });
   const orders = createOrdersService({ products: repos.products, orders: repos.orders, runInTransaction });
   const payments = createPaymentsService({ payments: repos.payments, orders: repos.orders, provider: paymentProvider });
+  const socials = createSocialsService({ scans: repos.scans });
 
   const app = new Hono<AuthEnv>();
 
@@ -74,6 +80,7 @@ export function createApp(deps: AppDeps) {
   app.route('/api', catalogRoutes(catalog, repos.wishlist, jwtSecret));
   app.route('/api', orderRoutes(orders, jwtSecret));
   app.route('/api/payments', paymentRoutes(payments));
+  app.route('/api/socials', socialsRoutes(socials, jwtSecret));
   app.route(
     '/api/admin',
     adminRoutes({
