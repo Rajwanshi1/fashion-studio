@@ -88,8 +88,6 @@ export function createApp(deps: AppDeps) {
   app.notFound((c) => c.json({ error: 'Not found' }, 404));
 
   app.use('/api/*', cors({ origin: corsOrigins, allowHeaders: ['Content-Type', 'Authorization'] }));
-  app.use('/api/auth/*', rateLimit({ windowMs: 60_000, max: 30 }));
-  app.use('/api/*', rateLimit({ windowMs: 60_000, max: 300 }));
 
   app.get('/api/health', (c) => c.json({ status: 'ok' }));
   app.get('/api/ready', async (c) => {
@@ -104,6 +102,9 @@ export function createApp(deps: AppDeps) {
       return c.json({ status: 'unavailable' }, 503);
     }
   });
+
+  app.use('/api/auth/*', rateLimit({ windowMs: 60_000, max: 30 }));
+  app.use('/api/*', rateLimit({ windowMs: 60_000, max: 300 }));
   app.route('/api/auth', authRoutes(auth, jwtSecret));
   app.route('/api', catalogRoutes(catalog, repos.wishlist, jwtSecret));
   app.route('/api', orderRoutes(orders, jwtSecret));

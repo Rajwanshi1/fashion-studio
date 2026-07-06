@@ -39,4 +39,19 @@ describe('GET /api/ready', () => {
     const res = await app.request('/api/ready');
     expect(res.status).toBe(503);
   });
+
+  it('returns 200 for 310 consecutive requests without x-forwarded-for header', async () => {
+    const app = makeTestApp({ pingDb: async () => {} });
+    const requests = Array.from({ length: 310 }, () =>
+      app.request('/api/ready', {
+        headers: {
+          // Omit x-forwarded-for to simulate ALB health checks that carry no header
+        },
+      }),
+    );
+    const responses = await Promise.all(requests);
+    responses.forEach((res) => {
+      expect(res.status).toBe(200);
+    });
+  });
 });
