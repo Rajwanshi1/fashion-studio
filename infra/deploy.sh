@@ -70,8 +70,12 @@ run_ssm() { # instance-id command...
 }
 
 cmd_seed() {
-  local iid
+  local iid data_ip
   iid=$(app_instance)
+  # Resolved driver-side: the app instance role is deliberately least-privilege
+  # (no cloudformation:* permissions), so it cannot call list-exports itself.
+  data_ip=$(aws cloudformation list-exports --region "$PRIMARY_REGION" \
+    --query "Exports[?Name=='fashion-$ENV_NAME-data-private-ip'].Value" --output text)
   run_ssm "$iid" '[
     "REGION='"$PRIMARY_REGION"'",
     "ACCT=$(aws sts get-caller-identity --query Account --output text)",
@@ -80,8 +84,7 @@ cmd_seed() {
     "DB_PW=$(aws secretsmanager get-secret-value --secret-id fashion/'"$ENV_NAME"'/db-password --region $REGION --query SecretString --output text)",
     "ADMIN_PW=$(aws secretsmanager get-secret-value --secret-id fashion/'"$ENV_NAME"'/seed-admin-password --region $REGION --query SecretString --output text)",
     "CUST_PW=$(aws secretsmanager get-secret-value --secret-id fashion/'"$ENV_NAME"'/seed-customer-password --region $REGION --query SecretString --output text)",
-    "DATA_IP=$(aws cloudformation list-exports --region $REGION --query \"Exports[?Name=='"'"'fashion-'"$ENV_NAME"'-data-private-ip'"'"'].Value\" --output text)",
-    "docker run --rm -e DATABASE_URL=postgres://boutique:$DB_PW@$DATA_IP:5432/boutique -e SEED_ADMIN_PASSWORD=$ADMIN_PW -e SEED_CUSTOMER_PASSWORD=$CUST_PW $REPO:$TAG node dist/seed-cli.js"
+    "docker run --rm -e DATABASE_URL=postgres://boutique:$DB_PW@'"$data_ip"':5432/boutique -e SEED_ADMIN_PASSWORD=$ADMIN_PW -e SEED_CUSTOMER_PASSWORD=$CUST_PW $REPO:$TAG node dist/seed-cli.js"
   ]'
 }
 
