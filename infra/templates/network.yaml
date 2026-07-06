@@ -1,0 +1,168 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: fashion - VPC, subnets, NAT, endpoints, security groups
+Parameters:
+  EnvName:
+    Type: String
+    AllowedValues: [staging, prod]
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}' }, { Key: Project, Value: fashion-studio }, { Key: Env, Value: !Ref EnvName }]
+  Igw:
+    Type: AWS::EC2::InternetGateway
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: { VpcId: !Ref Vpc, InternetGatewayId: !Ref Igw }
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-public-a' }]
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.1.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-public-b' }]
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-private-a' }]
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-private-b' }]
+  PublicRt:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc }
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties: { RouteTableId: !Ref PublicRt, DestinationCidrBlock: 0.0.0.0/0, GatewayId: !Ref Igw }
+  PublicRtA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicSubnetA, RouteTableId: !Ref PublicRt }
+  PublicRtB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicSubnetB, RouteTableId: !Ref PublicRt }
+  NatEip:
+    Type: AWS::EC2::EIP
+    Properties: { Domain: vpc }
+  Nat:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      SubnetId: !Ref PublicSubnetA
+  PrivateRt:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc }
+  PrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties: { RouteTableId: !Ref PrivateRt, DestinationCidrBlock: 0.0.0.0/0, NatGatewayId: !Ref Nat }
+  PrivateRtA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PrivateSubnetA, RouteTableId: !Ref PrivateRt }
+  PrivateRtB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PrivateSubnetB, RouteTableId: !Ref PrivateRt }
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcEndpointType: Gateway
+      RouteTableIds: [!Ref PrivateRt, !Ref PublicRt]
+  AlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: internal ALB - reachable from inside the VPC only (CloudFront VPC-origin ENIs)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 10.20.0.0/16 }
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-alb' }]
+  AppSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: app instances - API traffic from ALB only
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-app' }]
+  DataSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: data instance - Postgres from app SG only
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-data' }]
+  AlbToAppEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref AlbSg, IpProtocol: tcp, FromPort: 3001, ToPort: 3001, DestinationSecurityGroupId: !Ref AppSg }
+  AppFromAlbIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: { GroupId: !Ref AppSg, IpProtocol: tcp, FromPort: 3001, ToPort: 3001, SourceSecurityGroupId: !Ref AlbSg }
+  AppHttpsEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref AppSg, IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+  AppToDataEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref AppSg, IpProtocol: tcp, FromPort: 5432, ToPort: 5432, DestinationSecurityGroupId: !Ref DataSg }
+  AppDnsUdpEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref AppSg, IpProtocol: udp, FromPort: 53, ToPort: 53, CidrIp: 10.20.0.0/16 }
+  AppDnsTcpEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref AppSg, IpProtocol: tcp, FromPort: 53, ToPort: 53, CidrIp: 10.20.0.0/16 }
+  AppNtpEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref AppSg, IpProtocol: udp, FromPort: 123, ToPort: 123, CidrIp: 169.254.169.123/32 }
+  DataFromAppIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: { GroupId: !Ref DataSg, IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !Ref AppSg }
+  DataHttpsEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref DataSg, IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+  DataDnsUdpEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref DataSg, IpProtocol: udp, FromPort: 53, ToPort: 53, CidrIp: 10.20.0.0/16 }
+  DataDnsTcpEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref DataSg, IpProtocol: tcp, FromPort: 53, ToPort: 53, CidrIp: 10.20.0.0/16 }
+  DataNtpEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref DataSg, IpProtocol: udp, FromPort: 123, ToPort: 123, CidrIp: 169.254.169.123/32 }
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+    Export: { Name: !Sub 'fashion-${EnvName}-vpc' }
+  PublicSubnetA:
+    Value: !Ref PublicSubnetA
+    Export: { Name: !Sub 'fashion-${EnvName}-public-subnet-a' }
+  PublicSubnetB:
+    Value: !Ref PublicSubnetB
+    Export: { Name: !Sub 'fashion-${EnvName}-public-subnet-b' }
+  PrivateSubnetA:
+    Value: !Ref PrivateSubnetA
+    Export: { Name: !Sub 'fashion-${EnvName}-private-subnet-a' }
+  PrivateSubnetB:
+    Value: !Ref PrivateSubnetB
+    Export: { Name: !Sub 'fashion-${EnvName}-private-subnet-b' }
+  AlbSg:
+    Value: !Ref AlbSg
+    Export: { Name: !Sub 'fashion-${EnvName}-alb-sg' }
+  AppSg:
+    Value: !Ref AppSg
+    Export: { Name: !Sub 'fashion-${EnvName}-app-sg' }
+  DataSg:
+    Value: !Ref DataSg
+    Export: { Name: !Sub 'fashion-${EnvName}-data-sg' }
