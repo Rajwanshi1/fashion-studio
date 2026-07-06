@@ -10,7 +10,8 @@ comes from the Claude Design reference mirrored in [`design-reference/`](design-
 |---|---|---|---|
 | [`backend/`](backend/) | Marketplace API — app layer (routes → services) + data layer (SQL-only repositories + PostgreSQL container) | Hono 4, pg, zod, Node 22 | 3001 |
 | [`frontend/`](frontend/) | Customer storefront (mobile-first, matches the reference screens exactly) | Vite, React 18, react-router 6 | 5173 |
-| [`admin/`](admin/) | Atelier admin — dashboard, inventory, orders, payments | Vite, React 18 | 5174 |
+| [`admin/`](admin/) | Atelier admin — dashboard, inventory, orders, payments, socials QR | Vite, React 18 | 5174 |
+| [`socials/`](socials/) | Link-in-bio page for `socials.<domain>.com` — links + contact, logs QR scan sources | Vite, React 18 | 5175 |
 | [`e2e/`](e2e/) | Full-stack browser tests (desktop + Pixel 7) | Playwright | — |
 
 Money is always **integer paise** in the backend/API; UIs format `₹x,xx,xxx` (en-IN).
@@ -30,7 +31,14 @@ cd frontend && npm install && npm run dev        # http://localhost:5173
 
 # 3. Admin
 cd admin && npm install && npm run dev           # http://localhost:5174
+
+# 4. Socials link page (QR landing)
+cd socials && npm install && npm run dev         # http://localhost:5175
 ```
+
+QR flow: admin → Socials → generate a QR per placement (e.g. `store-window`); it encodes
+`<socials origin>/?src=store-window`. Each scan logs the source via `POST /api/socials/scan`;
+counts appear on the same admin page. Admin env `VITE_SOCIALS_URL` sets the QR origin.
 
 Seeded logins: admin `admin@tanviagnihotry.com` / `TanviAdmin@2026` ·
 demo customer `aanya@example.com` / `Aanya@2026`.
@@ -41,9 +49,10 @@ Backend env (see `docker-compose.yml`): `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIG
 ## Tests
 
 ```bash
-cd backend  && npm test        # 90 unit + API tests (services w/ fakes, routes via app.request)
+cd backend  && npm test        # 122 unit + API tests (services w/ fakes, routes via app.request)
 cd frontend && npm test        # 18 RTL tests (cart, checkout incl. mock payment, PLP/PDP, 404)
-cd admin    && npm test        # 9 RTL tests (auth guard, dashboard, orders, product edit)
+cd admin    && npm test        # 13 RTL tests (auth guard, dashboard, orders, product edit, socials)
+cd socials  && npm test        # 9 RTL tests (links render, scan beacon)
 
 # Live API verification against the containers (37 checks):
 ./scripts/verify-api.sh                          # results: docs/verification/backend-api.md
@@ -61,9 +70,10 @@ Design-fidelity QA (screenshots app vs reference): `docs/verification/design-qa.
 
 ## Deployment (out of scope for this iteration — prepared, not executed)
 
-- **Storefront + admin → AWS Amplify Hosting.** Build spec committed in
-  [`amplify.yml`](amplify.yml) (monorepo appRoots `frontend` and `admin`). Add the SPA
-  rewrite rule and set `VITE_API_URL` (instructions at the top of the file).
+- **Storefront + admin + socials → AWS Amplify Hosting.** Build spec committed in
+  [`amplify.yml`](amplify.yml) (monorepo appRoots `frontend`, `admin`, `socials`). Add the
+  SPA rewrite rule and set `VITE_API_URL` (instructions at the top of the file); point the
+  `socials.<domain>.com` custom domain at the socials app and set `VITE_SOCIALS_URL` on admin.
 - **Backend → containers on EC2** (or any cloud/VM): the same `docker compose up -d --build`
   runs the api + postgres pair; nothing in the code is AWS-specific. Put a TLS-terminating
   proxy (Caddy/nginx/ALB) in front, set real `JWT_SECRET`/`CORS_ORIGINS`, use a managed
