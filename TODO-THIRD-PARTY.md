@@ -53,5 +53,17 @@ Not implemented — order confirmation is on-screen only.
 - [ ] Web analytics for the storefront; uptime/log monitoring for the API containers
 
 ## 7. Deployment (explicitly out of scope this run)
-- [ ] Frontend + admin → AWS Amplify Hosting (build spec committed in `amplify.yml`)
+- [ ] Frontend + admin + socials → AWS Amplify Hosting (build spec committed in `amplify.yml`)
 - [ ] Backend containers (api + postgres) → EC2 via docker compose (portable to any cloud)
+
+## 8. Socials link page (`socials/`) — PLACEHOLDER CONTENT
+The link-in-bio page for `socials.<domain>.com` works end-to-end, but its content in
+`socials/src/config.ts` uses guessed placeholders. Before printing any QR codes:
+- [ ] Replace website URL + "Book an Appointment" link (currently `https://tanviagnihotry.com`)
+      with the real domain once §5 is settled
+- [ ] Replace Instagram handle (currently `@tanviagnihotry` — guessed, verify or register it)
+- [ ] Replace WhatsApp/phone number (currently the design placeholder `+91 90000 00000`)
+- [ ] Add the socials production origin (e.g. `https://socials.<domain>.com`) to the backend
+      `CORS_ORIGINS` env, or scan logging will be blocked by CORS
+- [ ] Set `VITE_SOCIALS_URL` on the admin Amplify app so generated QRs point at production
+      (defaults to `https://socials.tanviagnihotry.com`)

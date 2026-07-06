@@ -612,4 +612,63 @@ describe('API', () => {
       expect(summary.recentOrders[0]).toHaveProperty('total');
     });
   });
+
+  describe('socials', () => {
+    it('POST /api/socials/scan records a scan and returns empty 204', async () => {
+      const res = await app.request('/api/socials/scan', post({ source: 'Instagram Bio' }));
+      expect(res.status).toBe(204);
+      expect(await res.text()).toBe('');
+      expect(f.scans.scans).toHaveLength(1);
+      expect(f.scans.scans[0].source).toBe('instagram-bio');
+    });
+
+    it('records the request User-Agent and Referer, truncated', async () => {
+      const res = await app.request('/api/socials/scan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'x'.repeat(600),
+          Referer: 'https://instagram.com/tanviagnihotry',
+        },
+        body: JSON.stringify({ source: 'packaging-qr' }),
+      });
+      expect(res.status).toBe(204);
+      expect(f.scans.scans[0].userAgent).toHaveLength(512);
+      expect(f.scans.scans[0].referer).toBe('https://instagram.com/tanviagnihotry');
+    });
+
+    it('400 {error:{code:"INVALID_SOURCE"}} for a charset-invalid source', async () => {
+      const res = await app.request('/api/socials/scan', post({ source: 'café!' }));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: { code: 'INVALID_SOURCE', message: expect.any(String) } });
+      expect(f.scans.scans).toHaveLength(0);
+    });
+
+    it('400 {error:string} on a missing/empty source (zod)', async () => {
+      const empty = await app.request('/api/socials/scan', post({ source: '' }));
+      expect(empty.status).toBe(400);
+      expect(typeof (await empty.json()).error).toBe('string');
+      const missing = await app.request('/api/socials/scan', post({}));
+      expect(missing.status).toBe(400);
+    });
+
+    it('GET /api/socials/stats requires admin auth: 401 anonymous, 403 customer', async () => {
+      expect((await app.request('/api/socials/stats')).status).toBe(401);
+      const { token: customerToken } = await registerCustomer();
+      expect((await app.request('/api/socials/stats', bearer(customerToken))).status).toBe(403);
+    });
+
+    it('GET /api/socials/stats returns aggregated stats ordered by total desc', async () => {
+      await app.request('/api/socials/scan', post({ source: 'instagram-bio' }));
+      await app.request('/api/socials/scan', post({ source: 'instagram-bio' }));
+      await app.request('/api/socials/scan', post({ source: 'packaging-qr' }));
+
+      const res = await app.request('/api/socials/stats', bearer(adminToken));
+      expect(res.status).toBe(200);
+      const { stats } = await res.json();
+      expect(stats[0]).toMatchObject({ source: 'instagram-bio', total: 2, last7: 2, last30: 2 });
+      expect(stats[1]).toMatchObject({ source: 'packaging-qr', total: 1 });
+      expect(stats[0]).toHaveProperty('lastScanAt');
+    });
+  });
 });

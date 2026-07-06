@@ -9,6 +9,7 @@ import type {
   VariantForOrder,
   WishlistRepo,
 } from '../src/data/products.repo';
+import type { ScansRepo, SourceStats } from '../src/data/scans.repo';
 import type { AdminUser, CreateUserInput, UsersRepo } from '../src/data/users.repo';
 import type { GoogleTokenClaims, VerifyGoogleToken } from '../src/services/auth.service';
 import type { PaymentProvider } from '../src/services/payments.service';
@@ -461,12 +462,48 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 }
 
+interface FakeScanRow {
+  source: string;
+  userAgent: string | null;
+  referer: string | null;
+  createdAt: string;
+}
+
+export class FakeScansRepo implements ScansRepo {
+  scans: FakeScanRow[] = [];
+
+  async insert(source: string, userAgent: string | null, referer: string | null): Promise<void> {
+    this.scans.push({ source, userAgent, referer, createdAt: new Date().toISOString() });
+  }
+
+  async statsBySource(): Promise<SourceStats[]> {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const bySource = new Map<string, FakeScanRow[]>();
+    for (const row of this.scans) {
+      const list = bySource.get(row.source) ?? [];
+      list.push(row);
+      bySource.set(row.source, list);
+    }
+    return [...bySource.entries()]
+      .map(([source, rows]) => ({
+        source,
+        total: rows.length,
+        last7: rows.filter((r) => now - new Date(r.createdAt).getTime() <= 7 * DAY_MS).length,
+        last30: rows.filter((r) => now - new Date(r.createdAt).getTime() <= 30 * DAY_MS).length,
+        lastScanAt: rows.map((r) => r.createdAt).sort().at(-1)!,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }
+}
+
 export interface Fakes {
   users: FakeUsersRepo;
   products: FakeProductsRepo;
   wishlist: FakeWishlistRepo;
   orders: FakeOrdersRepo;
   payments: FakePaymentsRepo;
+  scans: FakeScansRepo;
 }
 
 export function makeFakes(): Fakes {
@@ -475,7 +512,8 @@ export function makeFakes(): Fakes {
   const orders = new FakeOrdersRepo();
   const users = new FakeUsersRepo(orders);
   const payments = new FakePaymentsRepo(orders);
-  return { users, products, wishlist, orders, payments };
+  const scans = new FakeScansRepo();
+  return { users, products, wishlist, orders, payments, scans };
 }
 
 /** Small catalog covering both categories, all flags, an inactive product and low stock. */

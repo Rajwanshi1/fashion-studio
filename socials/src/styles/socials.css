@@ -1,0 +1,230 @@
+/* ============================================================
+   TANVI AGNIHOTRY — Connect (link-in-bio)
+   Same couture brand as frontend/: celadon + soft gold, quiet luxury.
+   Token subset pinned to design-reference/DESIGN-NOTES.md.
+   ============================================================ */
+
+:root {
+  --paper: #F7F8F4;
+  --ink: #1E2620;
+  --celadon-50: #EEF3EA;
+  --gold: #B0894A;
+  --gold-soft: #C9AE7A;
+  --hairline: rgba(30, 38, 32, 0.13);
+  --edge: 2px;
+
+  --serif-display: 'Bodoni Moda', Georgia, serif;
+  --serif-soft: 'Cormorant Garamond', Georgia, serif;
+  --sans: 'Jost', system-ui, sans-serif;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-weight: 300;
+  line-height: 1.6;
+}
+
+a { color: inherit; text-decoration: none; }
+::selection { background: var(--gold); color: var(--paper); }
+
+/* Safety fallback: if the reveal effect's observer never fires, this class
+   (set on <html> after a 1.5s timeout) forces every .rv node visible. It is
+   deliberately outside the reduced-motion media query so it applies either way. */
+html.revealed-all .rv:not(.rv-in) {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+
+.page-socials {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.sc-main {
+  flex: 1;
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  padding: clamp(2.5rem, 10vw, 3.5rem) 1.25rem 3rem;
+}
+
+/* ---- Header ---- */
+.sc-head {
+  text-align: center;
+  margin: 0 0 clamp(2rem, 8vw, 2.75rem);
+}
+
+.sc-word {
+  margin: 0;
+  font-family: var(--serif-display);
+  font-weight: 500;
+  font-size: clamp(1.9rem, 7vw, 2.4rem);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sc-tag {
+  margin: 0.6rem 0 0;
+  font-family: var(--serif-soft);
+  font-style: italic;
+  font-weight: 300;
+  font-size: 1.05rem;
+  color: var(--ink);
+  opacity: 0.75;
+}
+
+/* ---- Links ---- */
+.sc-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.lk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 1.05rem 1.25rem;
+  background: #FFFFFF;
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  transition: border-color 320ms var(--ease), transform 320ms var(--ease);
+}
+
+.lk:hover,
+.lk:focus-visible {
+  border-color: var(--gold);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.lk-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.lk-label {
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  transition: color 320ms var(--ease);
+}
+
+.lk:hover .lk-label,
+.lk:focus-visible .lk-label {
+  color: var(--gold);
+}
+
+.lk-sub {
+  font-family: var(--serif-soft);
+  font-style: italic;
+  font-size: 0.95rem;
+  color: var(--ink);
+  opacity: 0.6;
+}
+
+.lk-arrow {
+  flex: none;
+  font-family: var(--sans);
+  color: var(--gold);
+  transition: transform 320ms var(--ease);
+}
+
+.lk:hover .lk-arrow,
+.lk:focus-visible .lk-arrow {
+  transform: translateX(4px);
+}
+
+/* ---- Studio block ---- */
+.sc-studio {
+  margin: clamp(2.5rem, 9vw, 3rem) 0 0;
+  background: var(--celadon-50);
+  border-radius: var(--edge);
+  padding: 1.5rem 1.5rem 1.65rem;
+  text-align: center;
+}
+
+.sc-studio .eyebrow {
+  display: block;
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.sc-studio .rule-gold {
+  width: 40px;
+  height: 1px;
+  background: var(--gold);
+  border: 0;
+  margin: 0.75rem auto 1rem;
+}
+
+.sc-studio address {
+  font-style: italic;
+  font-family: var(--serif-soft);
+  font-size: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.sc-hours {
+  margin: 0.85rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  opacity: 0.7;
+}
+
+/* ---- Footer ---- */
+.sc-foot {
+  background: var(--ink);
+  color: var(--gold-soft);
+  text-align: center;
+  padding: 1rem 1.25rem;
+  font-family: var(--sans);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+/* ---- Reveal motion ---- */
+@media (prefers-reduced-motion: no-preference) {
+  .rv {
+    opacity: 0;
+    transform: translateY(26px);
+    transition: opacity 700ms var(--ease), transform 700ms var(--ease);
+    transition-delay: var(--rv-d, 0ms);
+    will-change: opacity, transform;
+  }
+  .rv.rv-in { opacity: 1; transform: none; }
+}

@@ -1,9 +1,12 @@
 # AWS Amplify Hosting build spec (monorepo). Deployment itself is out of scope for now.
-# When connecting the repo in Amplify Console, pick the app root (frontend or admin).
-# Both are Vite SPAs — add a rewrite rule in Amplify:
+# When connecting the repo in Amplify Console, pick the app root (frontend, admin or socials).
+# All are Vite SPAs — add a rewrite rule in Amplify:
 #   Source: </^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>
 #   Target: /index.html   Type: 200 (Rewrite)
 # Set env var VITE_API_URL to the deployed backend URL before building.
+# For the admin app also set VITE_SOCIALS_URL to the socials page origin
+# (e.g. https://socials.<domain>.com) so generated QR codes point at production.
+# The socials app is meant for the socials.<domain>.com subdomain (custom domain in Amplify).
 version: 1
 applications:
   - appRoot: frontend
@@ -23,6 +26,22 @@ applications:
         paths:
           - node_modules/**/*
   - appRoot: admin
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: dist
+        files:
+          - "**/*"
+      cache:
+        paths:
+          - node_modules/**/*
+  - appRoot: socials
     frontend:
       phases:
         preBuild:

@@ -5,6 +5,7 @@ import { loadConfig } from './config';
 import { createOrdersRepo } from './data/orders.repo';
 import { createPaymentsRepo } from './data/payments.repo';
 import { createProductsRepo, createWishlistRepo } from './data/products.repo';
+import { createScansRepo } from './data/scans.repo';
 import { createUsersRepo } from './data/users.repo';
 import { createPool, makeTxRunner } from './db';
 import { migrate } from './migrate';
@@ -33,6 +34,7 @@ async function main() {
       wishlist: createWishlistRepo(pool),
       orders: createOrdersRepo(pool),
       payments: createPaymentsRepo(pool),
+      scans: createScansRepo(pool),
     },
     paymentProvider: new MockRazorpayProvider(),
     verifyGoogleToken: config.googleClientId ? createGoogleVerifier(config.googleClientId) : null,
