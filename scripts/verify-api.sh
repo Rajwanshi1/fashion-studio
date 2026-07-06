@@ -2,7 +2,17 @@
 # Live API verification against the dockerized stack (docker compose up -d --build first).
 # Exercises every endpoint group and asserts HTTP status codes.
 set -u
+# macOS bash 3.2 mis-parses nested double-quotes inside "$(...)" and would
+# brace-expand compact JSON bodies like {"a":1,"b":2} into comma-split
+# fragments (breaking every POST). Disabling brace expansion is a no-op on the
+# bash 4+/Linux hosts this script also targets. Uses only ${...} param
+# expansion, never {a,b} brace expansion, so this is always safe.
+set +B
 API="${API:-http://localhost:3001}"
+# Admin creds are env-overridable so this script works against any deployment.
+# Defaults match the local docker-compose seed; staging injects ADMIN_PASSWORD.
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@tanviagnihotry.com}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-TanviAdmin@2026}"
 PASS=0; FAIL=0
 TS="$(date +%s)"
 GUEST_EMAIL="guest${TS}@example.com"
@@ -36,7 +46,7 @@ check "register" "200|201" "$(code -X POST $API/api/auth/register -H 'content-ty
 TOKEN=$(jqget "d.token")
 check "register duplicate -> 409" 409 "$(code -X POST $API/api/auth/register -H 'content-type: application/json' -d "{\"email\":\"$NEW_USER_EMAIL\",\"password\":\"Passw0rd!\",\"firstName\":\"T\",\"lastName\":\"U\"}")"
 check "login bad password -> 401" 401 "$(code -X POST $API/api/auth/login -H 'content-type: application/json' -d "{\"email\":\"$NEW_USER_EMAIL\",\"password\":\"wrong\"}")"
-check "login admin" 200 "$(code -X POST $API/api/auth/login -H 'content-type: application/json' -d '{"email":"admin@tanviagnihotry.com","password":"TanviAdmin@2026"}')"
+check "login admin" 200 "$(code -X POST $API/api/auth/login -H 'content-type: application/json' -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")"
 ADMIN_TOKEN=$(jqget "d.token")
 check "GET /api/auth/me" 200 "$(code $API/api/auth/me -H "authorization: Bearer $TOKEN")"
 check "GET /api/auth/me no token -> 401" 401 "$(code $API/api/auth/me)"
