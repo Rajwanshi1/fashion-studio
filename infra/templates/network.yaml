@@ -4,6 +4,10 @@ Parameters:
   EnvName:
     Type: String
     AllowedValues: [staging, prod]
+  CfOriginFacingPrefixListId:
+    Type: String
+    Default: pl-9aa247f3
+    Description: Managed prefix list ID for com.amazonaws.global.cloudfront.origin-facing in ap-south-1 (CloudFront VPC-origin traffic source, used for ALB SG ingress)
 Resources:
   Vpc:
     Type: AWS::EC2::VPC
@@ -91,7 +95,7 @@ Resources:
       GroupDescription: internal ALB - reachable from inside the VPC only (CloudFront VPC-origin ENIs)
       VpcId: !Ref Vpc
       SecurityGroupIngress:
-        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 10.20.0.0/16 }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, SourcePrefixListId: !Ref CfOriginFacingPrefixListId }
       Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-alb' }]
   AppSg:
     Type: AWS::EC2::SecurityGroup
