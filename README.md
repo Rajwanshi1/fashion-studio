@@ -17,7 +17,7 @@ comes from the Claude Design reference mirrored in [`design-reference/`](design-
 Money is always **integer paise** in the backend/API; UIs format `₹x,xx,xxx` (en-IN).
 Guest checkout is supported; accounts use JWT (HS256). **Razorpay is masked** — a mock
 provider + in-app "Test Mode" modal simulate payment; see
-[`TODO-THIRD-PARTY.md`](TODO-THIRD-PARTY.md) for the go-live checklist (blocking security
+[`PRODUCTION-TODO.md`](PRODUCTION-TODO.md) for the go-live checklist (blocking security
 note included).
 
 ## Run it
@@ -78,8 +78,8 @@ Design-fidelity QA (screenshots app vs reference): `docs/verification/design-qa.
   runs the api + postgres pair; nothing in the code is AWS-specific. Put a TLS-terminating
   proxy (Caddy/nginx/ALB) in front, set real `JWT_SECRET`/`CORS_ORIGINS`, use a managed
   volume/backup for `dbdata`.
-- Third-party setup still pending (Razorpay keys, photography, email, domain):
-  [`TODO-THIRD-PARTY.md`](TODO-THIRD-PARTY.md).
+- All pending go-live work (third-party setup, security blockers, hardening):
+  [`PRODUCTION-TODO.md`](PRODUCTION-TODO.md).
 
 ## Documentation map
 
