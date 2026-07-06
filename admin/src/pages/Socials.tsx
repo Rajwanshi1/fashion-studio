@@ -14,7 +14,6 @@ const SOCIALS_URL =
 /**
  * Mirrors backend/src/services/socials.service.ts normalizeSource:
  * trim → lowercase → collapse whitespace runs to '-' → strip chars outside [a-z0-9_-].
- * (Does not enforce the backend's leading-char / length regex — this is a live preview only.)
  */
 export function normalizeSource(input: string): string {
   return input
@@ -23,6 +22,9 @@ export function normalizeSource(input: string): string {
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9_-]/g, '');
 }
+
+/** Mirrors backend/src/services/socials.service.ts SOURCE_RE — the scan route rejects anything else. */
+const VALID_SOURCE_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 const columns: Column<SocialStat>[] = [
   { key: 'source', label: 'Source', render: (s) => <span className="nm">{s.source}</span> },
@@ -42,7 +44,9 @@ export default function Socials() {
   const [error, setError] = useState<string | null>(null);
 
   const slug = normalizeSource(source);
-  const targetUrl = slug ? `${baseUrl}/?src=${slug}` : '';
+  const isValidSlug = VALID_SOURCE_RE.test(slug);
+  const showInvalidSourceWarning = source.trim().length > 0 && !isValidSlug;
+  const targetUrl = isValidSlug ? `${baseUrl}/?src=${slug}` : '';
 
   useEffect(() => {
     let live = true;
@@ -130,6 +134,13 @@ export default function Socials() {
             <p className="state-note">
               Target URL: <code>{targetUrl}</code>
             </p>
+          )}
+          {showInvalidSourceWarning && (
+            <div className="form-err" role="alert">
+              Invalid source — must start with a letter or number and contain only lowercase
+              letters, numbers, "_" or "-" (max 64 characters). A QR printed from this label
+              would have every scan rejected.
+            </div>
           )}
         </div>
 
