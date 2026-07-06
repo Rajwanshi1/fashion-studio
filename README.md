@@ -51,8 +51,8 @@ Backend env (see `docker-compose.yml`): `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIG
 ```bash
 cd backend  && npm test        # 122 unit + API tests (services w/ fakes, routes via app.request)
 cd frontend && npm test        # 18 RTL tests (cart, checkout incl. mock payment, PLP/PDP, 404)
-cd admin    && npm test        # 13 RTL tests (auth guard, dashboard, orders, product edit, socials)
-cd socials  && npm test        # 9 RTL tests (links render, scan beacon)
+cd admin    && npm test        # 15 RTL tests (auth guard, dashboard, orders, product edit, socials)
+cd socials  && npm test        # 10 RTL tests (links render, scan beacon)
 
 # Live API verification against the containers (37 checks):
 ./scripts/verify-api.sh                          # results: docs/verification/backend-api.md

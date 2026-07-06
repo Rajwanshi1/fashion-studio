@@ -12,8 +12,14 @@ const SOCIALS_URL =
   (import.meta.env.VITE_SOCIALS_URL as string | undefined) ?? DEFAULT_SOCIALS_URL;
 
 /**
- * Mirrors backend/src/services/socials.service.ts normalizeSource:
- * trim → lowercase → collapse whitespace runs to '-' → strip chars outside [a-z0-9_-].
+ * Live-preview helper only — NOT what the backend does. The backend's
+ * normalizeSource (backend/src/services/socials.service.ts) trims, lowercases,
+ * and collapses whitespace runs to '-', then REJECTS the result outright if it
+ * doesn't match VALID_SOURCE_RE (it never strips characters). This admin-side
+ * version strips disallowed chars instead, purely so the QR/link preview looks
+ * sane as the user types. VALID_SOURCE_RE below is what keeps the two paths
+ * equivalent in practice: for any input this function accepts unchanged, the
+ * backend's stricter validate-or-reject logic produces the same result.
  */
 export function normalizeSource(input: string): string {
   return input

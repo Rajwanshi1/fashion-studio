@@ -95,4 +95,31 @@ describe('trackScan', () => {
     await Promise.resolve();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('never throws when sessionStorage access is blocked (e.g. "Block all cookies")', async () => {
+    setLocation('?src=Store-Window');
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Simulate a browser/storage policy that throws a SecurityError on any
+    // sessionStorage access, instead of just being unavailable.
+    const originalSessionStorage = window.sessionStorage;
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('The operation is insecure.', 'SecurityError');
+      },
+    });
+
+    try {
+      const trackScan = await loadTrackScan();
+      expect(() => trackScan()).not.toThrow();
+    } finally {
+      Object.defineProperty(window, 'sessionStorage', {
+        configurable: true,
+        writable: true,
+        value: originalSessionStorage,
+      });
+    }
+  });
 });
