@@ -41,6 +41,9 @@ async function main() {
     jwtSecret: config.jwtSecret,
     corsOrigins: config.corsOrigins,
     runInTransaction: makeTxRunner(pool),
+    pingDb: async () => {
+      await pool.query('SELECT 1');
+    },
   });
 
   console.warn('payments: MOCK Razorpay provider active — do not use in production');

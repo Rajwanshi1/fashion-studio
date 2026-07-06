@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
+import { secureHeaders } from 'hono/secure-headers';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { OrdersRepo } from './data/orders.repo';
 import type { PaymentsRepo } from './data/payments.repo';
@@ -37,6 +39,8 @@ export interface AppDeps {
   jwtSecret: string;
   corsOrigins: string[];
   runInTransaction: TxRunner;
+  /** Liveness probe against the DB pool; absent → /api/ready always 503. */
+  pingDb?: () => Promise<void>;
 }
 
 const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 503> = {
@@ -62,6 +66,15 @@ export function createApp(deps: AppDeps) {
 
   const app = new Hono<AuthEnv>();
 
+  app.use(secureHeaders());
+  app.use(
+    '/api/*',
+    bodyLimit({
+      maxSize: 100 * 1024,
+      onError: (c) => c.json({ error: 'Payload too large' }, 413),
+    }),
+  );
+
   app.onError((err, c) => {
     if (err instanceof DomainError) return c.json({ error: err.message }, DOMAIN_STATUS[err.code]);
     // e.g. hono's 400 "Malformed JSON in request body" — keep its status but
@@ -79,6 +92,18 @@ export function createApp(deps: AppDeps) {
   app.use('/api/*', rateLimit({ windowMs: 60_000, max: 300 }));
 
   app.get('/api/health', (c) => c.json({ status: 'ok' }));
+  app.get('/api/ready', async (c) => {
+    if (!deps.pingDb) return c.json({ status: 'unavailable' }, 503);
+    try {
+      await Promise.race([
+        deps.pingDb(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2_000)),
+      ]);
+      return c.json({ status: 'ready' });
+    } catch {
+      return c.json({ status: 'unavailable' }, 503);
+    }
+  });
   app.route('/api/auth', authRoutes(auth, jwtSecret));
   app.route('/api', catalogRoutes(catalog, repos.wishlist, jwtSecret));
   app.route('/api', orderRoutes(orders, jwtSecret));
