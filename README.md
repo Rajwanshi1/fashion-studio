@@ -59,6 +59,7 @@ cd socials  && npm test        # 10 RTL tests (links render, scan beacon)
 
 # End-to-end (starts nothing itself — bring the stack up first):
 docker compose up -d
+export VITE_API_URL=http://localhost:3001        # production-mode builds now fail loud without it (PRODUCTION-TODO #8)
 (cd frontend && npm run build && npm run preview -- --port 4173 --strictPort &)
 (cd admin    && npm run build && npm run preview -- --port 4174 --strictPort &)
 cd e2e && npm install && npx playwright install chromium && npm test
@@ -68,12 +69,39 @@ cd e2e && npm install && npx playwright install chromium && npm test
 Design-fidelity QA (screenshots app vs reference): `docs/verification/design-qa.md`
 (regenerate with `node ../scripts/design-qa-shots.mjs` from `e2e/`).
 
-## Deployment (out of scope for this iteration — prepared, not executed)
+## Deployment
+
+### Deployment (staging)
+
+A staging environment is live on AWS, provisioned entirely by CloudFormation (see
+[`infra/README.md`](infra/README.md) for the stack map, deploy driver, and restore
+runbook): VPC + EC2 Postgres with DLM snapshots and cross-region-replicated `pg_dump`
+backups, an ALB/ASG API tier, and CloudFront+S3 (WAF-fronted) for all three SPAs. This
+supersedes the Amplify Hosting plan below for the deployed environment — `amplify.yml`
+is kept only as a reference and is not used by `infra/`.
+
+- Storefront `https://d1qn2j2hnhvlhl.cloudfront.net`
+- Admin `https://d2n8mfypcal9h4.cloudfront.net`
+- Socials `https://d36dldi1h3cvhl.cloudfront.net`
+- API `https://d1d2imu6irdm96.cloudfront.net`
+
+Verification: [`docs/verification/staging-resources.md`](docs/verification/staging-resources.md)
+(stack/resource inventory), [`docs/verification/staging-e2e.md`](docs/verification/staging-e2e.md)
+(API-contract script + full Playwright suite against the live URLs), and
+[`docs/verification/staging-security-audit.md`](docs/verification/staging-security-audit.md)
+(security probes + a refused-deletion demonstration of the data layer's protections).
+
+This is staging, not production — no custom domain/prod TLS, no live Razorpay keys, no
+CI yet. Remaining go-live work: [`PRODUCTION-TODO.md`](PRODUCTION-TODO.md).
+
+### Deployment (production — not yet executed)
 
 - **Storefront + admin + socials → AWS Amplify Hosting.** Build spec committed in
   [`amplify.yml`](amplify.yml) (monorepo appRoots `frontend`, `admin`, `socials`). Add the
   SPA rewrite rule and set `VITE_API_URL` (instructions at the top of the file); point the
   `socials.<domain>.com` custom domain at the socials app and set `VITE_SOCIALS_URL` on admin.
+  (The staging environment above uses CloudFormation-managed S3+CloudFront instead —
+  this Amplify path is one option for production, not the only one.)
 - **Backend → containers on EC2** (or any cloud/VM): the same `docker compose up -d --build`
   runs the api + postgres pair; nothing in the code is AWS-specific. Put a TLS-terminating
   proxy (Caddy/nginx/ALB) in front, set real `JWT_SECRET`/`CORS_ORIGINS`, use a managed
@@ -85,5 +113,6 @@ Design-fidelity QA (screenshots app vs reference): `docs/verification/design-qa.
 
 - Spec (schema + API contract): `docs/superpowers/specs/2026-07-05-fashion-boutique-design.md`
 - Implementation plan: `docs/superpowers/plans/2026-07-05-fashion-boutique.md`
-- Verification records: `docs/verification/` (live API, E2E, design QA)
+- Verification records: `docs/verification/` (live API, E2E, design QA, staging resources/E2E/security audit)
+- Infra runbook (staging/prod CloudFormation stacks, deploy driver, restore steps): `infra/README.md`
 - Design reference & tokens: `design-reference/`
