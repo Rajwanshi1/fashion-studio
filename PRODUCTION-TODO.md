@@ -268,8 +268,8 @@ CI — see the still-open items below, especially #1, #20, #22, #23, #25.
   `https://tanviagnihotry.com`, pending #25); verify or register the Instagram handle
   (`@tanviagnihotry` is guessed); replace the WhatsApp/phone placeholder
   (`+91 90000 00000`); add the socials production origin to backend `CORS_ORIGINS` (or
-  scan logging is CORS-blocked); set `VITE_SOCIALS_URL` on the admin Amplify app so
-  generated QRs point at production. Socials is the third Amplify app in deploy item #26.
+  scan logging is CORS-blocked). Generated QRs always point at production — the base URL
+  is hardcoded in the admin QR builder. Socials is the third Amplify app in deploy item #26.
 
 ## P2 — Post-launch / nice-to-have
 

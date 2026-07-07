@@ -151,6 +151,91 @@ describe('Socials', () => {
     );
   });
 
+  it('accepts a pasted hex code, syncs the swatch, and regenerates the QR', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/socials/stats')) {
+        return { json: { stats: [], clicks: [] } };
+      }
+      return undefined;
+    });
+
+    renderApp('/socials');
+    expect(await screen.findByRole('heading', { name: 'Socials' })).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Source'), 'Store Window');
+    await screen.findByAltText('QR code for store-window');
+
+    fireEvent.change(screen.getByLabelText('Background hex'), { target: { value: '#C8D8C0' } });
+
+    expect(screen.getByLabelText('Background')).toHaveValue('#c8d8c0');
+    await waitFor(() =>
+      expect(toDataURL).toHaveBeenCalledWith(
+        'https://tanviagnihotry.com/qr-socials/?src=store-window',
+        expect.objectContaining({ color: expect.objectContaining({ light: '#c8d8c0' }) }),
+      ),
+    );
+  });
+
+  it('normalizes hex codes typed without a hash or in 3-digit shorthand', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/socials/stats')) {
+        return { json: { stats: [], clicks: [] } };
+      }
+      return undefined;
+    });
+
+    renderApp('/socials');
+    expect(await screen.findByRole('heading', { name: 'Socials' })).toBeInTheDocument();
+
+    const hexInput = screen.getByLabelText('Background hex');
+
+    fireEvent.change(hexInput, { target: { value: '1E2620' } });
+    expect(screen.getByLabelText('Background')).toHaveValue('#1e2620');
+
+    fireEvent.change(hexInput, { target: { value: 'abc' } });
+    expect(screen.getByLabelText('Background')).toHaveValue('#aabbcc');
+  });
+
+  it('ignores invalid hex text and snaps the field back to the color on blur', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/socials/stats')) {
+        return { json: { stats: [], clicks: [] } };
+      }
+      return undefined;
+    });
+
+    renderApp('/socials');
+    expect(await screen.findByRole('heading', { name: 'Socials' })).toBeInTheDocument();
+
+    const hexInput = screen.getByLabelText('Background hex');
+    fireEvent.change(hexInput, { target: { value: 'oops' } });
+
+    expect(screen.getByLabelText('Background')).toHaveValue('#ffffff');
+    expect(hexInput).toHaveValue('oops');
+
+    fireEvent.blur(hexInput);
+    expect(hexInput).toHaveValue('#ffffff');
+  });
+
+  it('mirrors swatch changes into the hex field', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/socials/stats')) {
+        return { json: { stats: [], clicks: [] } };
+      }
+      return undefined;
+    });
+
+    renderApp('/socials');
+    expect(await screen.findByRole('heading', { name: 'Socials' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Background'), { target: { value: '#c8d8c0' } });
+    expect(screen.getByLabelText('Background hex')).toHaveValue('#c8d8c0');
+  });
+
   it('warns on a background too dark to scan but still renders the QR', async () => {
     seedAdminAuth();
     mockFetch((url) => {

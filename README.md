@@ -37,8 +37,9 @@ cd socials && npm install && npm run dev         # http://localhost:5175
 ```
 
 QR flow: admin → Socials → generate a QR per placement (e.g. `store-window`); it encodes
-`<socials origin>/?src=store-window`. Each scan logs the source via `POST /api/socials/scan`;
-counts appear on the same admin page. Admin env `VITE_SOCIALS_URL` sets the QR origin.
+`https://tanviagnihotry.com/qr-socials/?src=store-window` — always the production origin,
+since printed QRs outlive any environment. Each scan logs the source via
+`POST /api/socials/scan`; counts appear on the same admin page.
 
 Seeded logins: admin `admin@tanviagnihotry.com` / `TanviAdmin@2026` ·
 demo customer `aanya@example.com` / `Aanya@2026`.
@@ -104,7 +105,8 @@ CI yet. Remaining go-live work: [`PRODUCTION-TODO.md`](PRODUCTION-TODO.md).
 - **Storefront + admin + socials → AWS Amplify Hosting.** Build spec committed in
   [`amplify.yml`](amplify.yml) (monorepo appRoots `frontend`, `admin`, `socials`). Add the
   SPA rewrite rule and set `VITE_API_URL` (instructions at the top of the file); point the
-  `socials.<domain>.com` custom domain at the socials app and set `VITE_SOCIALS_URL` on admin.
+  `socials.<domain>.com` custom domain at the socials app. (The admin QR generator's base
+  URL is hardcoded to production — nothing to configure.)
   (The staging environment above uses CloudFormation-managed S3+CloudFront instead —
   this Amplify path is one option for production, not the only one.)
 - **Backend → containers on EC2** (or any cloud/VM): the same `docker compose up -d --build`

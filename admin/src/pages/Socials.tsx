@@ -7,9 +7,11 @@ import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { useToast } from '../components/Toast';
 
-const DEFAULT_SOCIALS_URL = 'https://tanviagnihotry.com/qr-socials';
-const SOCIALS_URL =
-  (import.meta.env.VITE_SOCIALS_URL as string | undefined) ?? DEFAULT_SOCIALS_URL;
+/**
+ * Always the production origin, whatever environment this build targets —
+ * printed QR codes outlive any staging deployment.
+ */
+const SOCIALS_URL = 'https://tanviagnihotry.com/qr-socials';
 
 /**
  * Live-preview helper only — NOT what the backend does. The backend's
@@ -36,6 +38,15 @@ const QR_DARK = '#1E2620';
 const DEFAULT_BG = '#ffffff';
 /** RGBA hex — the qrcode lib renders a fully transparent background. */
 const TRANSPARENT_BG = '#ffffff00';
+
+/** '#abc', 'abc', '#aabbcc', 'AABBCC' → '#aabbcc'; anything else → null. */
+export function normalizeHex(input: string): string | null {
+  const raw = input.trim().replace(/^#/, '');
+  if (/^[0-9a-f]{6}$/i.test(raw)) return `#${raw.toLowerCase()}`;
+  if (/^[0-9a-f]{3}$/i.test(raw))
+    return `#${[...raw].map((c) => c + c).join('').toLowerCase()}`;
+  return null;
+}
 
 /** WCAG relative luminance of a #rrggbb color. */
 function luminance(hex: string): number {
@@ -75,6 +86,8 @@ export default function Socials() {
   const [baseUrl, setBaseUrl] = useState(SOCIALS_URL);
   const [source, setSource] = useState('');
   const [bg, setBg] = useState(DEFAULT_BG);
+  /** Free-text mirror of `bg` — lets a hex code be pasted/typed without yanking the QR to invalid values. */
+  const [bgText, setBgText] = useState(DEFAULT_BG);
   const [qr, setQr] = useState<{ colored: string; transparent: string } | null>(null);
 
   const [stats, setStats] = useState<SocialStat[] | null>(null);
@@ -169,13 +182,32 @@ export default function Socials() {
               <label className="lab" htmlFor="s-bg">
                 Background
               </label>
-              <input
-                id="s-bg"
-                className="inp"
-                type="color"
-                value={bg}
-                onChange={(e) => setBg(e.target.value)}
-              />
+              <div className="color-row">
+                <input
+                  id="s-bg"
+                  className="inp"
+                  type="color"
+                  value={bg}
+                  onChange={(e) => {
+                    setBg(e.target.value);
+                    setBgText(e.target.value);
+                  }}
+                />
+                <input
+                  id="s-bg-hex"
+                  className="inp"
+                  aria-label="Background hex"
+                  placeholder="#ffffff"
+                  maxLength={7}
+                  value={bgText}
+                  onChange={(e) => {
+                    setBgText(e.target.value);
+                    const hex = normalizeHex(e.target.value);
+                    if (hex) setBg(hex);
+                  }}
+                  onBlur={() => setBgText(bg)}
+                />
+              </div>
             </div>
           </div>
 

@@ -235,6 +235,8 @@ label.lab { display: block; font-size: 0.6rem; letter-spacing: var(--track-wide)
 .inp:focus { outline: none; border-color: var(--gold); }
 textarea.inp { resize: vertical; min-height: 120px; }
 input[type='color'].inp { height: 48px; padding: 4px 6px; cursor: pointer; }
+.color-row { display: flex; gap: 0.5rem; }
+.color-row input[type='color'].inp { flex: 0 0 56px; width: 56px; }
 input[type='color'].inp::-webkit-color-swatch-wrapper { padding: 0; }
 input[type='color'].inp::-webkit-color-swatch { border: none; border-radius: var(--edge); }
 select.inp {

@@ -103,9 +103,9 @@ cmd_spas() {
   aws cloudfront create-invalidation --distribution-id "$sf_dist" --paths '/*' > /dev/null
   echo "published frontend + socials(/qr-socials) -> $sf_bucket"
 
-  # Admin's QR generator must emit URLs for the deployed socials path.
-  (cd admin && rm -rf dist && VITE_API_URL="https://$api_domain" \
-    VITE_SOCIALS_URL="https://$sf_domain/qr-socials" npm run build)
+  # Admin's QR generator always emits production URLs (hardcoded in
+  # admin/src/pages/Socials.tsx) — printed QRs must survive any environment.
+  (cd admin && rm -rf dist && VITE_API_URL="https://$api_domain" npm run build)
   aws s3 sync admin/dist "s3://$admin_bucket" --delete --region "$PRIMARY_REGION"
   aws cloudfront create-invalidation --distribution-id "$admin_dist" --paths '/*' > /dev/null
   echo "published admin -> $admin_bucket"

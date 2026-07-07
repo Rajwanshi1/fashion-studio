@@ -4,8 +4,8 @@
 #   Source: </^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>
 #   Target: /index.html   Type: 200 (Rewrite)
 # Set env var VITE_API_URL to the deployed backend URL before building.
-# For the admin app also set VITE_SOCIALS_URL to the socials page origin
-# (e.g. https://socials.<domain>.com) so generated QR codes point at production.
+# The admin QR generator's base URL is hardcoded to production
+# (admin/src/pages/Socials.tsx) — no env var needed for it.
 # The socials app is meant for the socials.<domain>.com subdomain (custom domain in Amplify).
 version: 1
 applications:
