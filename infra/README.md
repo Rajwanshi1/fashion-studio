@@ -66,9 +66,9 @@ land before those steps are useful. Each command also runs standalone.
 
 Local e2e builds now fail loudly without `VITE_API_URL` (production Vite builds
 require it, PRODUCTION-TODO #8) — export `VITE_API_URL=http://localhost:3001` before
-`npm run build` locally. `cmd_spas` sets it to the staging API domain automatically,
-and sets `VITE_SOCIALS_URL=https://<storefront-domain>/qr-socials` for the admin
-build so its QR generator emits URLs for the deployed socials path.
+`npm run build` locally. `cmd_spas` sets it to the staging API domain automatically.
+The admin QR generator's base URL is hardcoded to production
+(`https://tanviagnihotry.com/qr-socials`), so staging builds never emit staging QRs.
 
 ## One-time migration: socials distro → /qr-socials path (2026-07-07)
 

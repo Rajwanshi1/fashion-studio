@@ -7,9 +7,11 @@ import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { useToast } from '../components/Toast';
 
-const DEFAULT_SOCIALS_URL = 'https://tanviagnihotry.com/qr-socials';
-const SOCIALS_URL =
-  (import.meta.env.VITE_SOCIALS_URL as string | undefined) ?? DEFAULT_SOCIALS_URL;
+/**
+ * Always the production origin, whatever environment this build targets —
+ * printed QR codes outlive any staging deployment.
+ */
+const SOCIALS_URL = 'https://tanviagnihotry.com/qr-socials';
 
 /**
  * Live-preview helper only — NOT what the backend does. The backend's
@@ -32,10 +34,19 @@ export function normalizeSource(input: string): string {
 /** Mirrors backend/src/services/socials.service.ts SOURCE_RE — the scan route rejects anything else. */
 const VALID_SOURCE_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
-const QR_DARK = '#1E2620';
+const DEFAULT_QR_DARK = '#1E2620';
 const DEFAULT_BG = '#ffffff';
 /** RGBA hex — the qrcode lib renders a fully transparent background. */
 const TRANSPARENT_BG = '#ffffff00';
+
+/** '#abc', 'abc', '#aabbcc', 'AABBCC' → '#aabbcc'; anything else → null. */
+export function normalizeHex(input: string): string | null {
+  const raw = input.trim().replace(/^#/, '');
+  if (/^[0-9a-f]{6}$/i.test(raw)) return `#${raw.toLowerCase()}`;
+  if (/^[0-9a-f]{3}$/i.test(raw))
+    return `#${[...raw].map((c) => c + c).join('').toLowerCase()}`;
+  return null;
+}
 
 /** WCAG relative luminance of a #rrggbb color. */
 function luminance(hex: string): number {
@@ -48,9 +59,60 @@ function luminance(hex: string): number {
 }
 
 /** Scanners need the dark modules to stand out from the background. */
-function isLowContrast(bg: string): boolean {
-  const [hi, lo] = [luminance(bg), luminance(QR_DARK)].sort((a, b) => b - a);
+function isLowContrast(bg: string, dark: string): boolean {
+  const [hi, lo] = [luminance(bg), luminance(dark)].sort((a, b) => b - a);
   return (hi + 0.05) / (lo + 0.05) < 2;
+}
+
+/** Color swatch + hex text field, two-way synced; invalid text never touches the color. */
+function ColorField({
+  id,
+  label,
+  color,
+  text,
+  setColor,
+  setText,
+}: {
+  id: string;
+  label: string;
+  color: string;
+  text: string;
+  setColor: (v: string) => void;
+  setText: (v: string) => void;
+}) {
+  return (
+    <div className="field">
+      <label className="lab" htmlFor={id}>
+        {label}
+      </label>
+      <div className="color-row">
+        <input
+          id={id}
+          className="inp"
+          type="color"
+          value={color}
+          onChange={(e) => {
+            setColor(e.target.value);
+            setText(e.target.value);
+          }}
+        />
+        <input
+          id={`${id}-hex`}
+          className="inp"
+          aria-label={`${label} hex`}
+          placeholder={color}
+          maxLength={7}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            const hex = normalizeHex(e.target.value);
+            if (hex) setColor(hex);
+          }}
+          onBlur={() => setText(color)}
+        />
+      </div>
+    </div>
+  );
 }
 
 const columns: Column<SocialStat>[] = [
@@ -74,7 +136,12 @@ export default function Socials() {
   const toast = useToast();
   const [baseUrl, setBaseUrl] = useState(SOCIALS_URL);
   const [source, setSource] = useState('');
+  // Each color keeps a free-text mirror so a hex code can be pasted/typed
+  // without yanking the QR to invalid values.
   const [bg, setBg] = useState(DEFAULT_BG);
+  const [bgText, setBgText] = useState(DEFAULT_BG);
+  const [dark, setDark] = useState(DEFAULT_QR_DARK);
+  const [darkText, setDarkText] = useState(DEFAULT_QR_DARK);
   const [qr, setQr] = useState<{ colored: string; transparent: string } | null>(null);
 
   const [stats, setStats] = useState<SocialStat[] | null>(null);
@@ -107,7 +174,7 @@ export default function Socials() {
     }
     let live = true;
     const render = (light: string) =>
-      QRCode.toDataURL(targetUrl, { width: 512, margin: 2, color: { dark: QR_DARK, light } });
+      QRCode.toDataURL(targetUrl, { width: 512, margin: 2, color: { dark, light } });
     Promise.all([render(bg), render(TRANSPARENT_BG)])
       .then(([colored, transparent]) => {
         if (live) setQr({ colored, transparent });
@@ -118,7 +185,7 @@ export default function Socials() {
     return () => {
       live = false;
     };
-  }, [targetUrl, bg]);
+  }, [targetUrl, bg, dark]);
 
   const copyUrl = async () => {
     try {
@@ -165,18 +232,22 @@ export default function Socials() {
                 placeholder="e.g. Store Window"
               />
             </div>
-            <div className="field">
-              <label className="lab" htmlFor="s-bg">
-                Background
-              </label>
-              <input
-                id="s-bg"
-                className="inp"
-                type="color"
-                value={bg}
-                onChange={(e) => setBg(e.target.value)}
-              />
-            </div>
+            <ColorField
+              id="s-bg"
+              label="Background"
+              color={bg}
+              text={bgText}
+              setColor={setBg}
+              setText={setBgText}
+            />
+            <ColorField
+              id="s-dark"
+              label="QR color"
+              color={dark}
+              text={darkText}
+              setColor={setDark}
+              setText={setDarkText}
+            />
           </div>
 
           <p className="state-note">
@@ -194,7 +265,7 @@ export default function Socials() {
               would have every scan rejected.
             </div>
           )}
-          {isValidSlug && isLowContrast(bg) && (
+          {isValidSlug && isLowContrast(bg, dark) && (
             <div className="form-err" role="alert">
               Low contrast — the dark modules barely stand out from this background; scanners
               may not read a QR printed with it.
