@@ -1,12 +1,16 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mockFetch, renderApp, seedAdminAuth } from '../test/utils';
 
-vi.mock('qrcode', () => ({
-  toDataURL: async () => 'data:image/png;base64,x',
+const { toDataURL } = vi.hoisted(() => ({
+  toDataURL: vi.fn(async () => 'data:image/png;base64,x'),
 }));
+vi.mock('qrcode', () => ({ toDataURL }));
 
 describe('Socials', () => {
+  beforeEach(() => {
+    toDataURL.mockClear();
+  });
   it('renders scan stats and generates a QR from a typed source', async () => {
     seedAdminAuth();
     mockFetch((url) => {
@@ -86,6 +90,87 @@ describe('Socials', () => {
     expect(screen.getByText('7')).toBeInTheDocument();
     expect(screen.getByText('instagram')).toBeInTheDocument();
     expect(screen.getByText('direct')).toBeInTheDocument();
+  });
+
+  it('generates the QR on the default white background plus a transparent variant for download', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/socials/stats')) {
+        return { json: { stats: [], clicks: [] } };
+      }
+      return undefined;
+    });
+
+    renderApp('/socials');
+    expect(await screen.findByRole('heading', { name: 'Socials' })).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Source'), 'Store Window');
+    await screen.findByAltText('QR code for store-window');
+
+    const url = 'https://tanviagnihotry.com/qr-socials/?src=store-window';
+    expect(toDataURL).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({ color: expect.objectContaining({ light: '#ffffff' }) }),
+    );
+    expect(toDataURL).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({ color: expect.objectContaining({ light: '#ffffff00' }) }),
+    );
+
+    const transparent = screen.getByRole('link', { name: /transparent png/i });
+    expect(transparent).toHaveAttribute('download', 'ta-qr-store-window-transparent.png');
+    expect(transparent).toHaveAttribute('href', expect.stringMatching(/^data:image\/png/));
+    expect(screen.getByRole('link', { name: 'Download PNG' })).toHaveAttribute(
+      'download',
+      'ta-qr-store-window.png',
+    );
+  });
+
+  it('regenerates the QR when the background color changes', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/socials/stats')) {
+        return { json: { stats: [], clicks: [] } };
+      }
+      return undefined;
+    });
+
+    renderApp('/socials');
+    expect(await screen.findByRole('heading', { name: 'Socials' })).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Source'), 'Store Window');
+    await screen.findByAltText('QR code for store-window');
+
+    fireEvent.change(screen.getByLabelText('Background'), { target: { value: '#c8d8c0' } });
+
+    await waitFor(() =>
+      expect(toDataURL).toHaveBeenCalledWith(
+        'https://tanviagnihotry.com/qr-socials/?src=store-window',
+        expect.objectContaining({ color: expect.objectContaining({ light: '#c8d8c0' }) }),
+      ),
+    );
+  });
+
+  it('warns on a background too dark to scan but still renders the QR', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/socials/stats')) {
+        return { json: { stats: [], clicks: [] } };
+      }
+      return undefined;
+    });
+
+    renderApp('/socials');
+    expect(await screen.findByRole('heading', { name: 'Socials' })).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Source'), 'Store Window');
+    await screen.findByAltText('QR code for store-window');
+    expect(screen.queryByText(/low contrast/i)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Background'), { target: { value: '#1e2620' } });
+
+    expect(await screen.findByText(/low contrast/i)).toBeInTheDocument();
+    expect(screen.getByAltText('QR code for store-window')).toBeInTheDocument();
   });
 
   it('warns and withholds the QR when the normalized slug fails the backend leading-char rule', async () => {
