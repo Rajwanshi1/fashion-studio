@@ -16,6 +16,7 @@ describe('Socials', () => {
             stats: [
               { source: 'store-window', total: 42, last7: 5, last30: 12, lastScanAt: '2026-07-01T10:00:00Z' },
             ],
+            clicks: [],
           },
         };
       }
@@ -39,6 +40,52 @@ describe('Socials', () => {
 
     const qr = await screen.findByAltText('QR code for store-window');
     expect(qr).toHaveAttribute('src', expect.stringMatching(/^data:image\/png/));
+  });
+
+  it('defaults the QR base URL to the storefront /qr-socials path', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/socials/stats')) {
+        return { json: { stats: [], clicks: [] } };
+      }
+      return undefined;
+    });
+
+    renderApp('/socials');
+    expect(await screen.findByRole('heading', { name: 'Socials' })).toBeInTheDocument();
+
+    expect(screen.getByLabelText('Base URL')).toHaveValue('https://tanviagnihotry.com/qr-socials');
+
+    await userEvent.type(screen.getByLabelText('Source'), 'Store Window');
+    expect(
+      await screen.findByText('https://tanviagnihotry.com/qr-socials/?src=store-window'),
+    ).toBeInTheDocument();
+  });
+
+  it('renders click stats attributed to their QR source, with direct visits marked', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/socials/stats')) {
+        return {
+          json: {
+            stats: [],
+            clicks: [
+              { link: 'whatsapp', source: 'store-window', total: 7, last7: 2, last30: 5, lastClickAt: '2026-07-01T10:00:00Z' },
+              { link: 'instagram', source: null, total: 3, last7: 1, last30: 3, lastClickAt: '2026-07-02T10:00:00Z' },
+            ],
+          },
+        };
+      }
+      return undefined;
+    });
+
+    renderApp('/socials');
+
+    expect(await screen.findByText('whatsapp')).toBeInTheDocument();
+    expect(screen.getByText('store-window')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
+    expect(screen.getByText('instagram')).toBeInTheDocument();
+    expect(screen.getByText('direct')).toBeInTheDocument();
   });
 
   it('warns and withholds the QR when the normalized slug fails the backend leading-char rule', async () => {

@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import * as QRCode from 'qrcode';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/format';
-import type { SocialStat } from '../lib/types';
+import type { LinkClickStat, SocialStat } from '../lib/types';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { useToast } from '../components/Toast';
 
-const DEFAULT_SOCIALS_URL = 'https://socials.tanviagnihotry.com';
+const DEFAULT_SOCIALS_URL = 'https://tanviagnihotry.com/qr-socials';
 const SOCIALS_URL =
   (import.meta.env.VITE_SOCIALS_URL as string | undefined) ?? DEFAULT_SOCIALS_URL;
 
@@ -40,6 +40,15 @@ const columns: Column<SocialStat>[] = [
   { key: 'lastScan', label: 'Last scan', render: (s) => formatDate(s.lastScanAt) },
 ];
 
+const clickColumns: Column<LinkClickStat>[] = [
+  { key: 'link', label: 'Link', render: (c) => <span className="nm">{c.link}</span> },
+  { key: 'source', label: 'From QR', render: (c) => c.source ?? 'direct' },
+  { key: 'total', label: 'Total', align: 'right', render: (c) => c.total },
+  { key: 'last7', label: 'Last 7 days', align: 'right', render: (c) => c.last7 },
+  { key: 'last30', label: 'Last 30 days', align: 'right', render: (c) => c.last30 },
+  { key: 'lastClick', label: 'Last click', render: (c) => formatDate(c.lastClickAt) },
+];
+
 export default function Socials() {
   const toast = useToast();
   const [baseUrl, setBaseUrl] = useState(SOCIALS_URL);
@@ -47,6 +56,7 @@ export default function Socials() {
   const [qr, setQr] = useState<string | null>(null);
 
   const [stats, setStats] = useState<SocialStat[] | null>(null);
+  const [clicks, setClicks] = useState<LinkClickStat[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const slug = normalizeSource(source);
@@ -56,8 +66,12 @@ export default function Socials() {
 
   useEffect(() => {
     let live = true;
-    api<{ stats: SocialStat[] }>('/api/socials/stats')
-      .then((data) => live && setStats(data.stats))
+    api<{ stats: SocialStat[]; clicks: LinkClickStat[] }>('/api/socials/stats')
+      .then((data) => {
+        if (!live) return;
+        setStats(data.stats);
+        setClicks(data.clicks ?? []);
+      })
       .catch((err: Error) => live && setError(err.message));
     return () => {
       live = false;
@@ -174,6 +188,17 @@ export default function Socials() {
           rows={stats}
           rowKey={(s) => s.source}
           empty="No scans yet — print a QR and place it."
+        />
+      )}
+
+      <p className="section-label">Clicks by link</p>
+      {!clicks && !error && <p className="state-note">Loading clicks…</p>}
+      {clicks && (
+        <DataTable
+          columns={clickColumns}
+          rows={clicks}
+          rowKey={(c) => `${c.link}|${c.source ?? ''}`}
+          empty="No clicks yet — they appear once visitors tap a link on the socials page."
         />
       )}
     </>

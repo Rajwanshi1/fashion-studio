@@ -9,6 +9,7 @@ import type {
   VariantForOrder,
   WishlistRepo,
 } from '../src/data/products.repo';
+import type { ClicksRepo, LinkStats } from '../src/data/clicks.repo';
 import type { ScansRepo, SourceStats } from '../src/data/scans.repo';
 import type { AdminUser, CreateUserInput, UsersRepo } from '../src/data/users.repo';
 import type { GoogleTokenClaims, VerifyGoogleToken } from '../src/services/auth.service';
@@ -497,6 +498,44 @@ export class FakeScansRepo implements ScansRepo {
   }
 }
 
+interface FakeClickRow {
+  link: string;
+  source: string | null;
+  userAgent: string | null;
+  referer: string | null;
+  createdAt: string;
+}
+
+export class FakeClicksRepo implements ClicksRepo {
+  clicks: FakeClickRow[] = [];
+
+  async insert(link: string, source: string | null, userAgent: string | null, referer: string | null): Promise<void> {
+    this.clicks.push({ link, source, userAgent, referer, createdAt: new Date().toISOString() });
+  }
+
+  async statsByLink(): Promise<LinkStats[]> {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const byKey = new Map<string, FakeClickRow[]>();
+    for (const row of this.clicks) {
+      const key = `${row.link} ${row.source ?? ''}`;
+      const list = byKey.get(key) ?? [];
+      list.push(row);
+      byKey.set(key, list);
+    }
+    return [...byKey.values()]
+      .map((rows) => ({
+        link: rows[0].link,
+        source: rows[0].source,
+        total: rows.length,
+        last7: rows.filter((r) => now - new Date(r.createdAt).getTime() <= 7 * DAY_MS).length,
+        last30: rows.filter((r) => now - new Date(r.createdAt).getTime() <= 30 * DAY_MS).length,
+        lastClickAt: rows.map((r) => r.createdAt).sort().at(-1)!,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }
+}
+
 export interface Fakes {
   users: FakeUsersRepo;
   products: FakeProductsRepo;
@@ -504,6 +543,7 @@ export interface Fakes {
   orders: FakeOrdersRepo;
   payments: FakePaymentsRepo;
   scans: FakeScansRepo;
+  clicks: FakeClicksRepo;
 }
 
 export function makeFakes(): Fakes {
@@ -513,7 +553,8 @@ export function makeFakes(): Fakes {
   const users = new FakeUsersRepo(orders);
   const payments = new FakePaymentsRepo(orders);
   const scans = new FakeScansRepo();
-  return { users, products, wishlist, orders, payments, scans };
+  const clicks = new FakeClicksRepo();
+  return { users, products, wishlist, orders, payments, scans, clicks };
 }
 
 /** Small catalog covering both categories, all flags, an inactive product and low stock. */
