@@ -87,7 +87,9 @@ test('products: 16+ pieces listed; S-size stock edit persists and is restored', 
   const bumped = String(Number(original) + 7);
   await sStock.fill(bumped);
   await page.getByRole('button', { name: 'Save Piece' }).click();
-  await expect(page.getByRole('heading', { name: 'Products' })).toBeVisible();
+  // Save posts to the API then routes back to the list; allow for staging
+  // save round-trip + navigation latency over CloudFront (default 10s flakes cold).
+  await expect(page.getByRole('heading', { name: 'Products' })).toBeVisible({ timeout: 30_000 });
 
   // Reload the edit page — the new value must have persisted.
   await page.goto(editUrl);

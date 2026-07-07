@@ -1,0 +1,230 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: fashion - VPC, subnets, NAT, endpoints, security groups
+Parameters:
+  EnvName:
+    Type: String
+    AllowedValues: [staging, prod]
+  CfOriginFacingPrefixListId:
+    Type: String
+    Default: pl-9aa247f3
+    Description: Managed prefix list ID for com.amazonaws.global.cloudfront.origin-facing in ap-south-1 (CloudFront VPC-origin traffic source, used for ALB SG ingress)
+  NatInstanceType:
+    Type: String
+    Default: t4g.nano
+    Description: Instance type for the self-managed NAT instance (arm64/Graviton to match NatAmiId).
+  NatAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}' }, { Key: Project, Value: fashion-studio }, { Key: Env, Value: !Ref EnvName }]
+  Igw:
+    Type: AWS::EC2::InternetGateway
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: { VpcId: !Ref Vpc, InternetGatewayId: !Ref Igw }
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-public-a' }]
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.1.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-public-b' }]
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-private-a' }]
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-private-b' }]
+  PublicRt:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc }
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties: { RouteTableId: !Ref PublicRt, DestinationCidrBlock: 0.0.0.0/0, GatewayId: !Ref Igw }
+  PublicRtA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicSubnetA, RouteTableId: !Ref PublicRt }
+  PublicRtB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicSubnetB, RouteTableId: !Ref PublicRt }
+  NatSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: self-managed NAT instance
+      VpcId: !Ref Vpc
+      # Ingress ALL protocols from the VPC CIDR: the NAT only forwards traffic that a
+      # private instance already chose to send. Each private instance's own egress SG
+      # (AppSg/DataSg above) already constrains what is allowed to leave, so the NAT
+      # itself does not re-filter — it just masquerades whatever reaches it.
+      SecurityGroupIngress:
+        - { IpProtocol: '-1', CidrIp: 10.20.0.0/16 }
+      SecurityGroupEgress:
+        - { IpProtocol: '-1', CidrIp: 0.0.0.0/0 }
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-nat' }]
+  NatInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref NatInstanceType
+      ImageId: !Ref NatAmiId
+      SourceDestCheck: false   # REQUIRED for NAT: the instance forwards packets not addressed to it
+      MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 8, VolumeType: gp3, Encrypted: true }
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          SubnetId: !Ref PublicSubnetA
+          AssociatePublicIpAddress: true
+          GroupSet: [!Ref NatSg]
+      Tags:
+        - { Key: Name, Value: !Sub 'fashion-${EnvName}-nat' }
+        - { Key: Project, Value: fashion-studio }
+        - { Key: Env, Value: !Ref EnvName }
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          exec > /var/log/user-data.log 2>&1
+          sysctl -w net.ipv4.ip_forward=1
+          echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/99-nat.conf
+          dnf -y install iptables-services
+          IFACE=$(ip route list default | awk '{print $5}')
+          iptables -t nat -A POSTROUTING -o $IFACE -j MASQUERADE
+          service iptables save
+          systemctl enable --now iptables
+  NatRecoveryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: auto-recover the NAT instance on system failure - a dead NAT kills SSM + egress for every private instance
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Dimensions: [{ Name: InstanceId, Value: !Ref NatInstance }]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Sub 'arn:aws:automate:${AWS::Region}:ec2:recover'
+  PrivateRt:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc }
+  PrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties: { RouteTableId: !Ref PrivateRt, DestinationCidrBlock: 0.0.0.0/0, InstanceId: !Ref NatInstance }
+  PrivateRtA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PrivateSubnetA, RouteTableId: !Ref PrivateRt }
+  PrivateRtB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PrivateSubnetB, RouteTableId: !Ref PrivateRt }
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcEndpointType: Gateway
+      RouteTableIds: [!Ref PrivateRt, !Ref PublicRt]
+  AlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: internal ALB - reachable from inside the VPC only (CloudFront VPC-origin ENIs)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, SourcePrefixListId: !Ref CfOriginFacingPrefixListId }
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-alb' }]
+  AppSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: app instances - API traffic from ALB only
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-app' }]
+  DataSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: data instance - Postgres from app SG only
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-data' }]
+  AlbToAppEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref AlbSg, IpProtocol: tcp, FromPort: 3001, ToPort: 3001, DestinationSecurityGroupId: !Ref AppSg }
+  AppFromAlbIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: { GroupId: !Ref AppSg, IpProtocol: tcp, FromPort: 3001, ToPort: 3001, SourceSecurityGroupId: !Ref AlbSg }
+  AppHttpsEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref AppSg, IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+  AppToDataEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref AppSg, IpProtocol: tcp, FromPort: 5432, ToPort: 5432, DestinationSecurityGroupId: !Ref DataSg }
+  AppDnsUdpEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref AppSg, IpProtocol: udp, FromPort: 53, ToPort: 53, CidrIp: 10.20.0.0/16 }
+  AppDnsTcpEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref AppSg, IpProtocol: tcp, FromPort: 53, ToPort: 53, CidrIp: 10.20.0.0/16 }
+  AppNtpEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref AppSg, IpProtocol: udp, FromPort: 123, ToPort: 123, CidrIp: 169.254.169.123/32 }
+  DataFromAppIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: { GroupId: !Ref DataSg, IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !Ref AppSg }
+  DataHttpsEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref DataSg, IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+  DataDnsUdpEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref DataSg, IpProtocol: udp, FromPort: 53, ToPort: 53, CidrIp: 10.20.0.0/16 }
+  DataDnsTcpEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref DataSg, IpProtocol: tcp, FromPort: 53, ToPort: 53, CidrIp: 10.20.0.0/16 }
+  DataNtpEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: { GroupId: !Ref DataSg, IpProtocol: udp, FromPort: 123, ToPort: 123, CidrIp: 169.254.169.123/32 }
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+    Export: { Name: !Sub 'fashion-${EnvName}-vpc' }
+  PublicSubnetA:
+    Value: !Ref PublicSubnetA
+    Export: { Name: !Sub 'fashion-${EnvName}-public-subnet-a' }
+  PublicSubnetB:
+    Value: !Ref PublicSubnetB
+    Export: { Name: !Sub 'fashion-${EnvName}-public-subnet-b' }
+  PrivateSubnetA:
+    Value: !Ref PrivateSubnetA
+    Export: { Name: !Sub 'fashion-${EnvName}-private-subnet-a' }
+  PrivateSubnetB:
+    Value: !Ref PrivateSubnetB
+    Export: { Name: !Sub 'fashion-${EnvName}-private-subnet-b' }
+  AlbSg:
+    Value: !Ref AlbSg
+    Export: { Name: !Sub 'fashion-${EnvName}-alb-sg' }
+  AppSg:
+    Value: !Ref AppSg
+    Export: { Name: !Sub 'fashion-${EnvName}-app-sg' }
+  DataSg:
+    Value: !Ref DataSg
+    Export: { Name: !Sub 'fashion-${EnvName}-data-sg' }

@@ -1,0 +1,483 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: fashion - main layer (app + edge - ECR, secrets, ASG behind internal ALB, 3 SPA distros + API distro over VPC origin + WAF attach)
+Parameters:
+  EnvName:
+    Type: String
+    AllowedValues: [staging, prod]
+  AppInstanceType:
+    Type: String
+    Default: t3.small
+  AppMin:
+    Type: Number
+    Default: 2
+  AppMax:
+    Type: Number
+    Default: 4
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  WafWebAclArn:
+    Type: String
+Resources:
+  EcrRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: fashion-studio-api
+      ImageScanningConfiguration: { ScanOnPush: true }
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"keep last 10","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}'
+  JwtSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'fashion/${EnvName}/jwt-secret'
+      GenerateSecretString: { PasswordLength: 48, ExcludePunctuation: true }
+  SeedAdminSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'fashion/${EnvName}/seed-admin-password'
+      GenerateSecretString: { PasswordLength: 20, ExcludePunctuation: true }
+  SeedCustomerSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'fashion/${EnvName}/seed-customer-password'
+      GenerateSecretString: { PasswordLength: 20, ExcludePunctuation: true }
+  CorsParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/fashion/${EnvName}/cors-origins'
+      Type: String
+      Value: 'http://localhost:5173'
+  ImageTagParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/fashion/${EnvName}/api-image-tag'
+      Type: String
+      Value: bootstrap
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/fashion/${EnvName}/api'
+      RetentionInDays: 30
+  AppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: app-instance
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action: ['ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchCheckLayerAvailability']
+                Resource: !GetAtt EcrRepo.Arn
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref JwtSecret
+                  - !Ref SeedAdminSecret
+                  - !Ref SeedCustomerSecret
+                  - !ImportValue
+                    'Fn::Sub': 'fashion-${EnvName}-db-secret-arn'
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fashion/${EnvName}/*'
+              - Effect: Allow
+                Action: ['logs:CreateLogStream', 'logs:PutLogEvents', 'logs:DescribeLogStreams']
+                Resource: !GetAtt ApiLogGroup.Arn
+  AppInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref AppRole]
+  AppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub 'fashion-${EnvName}-app'
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref AppInstanceType
+        IamInstanceProfile: { Arn: !GetAtt AppInstanceProfile.Arn }
+        SecurityGroupIds:
+          - !ImportValue
+            'Fn::Sub': 'fashion-${EnvName}-app-sg'
+        MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
+        Monitoring: { Enabled: false }
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs: { VolumeSize: 20, VolumeType: gp3, Encrypted: true }
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - { Key: Name, Value: !Sub 'fashion-${EnvName}-app' }
+              - { Key: Project, Value: fashion-studio }
+              - { Key: Env, Value: !Ref EnvName }
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -uo pipefail
+            exec > /var/log/user-data.log 2>&1
+            dnf -y install docker
+            systemctl enable --now docker
+
+            REGION=${AWS::Region}
+            REPO=${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/fashion-studio-api
+            TAG=$(aws ssm get-parameter --name /fashion/${EnvName}/api-image-tag --region $REGION --query Parameter.Value --output text)
+            aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+            for i in $(seq 1 80); do docker pull $REPO:$TAG && break; echo "image $TAG not ready, retry $i"; sleep 15; done
+
+            DB_PW=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/db-password --region $REGION --query SecretString --output text)
+            JWT=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/jwt-secret --region $REGION --query SecretString --output text)
+            CORS=$(aws ssm get-parameter --name /fashion/${EnvName}/cors-origins --region $REGION --query Parameter.Value --output text)
+            until DATA_IP=$(aws ssm get-parameter --name /fashion/${EnvName}/db-host --region $REGION --query Parameter.Value --output text) && [ -n "$DATA_IP" ]; do echo "db-host param not ready"; sleep 15; done
+            TOK=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+            IID=$(curl -s -H "X-aws-ec2-metadata-token: $TOK" http://169.254.169.254/latest/meta-data/instance-id)
+
+            docker rm -f api 2>/dev/null || true
+            docker run -d --name api --restart always -p 3001:3001 \
+              --log-driver awslogs --log-opt awslogs-region=$REGION \
+              --log-opt awslogs-group=/fashion/${EnvName}/api --log-opt awslogs-stream=$IID \
+              -e NODE_ENV=production -e PORT=3001 \
+              -e DATABASE_URL="postgres://boutique:$DB_PW@$DATA_IP:5432/boutique" \
+              -e JWT_SECRET="$JWT" -e CORS_ORIGINS="$CORS" -e SEED_ON_START=false \
+              $REPO:$TAG
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub 'fashion-${EnvName}-alb'
+      Scheme: internal
+      Type: application
+      SecurityGroups:
+        - !ImportValue
+          'Fn::Sub': 'fashion-${EnvName}-alb-sg'
+      Subnets:
+        - !ImportValue
+          'Fn::Sub': 'fashion-${EnvName}-private-subnet-a'
+        - !ImportValue
+          'Fn::Sub': 'fashion-${EnvName}-private-subnet-b'
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !ImportValue
+        'Fn::Sub': 'fashion-${EnvName}-vpc'
+      Port: 3001
+      Protocol: HTTP
+      TargetType: instance
+      HealthCheckPath: /api/ready
+      HealthCheckIntervalSeconds: 15
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: '30' }
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - { Type: forward, TargetGroupArn: !Ref TargetGroup }
+  Asg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+    Properties:
+      AutoScalingGroupName: !Sub 'fashion-${EnvName}-app'
+      MinSize: !Ref AppMin
+      MaxSize: !Ref AppMax
+      DesiredCapacity: !Ref AppMin
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 300
+      VPCZoneIdentifier:
+        - !ImportValue
+          'Fn::Sub': 'fashion-${EnvName}-private-subnet-a'
+        - !ImportValue
+          'Fn::Sub': 'fashion-${EnvName}-private-subnet-b'
+      TargetGroupARNs: [!Ref TargetGroup]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref AppLaunchTemplate
+        Version: !GetAtt AppLaunchTemplate.LatestVersionNumber
+      Tags:
+        - { Key: Project, Value: fashion-studio, PropagateAtLaunch: false }
+  CpuScaling:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref Asg
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification: { PredefinedMetricType: ASGAverageCPUUtilization }
+        TargetValue: 60
+  Alb5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: API 5xx spike
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_Target_5XX_Count
+      Dimensions:
+        - { Name: LoadBalancer, Value: !GetAtt Alb.LoadBalancerFullName }
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+  UnhealthyHostsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: targets failing /api/ready
+      Namespace: AWS/ApplicationELB
+      MetricName: UnHealthyHostCount
+      Dimensions:
+        - { Name: LoadBalancer, Value: !GetAtt Alb.LoadBalancerFullName }
+        - { Name: TargetGroup, Value: !GetAtt TargetGroup.TargetGroupFullName }
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+  Oac:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub 'fashion-${EnvName}-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+  SpaHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub 'fashion-${EnvName}-spa-headers'
+        SecurityHeadersConfig:
+          StrictTransportSecurity: { AccessControlMaxAgeSec: 63072000, IncludeSubdomains: true, Override: true }
+          ContentTypeOptions: { Override: true }
+          FrameOptions: { FrameOption: DENY, Override: true }
+          ReferrerPolicy: { ReferrerPolicy: strict-origin-when-cross-origin, Override: true }
+          ContentSecurityPolicy:
+            Override: true
+            ContentSecurityPolicy: "default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src https:; frame-src https://accounts.google.com; object-src 'none'; base-uri 'self'"
+  AdminHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub 'fashion-${EnvName}-admin-headers'
+        SecurityHeadersConfig:
+          StrictTransportSecurity: { AccessControlMaxAgeSec: 63072000, IncludeSubdomains: true, Override: true }
+          ContentTypeOptions: { Override: true }
+          FrameOptions: { FrameOption: DENY, Override: true }
+          ReferrerPolicy: { ReferrerPolicy: strict-origin-when-cross-origin, Override: true }
+          ContentSecurityPolicy:
+            Override: true
+            ContentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src https:; object-src 'none'; base-uri 'self'"
+        CustomHeadersConfig:
+          Items:
+            - { Header: X-Robots-Tag, Value: noindex, Override: true }
+  StorefrontBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'fashion-${EnvName}-web-storefront-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  StorefrontDist:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'fashion-${EnvName} storefront'
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        PriceClass: PriceClass_200
+        WebACLId: !Ref WafWebAclArn
+        Origins:
+          - Id: s3
+            DomainName: !GetAtt StorefrontBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt Oac.Id
+            S3OriginConfig: { OriginAccessIdentity: '' }
+        DefaultCacheBehavior:
+          TargetOriginId: s3
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6   # Managed-CachingOptimized
+          ResponseHeadersPolicyId: !Ref SpaHeadersPolicy
+        CustomErrorResponses:
+          - { ErrorCode: 403, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 404, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 10 }
+  StorefrontBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref StorefrontBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub '${StorefrontBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${StorefrontDist}'
+  AdminBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'fashion-${EnvName}-web-admin-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  AdminDist:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'fashion-${EnvName} admin'
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        PriceClass: PriceClass_200
+        WebACLId: !Ref WafWebAclArn
+        Origins:
+          - Id: s3
+            DomainName: !GetAtt AdminBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt Oac.Id
+            S3OriginConfig: { OriginAccessIdentity: '' }
+        DefaultCacheBehavior:
+          TargetOriginId: s3
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6   # Managed-CachingOptimized
+          ResponseHeadersPolicyId: !Ref AdminHeadersPolicy
+        CustomErrorResponses:
+          - { ErrorCode: 403, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 404, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 10 }
+  AdminBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AdminBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub '${AdminBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${AdminDist}'
+  SocialsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'fashion-${EnvName}-web-socials-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  SocialsDist:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'fashion-${EnvName} socials'
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        PriceClass: PriceClass_200
+        WebACLId: !Ref WafWebAclArn
+        Origins:
+          - Id: s3
+            DomainName: !GetAtt SocialsBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt Oac.Id
+            S3OriginConfig: { OriginAccessIdentity: '' }
+        DefaultCacheBehavior:
+          TargetOriginId: s3
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6   # Managed-CachingOptimized
+          ResponseHeadersPolicyId: !Ref SpaHeadersPolicy
+        CustomErrorResponses:
+          - { ErrorCode: 403, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 404, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 10 }
+  SocialsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SocialsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub '${SocialsBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${SocialsDist}'
+  ApiVpcOrigin:
+    Type: AWS::CloudFront::VpcOrigin
+    Properties:
+      VpcOriginEndpointConfig:
+        Name: !Sub 'fashion-${EnvName}-api-vpco'
+        Arn: !Ref Alb
+        HTTPPort: 80
+        OriginProtocolPolicy: http-only
+  ApiDist:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'fashion-${EnvName} api'
+        HttpVersion: http2
+        PriceClass: PriceClass_200
+        WebACLId: !Ref WafWebAclArn
+        Origins:
+          - Id: alb
+            DomainName: !GetAtt Alb.DNSName
+            VpcOriginConfig:
+              VpcOriginId: !GetAtt ApiVpcOrigin.Id
+        DefaultCacheBehavior:
+          TargetOriginId: alb
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          Compress: true
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad          # Managed-CachingDisabled
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # Managed-AllViewerExceptHostHeader
+Outputs:
+  EcrUri:
+    Value: !GetAtt EcrRepo.RepositoryUri
+  AsgName:
+    Value: !Ref Asg
+  StorefrontDomain: { Value: !GetAtt StorefrontDist.DomainName }
+  AdminDomain: { Value: !GetAtt AdminDist.DomainName }
+  SocialsDomain: { Value: !GetAtt SocialsDist.DomainName }
+  ApiDomain: { Value: !GetAtt ApiDist.DomainName }
+  StorefrontBucket: { Value: !Ref StorefrontBucket }
+  AdminBucket: { Value: !Ref AdminBucket }
+  SocialsBucket: { Value: !Ref SocialsBucket }
+  StorefrontDistId: { Value: !Ref StorefrontDist }
+  AdminDistId: { Value: !Ref AdminDist }
+  SocialsDistId: { Value: !Ref SocialsDist }

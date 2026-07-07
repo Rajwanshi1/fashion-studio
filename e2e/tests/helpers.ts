@@ -1,9 +1,9 @@
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
-export const API = 'http://localhost:3001';
-export const ADMIN_URL = 'http://localhost:4174';
-export const ADMIN_EMAIL = 'admin@tanviagnihotry.com';
-export const ADMIN_PASSWORD = 'TanviAdmin@2026';
+export const API = process.env.E2E_API_URL ?? 'http://localhost:3001';
+export const ADMIN_URL = process.env.E2E_ADMIN_URL ?? 'http://localhost:4174';
+export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@tanviagnihotry.com';
+export const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 'TanviAdmin@2026';
 
 /** Boutique order numbers, e.g. TA-2026-04815. */
 export const ORDER_NUMBER_RE = /TA-2026-\d+/;

@@ -1,0 +1,246 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: fashion - protected data layer (Postgres EC2 + EBS + backups). NEVER DELETE.
+Parameters:
+  EnvName:
+    Type: String
+    AllowedValues: [staging, prod]
+  DataInstanceType:
+    Type: String
+    Default: t3.small
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+Resources:
+  DataKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub 'fashion-${EnvName} data-layer EBS encryption'
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: root
+            Effect: Allow
+            Principal: { AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root' }
+            Action: 'kms:*'
+            Resource: '*'
+  DataKmsAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/fashion-${EnvName}-data'
+      TargetKeyId: !Ref DataKmsKey
+  DbPasswordSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'fashion/${EnvName}/db-password'
+      GenerateSecretString:
+        PasswordLength: 32
+        ExcludePunctuation: true
+        IncludeSpace: false
+  BackupBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'fashion-${EnvName}-db-backup-${AWS::AccountId}'
+      VersioningConfiguration: { Status: Enabled }
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-dumps
+            Status: Enabled
+            ExpirationInDays: 30
+            NoncurrentVersionExpiration: { NoncurrentDays: 7 }
+      Tags:
+        - { Key: Project, Value: fashion-studio }
+        - { Key: Env, Value: !Ref EnvName }
+  DataRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: data-instance
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub 'arn:aws:s3:::fashion-${EnvName}-db-backup-${AWS::AccountId}/*'
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref DbPasswordSecret
+  DataInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref DataRole]
+  DataVolume:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Size: 30
+      VolumeType: gp3
+      Encrypted: true
+      KmsKeyId: !Ref DataKmsKey
+      Tags:
+        - { Key: Name, Value: !Sub 'fashion-${EnvName}-pgdata' }
+        - { Key: 'dlm:backup', Value: !Sub 'fashion-${EnvName}-data' }
+  DataInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      InstanceType: !Ref DataInstanceType
+      ImageId: !Ref AmiId
+      SubnetId: !ImportValue
+        'Fn::Sub': 'fashion-${EnvName}-private-subnet-a'
+      SecurityGroupIds:
+        - !ImportValue
+          'Fn::Sub': 'fashion-${EnvName}-data-sg'
+      IamInstanceProfile: !Ref DataInstanceProfile
+      DisableApiTermination: true
+      Monitoring: false
+      MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 20, VolumeType: gp3, Encrypted: true }
+      Tags:
+        - { Key: Name, Value: !Sub 'fashion-${EnvName}-data' }
+        - { Key: Project, Value: fashion-studio }
+        - { Key: Env, Value: !Ref EnvName }
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -uo pipefail
+          exec > /var/log/user-data.log 2>&1
+          dnf -y install docker cronie amazon-cloudwatch-agent
+          systemctl enable --now docker crond
+
+          VOLID="${DataVolume}"
+          DEV="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_$(echo $VOLID | tr -d -)"
+          for i in $(seq 1 120); do [ -e "$DEV" ] && break; sleep 5; done
+          blkid "$DEV" || mkfs -t xfs "$DEV"
+          mkdir -p /data
+          grep -q ' /data ' /etc/fstab || echo "$DEV /data xfs defaults,nofail 0 2" >> /etc/fstab
+          mount -a
+          mkdir -p /data/pgdata
+
+          PW=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/db-password --region ${AWS::Region} --query SecretString --output text)
+          docker rm -f pg 2>/dev/null || true
+          docker run -d --name pg --restart always \
+            -e POSTGRES_USER=boutique -e POSTGRES_DB=boutique -e POSTGRES_PASSWORD="$PW" \
+            -v /data/pgdata:/var/lib/postgresql/data \
+            -p 5432:5432 postgres:16-alpine
+
+          cat > /usr/local/bin/pg-backup.sh <<'EOS'
+          #!/bin/bash
+          set -euo pipefail
+          STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          docker exec pg pg_dump -U boutique -Fc boutique > /tmp/boutique-$STAMP.dump
+          aws s3 cp /tmp/boutique-$STAMP.dump s3://BACKUP_BUCKET/dumps/boutique-$STAMP.dump
+          rm -f /tmp/boutique-$STAMP.dump
+          EOS
+          sed -i "s|BACKUP_BUCKET|${BackupBucket}|" /usr/local/bin/pg-backup.sh
+          chmod +x /usr/local/bin/pg-backup.sh
+          echo "17 21 * * * root /usr/local/bin/pg-backup.sh >> /var/log/pg-backup.log 2>&1" > /etc/cron.d/pg-backup
+
+          cat > /opt/aws/amazon-cloudwatch-agent/etc/config.json <<'EOC'
+          {"metrics":{"namespace":"Fashion/Data","append_dimensions":{"InstanceId":"${!aws:InstanceId}"},"metrics_collected":{"disk":{"resources":["/data"],"measurement":["used_percent"],"drop_device":true,"metrics_collection_interval":60}}}}
+          EOC
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/config.json -s
+  DataVolumeAttachment:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref DataInstance
+      VolumeId: !Ref DataVolume
+      Device: /dev/sdf
+  DlmRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: dlm.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSDataLifecycleManagerServiceRole
+  SnapshotPolicy:
+    Type: AWS::DLM::LifecyclePolicy
+    Properties:
+      Description: !Sub 'fashion-${EnvName} pgdata volume snapshots every 4h'
+      State: ENABLED
+      ExecutionRoleArn: !GetAtt DlmRole.Arn
+      PolicyDetails:
+        ResourceTypes: [VOLUME]
+        TargetTags:
+          - { Key: 'dlm:backup', Value: !Sub 'fashion-${EnvName}-data' }
+        Schedules:
+          - Name: every-4h
+            CreateRule: { Interval: 4, IntervalUnit: HOURS }
+            RetainRule: { Count: 42 }
+            CopyTags: true
+  RecoveryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: auto-recover the data instance on system failure
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Dimensions: [{ Name: InstanceId, Value: !Ref DataInstance }]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Sub 'arn:aws:automate:${AWS::Region}:ec2:recover'
+  DataDiskAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: pgdata volume over 80 percent
+      Namespace: Fashion/Data
+      MetricName: disk_used_percent
+      Dimensions:
+        - { Name: InstanceId, Value: !Ref DataInstance }
+        - { Name: path, Value: /data }
+        - { Name: fstype, Value: xfs }
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 80
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+  DbHostParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/fashion/${EnvName}/db-host'
+      Type: String
+      Value: !GetAtt DataInstance.PrivateIp
+Outputs:
+  DataPrivateIp:
+    Value: !GetAtt DataInstance.PrivateIp
+    Export: { Name: !Sub 'fashion-${EnvName}-data-private-ip' }
+  DbSecretArn:
+    Value: !Ref DbPasswordSecret
+    Export: { Name: !Sub 'fashion-${EnvName}-db-secret-arn' }
+  BackupBucketName:
+    Value: !Ref BackupBucket
+    Export: { Name: !Sub 'fashion-${EnvName}-backup-bucket' }

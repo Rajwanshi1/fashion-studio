@@ -5,10 +5,26 @@ platform to production. Findings come from three codebase audits (2026-07-06: co
 sweep, backend hardening, frontend/deploy readiness) plus the former `TODO-THIRD-PARTY.md`
 (absorbed here).
 
-**Progress: 0/34 done.**
+**Progress: 10/34 done.**
 
 Suggested order of attack: **P0 security → P0 deploy → P1 → P2.** Every P0 item is
 individually exploitable or breaks the deployed site — never go live with any unchecked.
+
+**Staging deployment (2026-07-06):** the items checked below as done are live on a
+real (non-production) AWS environment — CloudFormation-provisioned VPC, EC2 Postgres,
+an ALB/ASG API tier, and CloudFront+S3 for all three SPAs, WAF-fronted. Provisioning,
+runbook, and restore steps: [`infra/README.md`](infra/README.md). Verification:
+[`docs/verification/staging-resources.md`](docs/verification/staging-resources.md)
+(stack/resource inventory), [`docs/verification/staging-e2e.md`](docs/verification/staging-e2e.md)
+(full Playwright + API-contract suite against the live stack), and
+[`docs/verification/staging-security-audit.md`](docs/verification/staging-security-audit.md)
+(infra/app security probes + a refused-deletion demonstration). Staging URLs (rotated
+2026-07-07 by the `app`/`edge`→`main` stack consolidation, now 4 stacks:
+network/data/main/waf) — storefront `https://d3rb2k31ty2kox.cloudfront.net`, admin
+`https://dr7ymafumqo0k.cloudfront.net`, socials `https://d3byxnyud664li.cloudfront.net`,
+api `https://d2bc3rl4v1olva.cloudfront.net`.
+This is **staging, not production**: no custom domain/prod TLS, no live Razorpay keys, no
+CI — see the still-open items below, especially #1, #20, #22, #23, #25.
 
 ---
 
@@ -28,13 +44,17 @@ individually exploitable or breaks the deployed site — never go live with any 
   Where: `backend/src/index.ts:37`, `backend/src/services/payments.service.ts:80-113`,
   `backend/src/routes/payments.routes.ts:22-25`, `frontend/src/components/RazorpayMock.tsx`.
 
-- [ ] **2. `JWT_SECRET` mandatory + validated at boot** ⚠
+- [x] **2. `JWT_SECRET` mandatory + validated at boot** ⚠
   Falls back to `'dev-secret-change-in-prod'`, and docker-compose ships that literal
   value → forgeable HS256 admin tokens if a deploy forgets to override.
   Fix: throw at boot when unset, equal to the known default, or too short (≥32 chars).
   Where: `backend/src/config.ts:15`, `docker-compose.yml:24`.
+  **Done (staging, 2026-07-06):** cherry-picked commit `25aaa97` — `loadConfig()` in
+  `backend/src/config.ts` now throws when `NODE_ENV=production` and `JWT_SECRET` is
+  unset, equal to the dev default, or under 32 chars. Staging's ASG launch config
+  injects a real secret from Secrets Manager (`fashion/staging/jwt-secret`).
 
-- [ ] **3. Known-password seed admin must never reach prod** ⚠
+- [x] **3. Known-password seed admin must never reach prod** ⚠
   `admin@tanviagnihotry.com` / `TanviAdmin@2026` is committed to the repo (and README)
   and recreated on every boot while `SEED_ON_START=true` — full admin takeover for
   anyone who has seen the repo.
@@ -42,6 +62,16 @@ individually exploitable or breaks the deployed site — never go live with any 
   password (rotate if the seed ever ran); consider refusing to seed when
   `NODE_ENV=production`.
   Where: `backend/src/seed.ts:241-252`, `docker-compose.yml:26`.
+  **Done (staging, 2026-07-06):** `seed()` takes `adminPassword`/`customerPassword`
+  overrides, and a standalone `backend/src/seed-cli.ts` runs migrations + seed once
+  via `docker run ... node dist/seed-cli.js` (`infra/deploy.sh staging seed`), never on
+  API boot. `NODE_ENV=production` additionally makes `loadConfig()` refuse to boot at
+  all if `SEED_ON_START=true`. Staging seeds the real admin with a password generated
+  into Secrets Manager (`fashion/staging/seed-admin-password`) — not the committed
+  default. **Residual:** the demo customer `aanya@example.com` is still seeded (with a
+  staging-unique, ops-known password from `fashion/staging/seed-customer-password`,
+  not the repo default) — fine for a staging demo account, but decide before prod
+  whether to drop it or keep it as a real fixture.
 
 - [ ] **4. Production compose/env overlay** ⚠
   Dev compose is prod-unsafe as-is: `POSTGRES_PASSWORD: boutique`, Postgres published to
@@ -52,20 +82,34 @@ individually exploitable or breaks the deployed site — never go live with any 
   `NODE_ENV=production`, `restart: unless-stopped` on both services.
   Where: `docker-compose.yml:6-10,24-26`.
 
-- [ ] **5. Rate limiting on auth (and a sane global limit)** ⚠
+- [x] **5. Rate limiting on auth (and a sane global limit)** ⚠
   Zero throttling anywhere — `/api/auth/login` and `/register` are open to credential
   brute-force and enumeration; no account lockout.
   Fix: per-IP rate limit middleware (strict on auth routes, generous globally).
   Where: `backend/src/routes/auth.routes.ts`, `backend/src/app.ts`.
+  **Done (staging, 2026-07-06):** `backend/src/middleware/rate-limit.ts` — fixed-window
+  in-memory limiter keyed by `X-Forwarded-For`, mounted at 30/min on `/api/auth/*` and
+  300/min globally, plus a CloudFront/WAF `RateBasedStatement` at 2000/5min/IP as a
+  fleet-wide backstop (`infra/templates/waf.yaml`). **Note:** the app-layer limiter is
+  per-instance (in-memory, not shared) — with 2 ASG replicas the effective per-IP
+  ceiling is ~2x the configured number; confirmed in
+  `docs/verification/staging-security-audit.md` (A-5). WAF's rate rule is the only
+  fleet-wide enforcement.
 
 ## P0 — Deploy blockers ⚠
 
-- [ ] **6. SPA rewrite rules for both Amplify apps** ⚠
+- [x] **6. SPA rewrite rules for both Amplify apps** ⚠
   Both SPAs use `BrowserRouter`; without the rewrite-to-index.html rule every deep link
   and browser refresh 404s. `amplify.yml` only documents it as a manual console step.
   Fix: add the rewrite rule per app in the Amplify console (or codify it), for both
   `frontend` and `admin`.
   Where: `amplify.yml` (header comment), `frontend/src/App.tsx`, `admin/src/main.tsx`.
+  **Done (staging, 2026-07-06), superseding the Amplify plan:** staging deploys all
+  three SPAs to S3+CloudFront (`infra/templates/main.yaml`), provisioned entirely by
+  CloudFormation, not Amplify Hosting. The rewrite is CloudFront custom error responses
+  (403/404 → `/index.html`, 200) on all three distributions — verified end-to-end by
+  the Playwright suite in `docs/verification/staging-e2e.md`. `amplify.yml` is now
+  unused for this deployment path; left in place only as a reference.
 
 - [ ] **7. Legal/compliance pages + real contact details** ⚠
   Razorpay merchant activation requires live URLs for Privacy Policy, Terms &
@@ -77,21 +121,36 @@ individually exploitable or breaks the deployed site — never go live with any 
   Where: `frontend/src/App.tsx`, `frontend/src/pages/Contact.tsx`,
   `frontend/src/components/Footer.tsx`, `frontend/src/pages/ClientCare.tsx`.
 
-- [ ] **8. `VITE_API_URL` set per Amplify app — and fail loud when missing** ⚠
+- [x] **8. `VITE_API_URL` set per Amplify app — and fail loud when missing** ⚠
   Both SPAs silently fall back to `http://localhost:3001` if the build-time var is
   forgotten — the deployed site "works" until every API call fails.
   Fix: set `VITE_API_URL` in each Amplify app's env; make production builds fail when
   it's unset instead of falling back.
   Where: `frontend/src/lib/api.ts:5-6`, `admin/src/lib/api.ts:1-2`, `amplify.yml`.
+  **Done (staging, 2026-07-06):** commit `eeb9de3` wraps each SPA's `vite.config.ts` in
+  function form; a production-mode build (`npm run build`) now throws if `VITE_API_URL`
+  is unset (vitest's `test` mode is unaffected). `infra/deploy.sh`'s `cmd_spas` sets it
+  per SPA to the staging API CloudFront domain before building. The localhost dev
+  fallback in `lib/api.ts` is unchanged and still applies to `npm run dev`.
 
 ## P1 — Hardening & ops
 
-- [ ] **9. Security headers** — none anywhere. Add hono `secureHeaders` on the API and
+- [x] **9. Security headers** — none anywhere. Add hono `secureHeaders` on the API and
   Amplify `customHeaders` (CSP, HSTS, X-Frame-Options, X-Content-Type-Options,
   Referrer-Policy) for both SPAs. Where: `backend/src/app.ts:70`, `amplify.yml`.
+  **Done (staging, 2026-07-06):** `backend/src/app.ts` mounts hono `secureHeaders()`
+  globally (HSTS, `nosniff`, `X-Frame-Options`, `Referrer-Policy`, COOP/CORP —
+  confirmed live in `docs/verification/staging-security-audit.md` A-1). CloudFront
+  `ResponseHeadersPolicy` resources in `infra/templates/main.yaml` add CSP + a longer
+  HSTS max-age + `X-Frame-Options: DENY` on all three SPA distributions, superseding
+  the old Amplify `customHeaders` plan.
 
-- [ ] **10. Request body size limit** — unbounded JSON bodies can exhaust memory. Add
+- [x] **10. Request body size limit** — unbounded JSON bodies can exhaust memory. Add
   hono `bodyLimit`. Where: `backend/src/app.ts`.
+  **Done (staging, 2026-07-06):** `backend/src/app.ts` mounts hono `bodyLimit` at
+  100KB on `/api/*` (413 on overflow); the WAF managed rule set also caps request body
+  size at the edge (~8KB), so oversized bodies are rejected before reaching the app —
+  confirmed in `docs/verification/staging-security-audit.md` A-6.
 
 - [ ] **11. Structured + request logging** — only 9 raw `console.*` calls; no access
   log, no request IDs, 500s can't be correlated. Add pino or `hono/logger` with request
@@ -111,15 +170,29 @@ individually exploitable or breaks the deployed site — never go live with any 
   `HEALTHCHECK` and runs as root. Add `/api/ready` that pings the pool, a Dockerfile
   `HEALTHCHECK`, and a non-root `USER`. Where: `backend/src/app.ts:72`,
   `backend/Dockerfile`.
+  **Partially done (staging, 2026-07-06):** `/api/ready` pings the pool with a 2s
+  timeout and 503s on failure; the ALB target group health-checks against it, and the
+  ASG replaces unhealthy instances. **Still open:** `backend/Dockerfile` still has no
+  `HEALTHCHECK` and still runs as root (no `USER` directive) — leaving unchecked.
 
-- [ ] **15. Migration advisory lock** — `migrate()` runs on every boot; with >1 API
+- [x] **15. Migration advisory lock** — `migrate()` runs on every boot; with >1 API
   replica, instances race to apply migrations. Add a Postgres advisory lock, or
   document a single-instance constraint. Where: `backend/src/index.ts:21`,
   `backend/src/migrate.ts:6-33`.
+  **Done (staging, 2026-07-06):** `migrate()` in `backend/src/migrate.ts` takes a
+  `pg_advisory_lock` for the duration of the migration run, so the 2-instance ASG
+  boots without a migration race.
 
-- [ ] **16. DB backups** — `dbdata` is a plain volume; no pg_dump/snapshot mechanism
+- [x] **16. DB backups** — `dbdata` is a plain volume; no pg_dump/snapshot mechanism
   exists (README just says "use a managed volume/backup"). Script a pg_dump cron (or
   use volume snapshots) with retention + a tested restore. Where: `docker-compose.yml:34-35`.
+  **Done (staging, 2026-07-06):** the data layer moved to CloudFormation-managed EC2 +
+  EBS (`infra/templates/data.yaml`): a DLM policy snapshots the Postgres volume every
+  4h (retain 42), and a cron'd `pg_dump` ships nightly logical dumps to a versioned S3
+  bucket that cross-region-replicates to `ap-southeast-1` (`infra/templates/backup-replica.yaml`).
+  Both the snapshot and the dump pipeline were demonstrated live — see
+  `docs/verification/staging-security-audit.md` §4 ("Backup evidence") and the restore
+  runbook in `infra/README.md`.
 
 - [ ] **17. React error boundary in both SPAs** — any render exception is a white
   screen with no recovery UI. Where: `frontend/src/main.tsx`, `admin/src/main.tsx`.
@@ -128,9 +201,13 @@ individually exploitable or breaks the deployed site — never go live with any 
   description, OG/Twitter tags, canonical, favicon, robots.txt, or sitemap (no
   `public/` dir at all). Where: `frontend/index.html`.
 
-- [ ] **19. Admin `noindex`** — the admin SPA is indexable by search engines. Add
+- [x] **19. Admin `noindex`** — the admin SPA is indexable by search engines. Add
   `<meta name="robots" content="noindex">` (and/or robots.txt disallow).
   Where: `admin/index.html`.
+  **Done (staging, 2026-07-06), different mechanism than planned:** rather than a meta
+  tag in `admin/index.html` (still absent), the admin CloudFront distribution's
+  `ResponseHeadersPolicy` (`infra/templates/main.yaml`) adds `X-Robots-Tag: noindex` on
+  every response — equally effective and edge-enforced regardless of SPA HTML.
 
 - [ ] **20. CI pipeline** — no `.github/` exists; nothing runs tests before a deploy
   (Amplify only builds). Add GitHub Actions: typecheck + unit tests (backend 90,
@@ -156,11 +233,33 @@ individually exploitable or breaks the deployed site — never go live with any 
 
 - [ ] **25. Domain, DNS, TLS** — domain for storefront/admin/api; certs via ACM (AWS)
   or Let's Encrypt; TLS-terminating proxy (Caddy/nginx/ALB) in front of the API.
+  **Partially addressed, staging only (2026-07-06, URLs rotated 2026-07-07 by the
+  `app`/`edge`→`main` stack consolidation):** all four surfaces are served over
+  TLS today, but on CloudFront's shared `*.cloudfront.net` certificate, not a real
+  domain — storefront `https://d3rb2k31ty2kox.cloudfront.net`, admin
+  `https://dr7ymafumqo0k.cloudfront.net`, socials `https://d3byxnyud664li.cloudfront.net`,
+  api `https://d2bc3rl4v1olva.cloudfront.net` (http→https redirect confirmed on all
+  four in `docs/verification/staging-security-audit.md` A-7). CloudFront → ALB origin
+  traffic runs over the VPC origin inside AWS's network. **Still open:** no purchased
+  domain, no ACM cert for a custom domain, no Route 53 — leaving unchecked.
 
 - [ ] **26. Execute deployment** — storefront + admin + socials → Amplify Hosting (three
   apps from `amplify.yml`, each with env vars from #8/#23/#34 and the rewrite from #6);
   backend api+postgres → EC2 via the prod compose overlay (#4); backend `CORS_ORIGINS`
   must include all three Amplify domains.
+  **Executed for staging, not production (2026-07-06), via a different architecture
+  than originally planned:** four CloudFormation stacks (`network`/`data`/`waf`/`main`)
+  are live and deployed end-to-end by `infra/deploy.sh staging all` — S3+CloudFront for
+  the three SPAs and an ALB/ASG for the API, entirely superseding the Amplify Hosting +
+  prod-compose-overlay plan (`amplify.yml` and item #4's compose overlay are unused for
+  this path). The former `backup-replica` stack (cross-region `pg_dump` replication)
+  and the separate `app`/`edge` stacks were removed/merged on 2026-07-07 — see
+  `infra/README.md` and `docs/verification/staging-resources.md` for the consolidation
+  and the new CloudFront URLs. Verified with a 39-check API script and the full
+  Playwright suite against the live URLs (`docs/verification/staging-e2e.md`) and a
+  security/deletion-protection audit (`docs/verification/staging-security-audit.md`).
+  **Still open before this is "production":** a real domain (#25), a production
+  Razorpay integration (#1), and a CI pipeline (#20) — leaving unchecked.
 
 - [ ] **34. Socials link-in-bio page: real content + prod config** *(the `socials/`
   package, merged 2026-07-06 via PR #2 `feat/socials-linktree` — was §8 of the old

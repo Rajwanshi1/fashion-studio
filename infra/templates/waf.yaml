@@ -1,0 +1,41 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: fashion - CloudFront WAF (deploy in us-east-1; CLOUDFRONT scope requires it)
+Parameters:
+  EnvName:
+    Type: String
+    AllowedValues: [staging, prod]
+Resources:
+  WebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub 'fashion-${EnvName}'
+      Scope: CLOUDFRONT
+      DefaultAction: { Allow: {} }
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub 'fashion-${EnvName}-acl'
+      Rules:
+        - Name: rate-limit-per-ip
+          Priority: 0
+          Action: { Block: {} }
+          Statement:
+            RateBasedStatement: { Limit: 2000, AggregateKeyType: IP }
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub 'fashion-${EnvName}-rate'
+        - Name: aws-common
+          Priority: 1
+          OverrideAction: { None: {} }
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub 'fashion-${EnvName}-common'
+Outputs:
+  WebAclArn:
+    Value: !GetAtt WebAcl.Arn

@@ -23,7 +23,10 @@ async function main() {
   if (applied.length) console.log(`Applied migrations: ${applied.join(', ')}`);
 
   if (config.seedOnStart) {
-    const seeded = await seed(pool);
+    const seeded = await seed(pool, {
+      adminPassword: process.env.SEED_ADMIN_PASSWORD,
+      customerPassword: process.env.SEED_CUSTOMER_PASSWORD,
+    });
     console.log(seeded ? 'Seeded catalog + users' : 'Seed skipped (products already exist)');
   }
 
@@ -41,6 +44,9 @@ async function main() {
     jwtSecret: config.jwtSecret,
     corsOrigins: config.corsOrigins,
     runInTransaction: makeTxRunner(pool),
+    pingDb: async () => {
+      await pool.query('SELECT 1');
+    },
   });
 
   console.warn('payments: MOCK Razorpay provider active — do not use in production');
