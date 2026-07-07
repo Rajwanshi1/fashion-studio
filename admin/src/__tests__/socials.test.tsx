@@ -236,6 +236,59 @@ describe('Socials', () => {
     expect(screen.getByLabelText('Background hex')).toHaveValue('#c8d8c0');
   });
 
+  it('renders the QR in the brand dark color by default and accepts a pasted QR color', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/socials/stats')) {
+        return { json: { stats: [], clicks: [] } };
+      }
+      return undefined;
+    });
+
+    renderApp('/socials');
+    expect(await screen.findByRole('heading', { name: 'Socials' })).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Source'), 'Store Window');
+    await screen.findByAltText('QR code for store-window');
+
+    const url = 'https://tanviagnihotry.com/qr-socials/?src=store-window';
+    expect(toDataURL).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({ color: expect.objectContaining({ dark: '#1E2620' }) }),
+    );
+
+    fireEvent.change(screen.getByLabelText('QR color hex'), { target: { value: '7A1F2B' } });
+
+    expect(screen.getByLabelText('QR color')).toHaveValue('#7a1f2b');
+    await waitFor(() =>
+      expect(toDataURL).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({ color: expect.objectContaining({ dark: '#7a1f2b' }) }),
+      ),
+    );
+  });
+
+  it('warns when the chosen QR color is too close to the background', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/socials/stats')) {
+        return { json: { stats: [], clicks: [] } };
+      }
+      return undefined;
+    });
+
+    renderApp('/socials');
+    expect(await screen.findByRole('heading', { name: 'Socials' })).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Source'), 'Store Window');
+    await screen.findByAltText('QR code for store-window');
+    expect(screen.queryByText(/low contrast/i)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('QR color'), { target: { value: '#f5f0e8' } });
+
+    expect(await screen.findByText(/low contrast/i)).toBeInTheDocument();
+  });
+
   it('warns on a background too dark to scan but still renders the QR', async () => {
     seedAdminAuth();
     mockFetch((url) => {
