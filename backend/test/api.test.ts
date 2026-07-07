@@ -701,5 +701,41 @@ describe('API', () => {
       expect(stats[1]).toMatchObject({ source: 'packaging-qr', total: 1 });
       expect(stats[0]).toHaveProperty('lastScanAt');
     });
+
+    it('POST /api/socials/click records a click with source attribution and returns 204', async () => {
+      const res = await app.request('/api/socials/click', post({ link: 'WhatsApp', source: 'Store-Window' }));
+      expect(res.status).toBe(204);
+      expect(await res.text()).toBe('');
+      expect(f.clicks.clicks).toHaveLength(1);
+      expect(f.clicks.clicks[0]).toMatchObject({ link: 'whatsapp', source: 'store-window' });
+    });
+
+    it('POST /api/socials/click keeps the click with null source when source is absent or invalid', async () => {
+      expect((await app.request('/api/socials/click', post({ link: 'instagram' }))).status).toBe(204);
+      expect((await app.request('/api/socials/click', post({ link: 'instagram', source: 'café!' }))).status).toBe(204);
+      expect(f.clicks.clicks).toHaveLength(2);
+      expect(f.clicks.clicks[0].source).toBeNull();
+      expect(f.clicks.clicks[1].source).toBeNull();
+    });
+
+    it('400 {error:{code:"INVALID_LINK"}} for a charset-invalid link', async () => {
+      const res = await app.request('/api/socials/click', post({ link: 'café!' }));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: { code: 'INVALID_LINK', message: expect.any(String) } });
+      expect(f.clicks.clicks).toHaveLength(0);
+    });
+
+    it('GET /api/socials/stats also returns clicks grouped by link and source', async () => {
+      await app.request('/api/socials/click', post({ link: 'whatsapp', source: 'store-window' }));
+      await app.request('/api/socials/click', post({ link: 'whatsapp', source: 'store-window' }));
+      await app.request('/api/socials/click', post({ link: 'instagram' }));
+
+      const res = await app.request('/api/socials/stats', bearer(adminToken));
+      expect(res.status).toBe(200);
+      const { clicks } = await res.json();
+      expect(clicks[0]).toMatchObject({ link: 'whatsapp', source: 'store-window', total: 2, last7: 2, last30: 2 });
+      expect(clicks).toContainEqual(expect.objectContaining({ link: 'instagram', source: null, total: 1 }));
+      expect(clicks[0]).toHaveProperty('lastClickAt');
+    });
   });
 });

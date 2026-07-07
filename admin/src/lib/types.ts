@@ -141,6 +141,16 @@ export interface SocialStat {
   lastScanAt: string;
 }
 
+export interface LinkClickStat {
+  link: string;
+  /** QR scan source the visitor arrived from, or null for direct/untagged visits. */
+  source: string | null;
+  total: number;
+  last7: number;
+  last30: number;
+  lastClickAt: string;
+}
+
 /** Valid next order-status transitions, mirrored from the backend state machine. */
 export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending_payment: ['paid', 'cancelled'],

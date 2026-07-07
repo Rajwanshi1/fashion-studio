@@ -152,7 +152,8 @@ export class DomainError extends Error {
       | 'INVALID_STATUS_TRANSITION'
       | 'PAYMENT_ALREADY_FINAL'
       | 'NOT_CONFIGURED'
-      | 'INVALID_SOURCE',
+      | 'INVALID_SOURCE'
+      | 'INVALID_LINK',
     message: string,
   ) {
     super(message);

@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
 import { secureHeaders } from 'hono/secure-headers';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import type { ClicksRepo } from './data/clicks.repo';
 import type { OrdersRepo } from './data/orders.repo';
 import type { PaymentsRepo } from './data/payments.repo';
 import type { ProductsRepo, WishlistRepo } from './data/products.repo';
@@ -32,6 +33,7 @@ export interface AppDeps {
     orders: OrdersRepo;
     payments: PaymentsRepo;
     scans: ScansRepo;
+    clicks: ClicksRepo;
   };
   paymentProvider: PaymentProvider;
   /** Masked Google sign-in seam — null/undefined until GOOGLE_CLIENT_ID exists. */
@@ -53,6 +55,7 @@ const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 503> = 
   INVALID_STATUS_TRANSITION: 400,
   NOT_CONFIGURED: 503,
   INVALID_SOURCE: 400,
+  INVALID_LINK: 400,
 };
 
 export function createApp(deps: AppDeps) {
@@ -62,7 +65,7 @@ export function createApp(deps: AppDeps) {
   const catalog = createCatalogService({ products: repos.products });
   const orders = createOrdersService({ products: repos.products, orders: repos.orders, runInTransaction });
   const payments = createPaymentsService({ payments: repos.payments, orders: repos.orders, provider: paymentProvider });
-  const socials = createSocialsService({ scans: repos.scans });
+  const socials = createSocialsService({ scans: repos.scans, clicks: repos.clicks });
 
   const app = new Hono<AuthEnv>();
 

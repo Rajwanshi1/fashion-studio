@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { SOCIALS } from './config';
+import { trackClick } from './track';
 
 /** Rise-in reveal for this page's own sections. The page is short and fixed
  *  (no async content, unlike the storefront's Reveal), so a single mount-time
@@ -71,7 +72,7 @@ export default function App() {
 
         <nav className="sc-links" aria-label="Connect with us">
           {SOCIALS.links.map((link) => (
-            <a key={link.href} className="lk rv" href={link.href}>
+            <a key={link.href} className="lk rv" href={link.href} onClick={() => trackClick(link.id)}>
               <span className="lk-text">
                 <span className="lk-label">{link.label}</span>
                 <span className="lk-sub">{link.sub}</span>

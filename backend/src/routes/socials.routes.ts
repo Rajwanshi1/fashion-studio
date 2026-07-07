@@ -7,6 +7,10 @@ import { DomainError } from '../types';
 import { zodHook } from './hooks';
 
 const scanSchema = z.object({ source: z.string().min(1).max(200) });
+const clickSchema = z.object({
+  link: z.string().min(1).max(200),
+  source: z.string().max(200).nullish(),
+});
 
 export function socialsRoutes(socials: SocialsService, jwtSecret: string) {
   const r = new Hono<AuthEnv>();
@@ -27,8 +31,23 @@ export function socialsRoutes(socials: SocialsService, jwtSecret: string) {
     return c.body(null, 204);
   });
 
+  // Public — beacon fired as the visitor leaves through one of the page's links.
+  r.post('/click', zValidator('json', clickSchema, zodHook), async (c) => {
+    const { link, source } = c.req.valid('json');
+    try {
+      await socials.recordClick(link, source ?? null, c.req.header('User-Agent') ?? null, c.req.header('Referer') ?? null);
+    } catch (err) {
+      if (err instanceof DomainError && err.code === 'INVALID_LINK') {
+        return c.json({ error: { code: err.code, message: err.message } }, 400);
+      }
+      throw err;
+    }
+    return c.body(null, 204);
+  });
+
   r.get('/stats', requireAuth(jwtSecret), requireAdmin, async (c) => {
-    return c.json({ stats: await socials.stats() });
+    const [stats, clicks] = await Promise.all([socials.stats(), socials.clickStats()]);
+    return c.json({ stats, clicks });
   });
 
   return r;

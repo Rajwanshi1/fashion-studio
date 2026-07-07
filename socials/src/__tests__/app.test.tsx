@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import App from '../App';
 import { SOCIALS } from '../config';
 
@@ -35,5 +35,31 @@ describe('Socials link-in-bio page', () => {
     render(<App />);
 
     expect(screen.getByText(`© 2026 ${SOCIALS.wordmark}`)).toBeInTheDocument();
+  });
+
+  it('fires a click beacon with the link id when a link is clicked', () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal('fetch', fetchMock);
+    // Cancel jsdom's (unimplemented) navigation; the app's own click handler
+    // on the anchor still runs before this bubbles up to document.
+    const cancelNav = (e: Event) => e.preventDefault();
+    document.addEventListener('click', cancelNav);
+
+    try {
+      render(<App />);
+      fireEvent.click(screen.getByRole('link', { name: /WhatsApp/ }));
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('http://localhost:3001/api/socials/click');
+      expect(JSON.parse(init.body as string)).toEqual({ link: 'whatsapp' });
+    } finally {
+      document.removeEventListener('click', cancelNav);
+      vi.unstubAllGlobals();
+    }
+  });
+
+  afterEach(() => {
+    sessionStorage.clear();
   });
 });
