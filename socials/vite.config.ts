@@ -7,6 +7,9 @@ export default defineConfig(({ mode }) => {
     throw new Error('VITE_API_URL must be set for production builds (see PRODUCTION-TODO #8)');
   }
   return {
+    // Served under tanviagnihotry.com/qr-socials/ via the storefront CloudFront
+    // distribution — assets must resolve relative to that prefix.
+    base: '/qr-socials/',
     plugins: [react()],
     server: { port: 5175 },
     test: {
