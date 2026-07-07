@@ -128,3 +128,49 @@ Mapped to `PRODUCTION-TODO.md`. These are **accepted for the staging environment
 - **App verdict:** PASS — admin RBAC (401 unauth / 403 customer), the `ce91303` order IDOR fix (wrong email → indistinguishable 404), auth rate limiting (429 under load), edge + app body-size limits, security headers, and http→https on all four distributions.
 
 **Production-readiness deltas** (the gap between "secure staging" and "safe to take real customers/money"): **#1** (real payment provider + mock guard — critical), **#3** (production seed/credentials hygiene), **#13** (JWT lifecycle/revocation), **#25** (custom domain + ACM → HTTPS to origin and a tightened CSP), plus operational hardening not in staging scope — CloudTrail/Config, S3 access logging + SSL-only bucket policies, and a fleet-wide (shared-store) rate limiter. None of these is a live exposure in staging; each is an explicit gate for go-live.
+
+---
+
+## Addendum — 2026-07-07: 4-stack consolidation + URL rotation
+
+The audit above (§1–6) reflects the environment as it existed on 2026-07-06, when
+staging ran as six CloudFormation stacks including `backup-replica` (cross-region
+`pg_dump` replication) and separate `app`/`edge` stacks. On 2026-07-07, staging was
+consolidated to **four stacks — `network`/`data`/`main`/`waf`**: the `backup-replica`
+stack and cross-region replication were removed (backups are now DLM snapshots +
+in-region `pg_dump` only, per `infra/README.md`), and the former `app` and `edge`
+stacks were merged into a single `main` stack. CloudFront distributions were
+recreated as part of the merge, so **all four public URLs rotated**:
+
+| Surface | Audited (2026-07-06, now dead) | Current (2026-07-07) |
+| --- | --- | --- |
+| Storefront | `d1qn2j2hnhvlhl.cloudfront.net` | `d3rb2k31ty2kox.cloudfront.net` |
+| Admin | `d2n8mfypcal9h4.cloudfront.net` | `dr7ymafumqo0k.cloudfront.net` |
+| Socials | `d36dldi1h3cvhl.cloudfront.net` | `d3byxnyud664li.cloudfront.net` |
+| API | `d1d2imu6irdm96.cloudfront.net` | `d2bc3rl4v1olva.cloudfront.net` |
+
+This addendum does not rewrite the original audit body above — it stands as the
+historical record of the 2026-07-06 posture. What changed as a result of the
+migration review:
+
+- The data/network stacks (and the database + its seeded contents) were not
+  modified by the migration; secret values (JWT secret, seed passwords) were
+  captured and restored into the recreated `main` stack's secrets, so the
+  authorization, IDOR, rate-limit, and RBAC behavior audited in §3 (A-1 through
+  A-7) carries over unchanged — the `main` stack serves the same application image
+  and security-header/CORS configuration as the former `app` stack.
+- The **live probes were re-validated** against the new URLs as part of the
+  migration review: `scripts/verify-api.sh` (39/39 passed) and the full Playwright
+  suite (8/8 passed, zero retries) — see the "2026-07-07 re-run after 4-stack
+  consolidation" section of `docs/verification/staging-e2e.md`. Both re-runs used
+  the same live-network method as the original audit, exercising auth, RBAC,
+  order-tracking IDOR protection, and payment flows end-to-end against the new
+  `main`-stack API distribution — no regression observed.
+- The deletion-protection demonstration in §4 and the backup evidence in §4/§97-102
+  described the `data` stack, which was untouched by the consolidation; those
+  findings still hold. The cross-region replication described there (§101,
+  `backup-replica`) has since been removed by design (see `infra/README.md` §
+  "Data-layer protection story") — this is a tracked simplification, not a
+  regression, and is called out here rather than edited into the original §4 text.
+- No new infra or app findings resulted from the consolidation; the accepted
+  deltas in §5 (Open findings) are unchanged and still apply to the `main` stack.

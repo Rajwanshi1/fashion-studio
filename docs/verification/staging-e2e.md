@@ -124,3 +124,65 @@ The deployed staging stack satisfies the full API contract (39/39) and the entir
 Playwright journey suite (8/8 green) across desktop and mobile. No product defects
 found. The only code changes are shell-portability and test-timing fixes for
 running the existing checks against real-network staging; no assertions weakened.
+
+---
+
+## 2026-07-07 re-run after 4-stack consolidation
+
+Staging was consolidated from 5 stacks to 4 (network/data/main/waf) by merging the
+former `app` and `edge` stacks into one `main` stack. CloudFront distributions were
+recreated, so every surface has a **new** URL; the old distributions (and their
+URLs) are gone. Re-ran the full verification below against the new URLs to confirm
+the merge is behaviorally transparent.
+
+### New target URLs
+
+| Surface | URL |
+| --- | --- |
+| Storefront | https://d3rb2k31ty2kox.cloudfront.net |
+| Admin | https://dr7ymafumqo0k.cloudfront.net |
+| Socials | https://d3byxnyud664li.cloudfront.net |
+| API | https://d2bc3rl4v1olva.cloudfront.net |
+
+Old (now dead) URLs, for reference only — do not use:
+`d1qn2j2hnhvlhl` / `d2n8mfypcal9h4` / `d36dldi1h3cvhl` / `d1d2imu6irdm96` `.cloudfront.net`.
+
+### Step 1 — API contract
+
+```bash
+API=https://d2bc3rl4v1olva.cloudfront.net \
+ADMIN_PASSWORD="$(aws secretsmanager get-secret-value \
+  --secret-id fashion/staging/seed-admin-password --region ap-south-1 \
+  --query SecretString --output text)" \
+bash scripts/verify-api.sh
+```
+
+**Result: `39 passed, 0 failed`.** Same coverage as the original run (health,
+catalog, auth, guest orders, payments, user orders/wishlist, admin) — all green on
+the new API distribution, no script changes needed.
+
+### Step 2 — Full Playwright suite
+
+```bash
+cd e2e
+E2E_BASE_URL=https://d3rb2k31ty2kox.cloudfront.net \
+E2E_ADMIN_URL=https://dr7ymafumqo0k.cloudfront.net \
+E2E_API_URL=https://d2bc3rl4v1olva.cloudfront.net \
+E2E_ADMIN_PASSWORD=<secret> npx playwright test
+```
+
+**Result: `8 passed` in 25.3s (exit 0) — clean, zero flakes, zero retries.** All 4
+admin specs, both storefront desktop specs, and both `@mobile` executions of the
+guest purchase journey passed on the first attempt across desktop and mobile
+projects.
+
+### WAF / rate-limit contingencies
+
+None triggered — same as the original run. No WAF 403s, no 429s.
+
+### Conclusion
+
+The 4-stack consolidation (network/data/main/waf) is behaviorally transparent: the
+merged `main` stack serves the same contract and journeys as the former separate
+`app`/`edge` stacks. No code changes were required to re-pass either suite — only
+the target URLs changed. The original 5-stack run above is kept as history.

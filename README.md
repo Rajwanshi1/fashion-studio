@@ -75,15 +75,20 @@ Design-fidelity QA (screenshots app vs reference): `docs/verification/design-qa.
 
 A staging environment is live on AWS, provisioned entirely by CloudFormation (see
 [`infra/README.md`](infra/README.md) for the stack map, deploy driver, and restore
-runbook): VPC + EC2 Postgres with DLM snapshots and cross-region-replicated `pg_dump`
-backups, an ALB/ASG API tier, and CloudFront+S3 (WAF-fronted) for all three SPAs. This
+runbook): VPC + EC2 Postgres with DLM snapshots and in-region `pg_dump` backups, an
+ALB/ASG API tier, and CloudFront+S3 (WAF-fronted) for all three SPAs — 4 stacks
+(network/data/main/waf) after the 2026-07-07 `app`/`edge` consolidation. This
 supersedes the Amplify Hosting plan below for the deployed environment — `amplify.yml`
 is kept only as a reference and is not used by `infra/`.
 
-- Storefront `https://d1qn2j2hnhvlhl.cloudfront.net`
-- Admin `https://d2n8mfypcal9h4.cloudfront.net`
-- Socials `https://d36dldi1h3cvhl.cloudfront.net`
-- API `https://d1d2imu6irdm96.cloudfront.net`
+- Storefront `https://d3rb2k31ty2kox.cloudfront.net`
+- Admin `https://dr7ymafumqo0k.cloudfront.net`
+- Socials `https://d3byxnyud664li.cloudfront.net`
+- API `https://d2bc3rl4v1olva.cloudfront.net`
+
+(URLs rotated 2026-07-07 when the `app`/`edge` stacks were consolidated into one
+`main` stack — see [`infra/README.md`](infra/README.md) and
+[`docs/verification/staging-resources.md`](docs/verification/staging-resources.md).)
 
 Verification: [`docs/verification/staging-resources.md`](docs/verification/staging-resources.md)
 (stack/resource inventory), [`docs/verification/staging-e2e.md`](docs/verification/staging-e2e.md)

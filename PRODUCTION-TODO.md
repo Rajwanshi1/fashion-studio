@@ -18,9 +18,11 @@ runbook, and restore steps: [`infra/README.md`](infra/README.md). Verification:
 (stack/resource inventory), [`docs/verification/staging-e2e.md`](docs/verification/staging-e2e.md)
 (full Playwright + API-contract suite against the live stack), and
 [`docs/verification/staging-security-audit.md`](docs/verification/staging-security-audit.md)
-(infra/app security probes + a refused-deletion demonstration). Staging URLs — storefront
-`https://d1qn2j2hnhvlhl.cloudfront.net`, admin `https://d2n8mfypcal9h4.cloudfront.net`,
-socials `https://d36dldi1h3cvhl.cloudfront.net`, api `https://d1d2imu6irdm96.cloudfront.net`.
+(infra/app security probes + a refused-deletion demonstration). Staging URLs (rotated
+2026-07-07 by the `app`/`edge`→`main` stack consolidation, now 4 stacks:
+network/data/main/waf) — storefront `https://d3rb2k31ty2kox.cloudfront.net`, admin
+`https://dr7ymafumqo0k.cloudfront.net`, socials `https://d3byxnyud664li.cloudfront.net`,
+api `https://d2bc3rl4v1olva.cloudfront.net`.
 This is **staging, not production**: no custom domain/prod TLS, no live Razorpay keys, no
 CI — see the still-open items below, especially #1, #20, #22, #23, #25.
 
@@ -103,7 +105,7 @@ CI — see the still-open items below, especially #1, #20, #22, #23, #25.
   `frontend` and `admin`.
   Where: `amplify.yml` (header comment), `frontend/src/App.tsx`, `admin/src/main.tsx`.
   **Done (staging, 2026-07-06), superseding the Amplify plan:** staging deploys all
-  three SPAs to S3+CloudFront (`infra/templates/edge.yaml`), provisioned entirely by
+  three SPAs to S3+CloudFront (`infra/templates/main.yaml`), provisioned entirely by
   CloudFormation, not Amplify Hosting. The rewrite is CloudFront custom error responses
   (403/404 → `/index.html`, 200) on all three distributions — verified end-to-end by
   the Playwright suite in `docs/verification/staging-e2e.md`. `amplify.yml` is now
@@ -139,7 +141,7 @@ CI — see the still-open items below, especially #1, #20, #22, #23, #25.
   **Done (staging, 2026-07-06):** `backend/src/app.ts` mounts hono `secureHeaders()`
   globally (HSTS, `nosniff`, `X-Frame-Options`, `Referrer-Policy`, COOP/CORP —
   confirmed live in `docs/verification/staging-security-audit.md` A-1). CloudFront
-  `ResponseHeadersPolicy` resources in `infra/templates/edge.yaml` add CSP + a longer
+  `ResponseHeadersPolicy` resources in `infra/templates/main.yaml` add CSP + a longer
   HSTS max-age + `X-Frame-Options: DENY` on all three SPA distributions, superseding
   the old Amplify `customHeaders` plan.
 
@@ -204,7 +206,7 @@ CI — see the still-open items below, especially #1, #20, #22, #23, #25.
   Where: `admin/index.html`.
   **Done (staging, 2026-07-06), different mechanism than planned:** rather than a meta
   tag in `admin/index.html` (still absent), the admin CloudFront distribution's
-  `ResponseHeadersPolicy` (`infra/templates/edge.yaml`) adds `X-Robots-Tag: noindex` on
+  `ResponseHeadersPolicy` (`infra/templates/main.yaml`) adds `X-Robots-Tag: noindex` on
   every response — equally effective and edge-enforced regardless of SPA HTML.
 
 - [ ] **20. CI pipeline** — no `.github/` exists; nothing runs tests before a deploy
@@ -231,11 +233,12 @@ CI — see the still-open items below, especially #1, #20, #22, #23, #25.
 
 - [ ] **25. Domain, DNS, TLS** — domain for storefront/admin/api; certs via ACM (AWS)
   or Let's Encrypt; TLS-terminating proxy (Caddy/nginx/ALB) in front of the API.
-  **Partially addressed, staging only (2026-07-06):** all four surfaces are served over
+  **Partially addressed, staging only (2026-07-06, URLs rotated 2026-07-07 by the
+  `app`/`edge`→`main` stack consolidation):** all four surfaces are served over
   TLS today, but on CloudFront's shared `*.cloudfront.net` certificate, not a real
-  domain — storefront `https://d1qn2j2hnhvlhl.cloudfront.net`, admin
-  `https://d2n8mfypcal9h4.cloudfront.net`, socials `https://d36dldi1h3cvhl.cloudfront.net`,
-  api `https://d1d2imu6irdm96.cloudfront.net` (http→https redirect confirmed on all
+  domain — storefront `https://d3rb2k31ty2kox.cloudfront.net`, admin
+  `https://dr7ymafumqo0k.cloudfront.net`, socials `https://d3byxnyud664li.cloudfront.net`,
+  api `https://d2bc3rl4v1olva.cloudfront.net` (http→https redirect confirmed on all
   four in `docs/verification/staging-security-audit.md` A-7). CloudFront → ALB origin
   traffic runs over the VPC origin inside AWS's network. **Still open:** no purchased
   domain, no ACM cert for a custom domain, no Route 53 — leaving unchecked.
@@ -245,16 +248,18 @@ CI — see the still-open items below, especially #1, #20, #22, #23, #25.
   backend api+postgres → EC2 via the prod compose overlay (#4); backend `CORS_ORIGINS`
   must include all three Amplify domains.
   **Executed for staging, not production (2026-07-06), via a different architecture
-  than originally planned:** all six CloudFormation stacks
-  (`backup-replica`/`network`/`data`/`app`/`waf`/`edge`) are live and deployed
-  end-to-end by `infra/deploy.sh staging all` — S3+CloudFront for the three SPAs and an
-  ALB/ASG for the API, entirely superseding the Amplify Hosting + prod-compose-overlay
-  plan (`amplify.yml` and item #4's compose overlay are unused for this path). Verified
-  with a 39-check API script and the full Playwright suite against the live URLs
-  (`docs/verification/staging-e2e.md`) and a security/deletion-protection audit
-  (`docs/verification/staging-security-audit.md`). **Still open before this is
-  "production":** a real domain (#25), a production Razorpay integration (#1), and a
-  CI pipeline (#20) — leaving unchecked.
+  than originally planned:** four CloudFormation stacks (`network`/`data`/`waf`/`main`)
+  are live and deployed end-to-end by `infra/deploy.sh staging all` — S3+CloudFront for
+  the three SPAs and an ALB/ASG for the API, entirely superseding the Amplify Hosting +
+  prod-compose-overlay plan (`amplify.yml` and item #4's compose overlay are unused for
+  this path). The former `backup-replica` stack (cross-region `pg_dump` replication)
+  and the separate `app`/`edge` stacks were removed/merged on 2026-07-07 — see
+  `infra/README.md` and `docs/verification/staging-resources.md` for the consolidation
+  and the new CloudFront URLs. Verified with a 39-check API script and the full
+  Playwright suite against the live URLs (`docs/verification/staging-e2e.md`) and a
+  security/deletion-protection audit (`docs/verification/staging-security-audit.md`).
+  **Still open before this is "production":** a real domain (#25), a production
+  Razorpay integration (#1), and a CI pipeline (#20) — leaving unchecked.
 
 - [ ] **34. Socials link-in-bio page: real content + prod config** *(the `socials/`
   package, merged 2026-07-06 via PR #2 `feat/socials-linktree` — was §8 of the old
