@@ -19,8 +19,12 @@ templates have been removed:
    `/fashion/<env>/db-host` in SSM Parameter Store, consumed by the `main` stack.
 3. **waf** (us-east-1 — required for CloudFront WebACLs).
 4. **main** (ap-south-1) — ALB, ASG, ECR repo, Secrets Manager (JWT + seed
-   passwords), plus CloudFront + S3 for the 3 SPAs and the API distribution. Takes
-   `WafWebAclArn` from the `waf` stack.
+   passwords), plus CloudFront + S3 for the SPAs and the API distribution. Takes
+   `WafWebAclArn` from the `waf` stack. Two web distributions: storefront (also
+   serves the socials SPA under `/qr-socials/` via a viewer-request CloudFront
+   Function that rewrites the two entry paths to `qr-socials/index.html`) and
+   admin. The socials app has no distribution or bucket of its own — its build
+   is synced to the `qr-socials/` prefix of the storefront bucket.
 
 Every `deploy_stack` call enables stack termination protection right after deploying,
 so deleting a stack first needs `update-termination-protection --no-...`.
@@ -62,7 +66,26 @@ land before those steps are useful. Each command also runs standalone.
 
 Local e2e builds now fail loudly without `VITE_API_URL` (production Vite builds
 require it, PRODUCTION-TODO #8) — export `VITE_API_URL=http://localhost:3001` before
-`npm run build` locally. `cmd_spas` sets it to the staging API domain automatically.
+`npm run build` locally. `cmd_spas` sets it to the staging API domain automatically,
+and sets `VITE_SOCIALS_URL=https://<storefront-domain>/qr-socials` for the admin
+build so its QR generator emits URLs for the deployed socials path.
+
+## One-time migration: socials distro → /qr-socials path (2026-07-07)
+
+The standalone socials bucket + distribution were removed from `main.yaml`; the
+socials SPA now ships inside the storefront bucket under `qr-socials/`. Applying
+this template update to an existing environment needs, in order:
+
+1. Empty the old socials bucket first or the stack update fails on delete:
+   `aws s3 rm s3://fashion-<env>-web-socials-<account-id> --recursive`
+2. `infra/deploy.sh <env> stacks` — deletes the socials distro (CloudFront disable
+   + delete takes ~10 min), adds the rewrite function to the storefront distro.
+3. `infra/deploy.sh <env> cors` then `refresh` — drops the retired socials origin
+   from `/fashion/<env>/cors-origins` (the page now calls the API from the
+   storefront origin).
+4. `infra/deploy.sh <env> spas` — publishes the socials build to the new prefix.
+5. Reprint/replace any QR codes pointing at the old
+   `https://<socials-dist>.cloudfront.net` URL — it is gone, not redirected.
 
 ## Secrets/params flow
 

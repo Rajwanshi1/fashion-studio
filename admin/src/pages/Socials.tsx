@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import * as QRCode from 'qrcode';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/format';
-import type { SocialStat } from '../lib/types';
+import type { LinkClickStat, SocialStat } from '../lib/types';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { useToast } from '../components/Toast';
 
-const DEFAULT_SOCIALS_URL = 'https://socials.tanviagnihotry.com';
+const DEFAULT_SOCIALS_URL = 'https://tanviagnihotry.com/qr-socials';
 const SOCIALS_URL =
   (import.meta.env.VITE_SOCIALS_URL as string | undefined) ?? DEFAULT_SOCIALS_URL;
 
@@ -32,6 +32,27 @@ export function normalizeSource(input: string): string {
 /** Mirrors backend/src/services/socials.service.ts SOURCE_RE — the scan route rejects anything else. */
 const VALID_SOURCE_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
+const QR_DARK = '#1E2620';
+const DEFAULT_BG = '#ffffff';
+/** RGBA hex — the qrcode lib renders a fully transparent background. */
+const TRANSPARENT_BG = '#ffffff00';
+
+/** WCAG relative luminance of a #rrggbb color. */
+function luminance(hex: string): number {
+  const n = parseInt(hex.slice(1, 7), 16);
+  const chan = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * chan((n >> 16) & 255) + 0.7152 * chan((n >> 8) & 255) + 0.0722 * chan(n & 255);
+}
+
+/** Scanners need the dark modules to stand out from the background. */
+function isLowContrast(bg: string): boolean {
+  const [hi, lo] = [luminance(bg), luminance(QR_DARK)].sort((a, b) => b - a);
+  return (hi + 0.05) / (lo + 0.05) < 2;
+}
+
 const columns: Column<SocialStat>[] = [
   { key: 'source', label: 'Source', render: (s) => <span className="nm">{s.source}</span> },
   { key: 'total', label: 'Total', align: 'right', render: (s) => s.total },
@@ -40,13 +61,24 @@ const columns: Column<SocialStat>[] = [
   { key: 'lastScan', label: 'Last scan', render: (s) => formatDate(s.lastScanAt) },
 ];
 
+const clickColumns: Column<LinkClickStat>[] = [
+  { key: 'link', label: 'Link', render: (c) => <span className="nm">{c.link}</span> },
+  { key: 'source', label: 'From QR', render: (c) => c.source ?? 'direct' },
+  { key: 'total', label: 'Total', align: 'right', render: (c) => c.total },
+  { key: 'last7', label: 'Last 7 days', align: 'right', render: (c) => c.last7 },
+  { key: 'last30', label: 'Last 30 days', align: 'right', render: (c) => c.last30 },
+  { key: 'lastClick', label: 'Last click', render: (c) => formatDate(c.lastClickAt) },
+];
+
 export default function Socials() {
   const toast = useToast();
   const [baseUrl, setBaseUrl] = useState(SOCIALS_URL);
   const [source, setSource] = useState('');
-  const [qr, setQr] = useState<string | null>(null);
+  const [bg, setBg] = useState(DEFAULT_BG);
+  const [qr, setQr] = useState<{ colored: string; transparent: string } | null>(null);
 
   const [stats, setStats] = useState<SocialStat[] | null>(null);
+  const [clicks, setClicks] = useState<LinkClickStat[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const slug = normalizeSource(source);
@@ -56,8 +88,12 @@ export default function Socials() {
 
   useEffect(() => {
     let live = true;
-    api<{ stats: SocialStat[] }>('/api/socials/stats')
-      .then((data) => live && setStats(data.stats))
+    api<{ stats: SocialStat[]; clicks: LinkClickStat[] }>('/api/socials/stats')
+      .then((data) => {
+        if (!live) return;
+        setStats(data.stats);
+        setClicks(data.clicks ?? []);
+      })
       .catch((err: Error) => live && setError(err.message));
     return () => {
       live = false;
@@ -70,13 +106,11 @@ export default function Socials() {
       return;
     }
     let live = true;
-    QRCode.toDataURL(targetUrl, {
-      width: 512,
-      margin: 2,
-      color: { dark: '#1E2620', light: '#FFFFFF' },
-    })
-      .then((url) => {
-        if (live) setQr(url);
+    const render = (light: string) =>
+      QRCode.toDataURL(targetUrl, { width: 512, margin: 2, color: { dark: QR_DARK, light } });
+    Promise.all([render(bg), render(TRANSPARENT_BG)])
+      .then(([colored, transparent]) => {
+        if (live) setQr({ colored, transparent });
       })
       .catch(() => {
         if (live) setQr(null);
@@ -84,7 +118,7 @@ export default function Socials() {
     return () => {
       live = false;
     };
-  }, [targetUrl]);
+  }, [targetUrl, bg]);
 
   const copyUrl = async () => {
     try {
@@ -131,6 +165,18 @@ export default function Socials() {
                 placeholder="e.g. Store Window"
               />
             </div>
+            <div className="field">
+              <label className="lab" htmlFor="s-bg">
+                Background
+              </label>
+              <input
+                id="s-bg"
+                className="inp"
+                type="color"
+                value={bg}
+                onChange={(e) => setBg(e.target.value)}
+              />
+            </div>
           </div>
 
           <p className="state-note">
@@ -148,14 +194,27 @@ export default function Socials() {
               would have every scan rejected.
             </div>
           )}
+          {isValidSlug && isLowContrast(bg) && (
+            <div className="form-err" role="alert">
+              Low contrast — the dark modules barely stand out from this background; scanners
+              may not read a QR printed with it.
+            </div>
+          )}
         </div>
 
         {qr && slug && (
           <div className="qr-preview">
-            <img src={qr} alt={`QR code for ${slug}`} />
+            <img src={qr.colored} alt={`QR code for ${slug}`} />
             <div className="form-actions">
-              <a className="btn-buy gold fit" href={qr} download={`ta-qr-${slug}.png`}>
+              <a className="btn-buy gold fit" href={qr.colored} download={`ta-qr-${slug}.png`}>
                 Download PNG
+              </a>
+              <a
+                className="btn-outline fit"
+                href={qr.transparent}
+                download={`ta-qr-${slug}-transparent.png`}
+              >
+                Transparent PNG
               </a>
               <button type="button" className="btn-outline fit" onClick={() => void copyUrl()}>
                 Copy URL
@@ -174,6 +233,17 @@ export default function Socials() {
           rows={stats}
           rowKey={(s) => s.source}
           empty="No scans yet — print a QR and place it."
+        />
+      )}
+
+      <p className="section-label">Clicks by link</p>
+      {!clicks && !error && <p className="state-note">Loading clicks…</p>}
+      {clicks && (
+        <DataTable
+          columns={clickColumns}
+          rows={clicks}
+          rowKey={(c) => `${c.link}|${c.source ?? ''}`}
+          empty="No clicks yet — they appear once visitors tap a link on the socials page."
         />
       )}
     </>

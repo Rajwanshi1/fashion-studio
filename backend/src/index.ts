@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import path from 'path';
 import { createApp } from './app';
 import { loadConfig } from './config';
+import { createClicksRepo } from './data/clicks.repo';
 import { createOrdersRepo } from './data/orders.repo';
 import { createPaymentsRepo } from './data/payments.repo';
 import { createProductsRepo, createWishlistRepo } from './data/products.repo';
@@ -38,6 +39,7 @@ async function main() {
       orders: createOrdersRepo(pool),
       payments: createPaymentsRepo(pool),
       scans: createScansRepo(pool),
+      clicks: createClicksRepo(pool),
     },
     paymentProvider: new MockRazorpayProvider(),
     verifyGoogleToken: config.googleClientId ? createGoogleVerifier(config.googleClientId) : null,
