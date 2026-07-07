@@ -85,26 +85,39 @@ cmd_seed() {
 }
 
 cmd_spas() {
-  local api_domain
+  local api_domain sf_domain sf_bucket sf_dist admin_bucket admin_dist
   api_domain=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" ApiDomain)
-  for app in frontend:Storefront admin:Admin socials:Socials; do
-    local dir="${app%%:*}" key="${app##*:}"
-    local bucket dist
-    bucket=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" "${key}Bucket")
-    dist=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" "${key}DistId")
-    (cd "$dir" && rm -rf dist && VITE_API_URL="https://$api_domain" npm run build)
-    aws s3 sync "$dir/dist" "s3://$bucket" --delete --region "$PRIMARY_REGION"
-    aws cloudfront create-invalidation --distribution-id "$dist" --paths '/*' > /dev/null
-    echo "published $dir -> $bucket"
-  done
+  sf_domain=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" StorefrontDomain)
+  sf_bucket=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" StorefrontBucket)
+  sf_dist=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" StorefrontDistId)
+  admin_bucket=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" AdminBucket)
+  admin_dist=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" AdminDistId)
+
+  # Storefront owns the bucket root. The socials app lives under qr-socials/
+  # in the SAME bucket (served at <storefront>/qr-socials/), so the storefront
+  # sync must never --delete that prefix and the socials sync stays inside it.
+  (cd frontend && rm -rf dist && VITE_API_URL="https://$api_domain" npm run build)
+  aws s3 sync frontend/dist "s3://$sf_bucket" --delete --exclude 'qr-socials/*' --region "$PRIMARY_REGION"
+  (cd socials && rm -rf dist && VITE_API_URL="https://$api_domain" npm run build)
+  aws s3 sync socials/dist "s3://$sf_bucket/qr-socials" --delete --region "$PRIMARY_REGION"
+  aws cloudfront create-invalidation --distribution-id "$sf_dist" --paths '/*' > /dev/null
+  echo "published frontend + socials(/qr-socials) -> $sf_bucket"
+
+  # Admin's QR generator must emit URLs for the deployed socials path.
+  (cd admin && rm -rf dist && VITE_API_URL="https://$api_domain" \
+    VITE_SOCIALS_URL="https://$sf_domain/qr-socials" npm run build)
+  aws s3 sync admin/dist "s3://$admin_bucket" --delete --region "$PRIMARY_REGION"
+  aws cloudfront create-invalidation --distribution-id "$admin_dist" --paths '/*' > /dev/null
+  echo "published admin -> $admin_bucket"
 }
 
 cmd_cors() {
-  local sf admin socials origins
+  # The socials page is served from the storefront origin (/qr-socials), so
+  # only two origins remain.
+  local sf admin origins
   sf=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" StorefrontDomain)
   admin=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" AdminDomain)
-  socials=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" SocialsDomain)
-  origins="https://$sf,https://$admin,https://$socials"
+  origins="https://$sf,https://$admin"
   aws ssm put-parameter --region "$PRIMARY_REGION" --name "/fashion/$ENV_NAME/cors-origins" \
     --type String --value "$origins" --overwrite
   echo "cors-origins = $origins (run refresh to apply)"
