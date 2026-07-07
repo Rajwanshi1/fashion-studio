@@ -10,8 +10,6 @@ Parameters:
   AmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
-  ReplicaBucketArn:
-    Type: String
 Resources:
   DataKmsKey:
     Type: AWS::KMS::Key
@@ -62,41 +60,9 @@ Resources:
             Status: Enabled
             ExpirationInDays: 30
             NoncurrentVersionExpiration: { NoncurrentDays: 7 }
-      ReplicationConfiguration:
-        Role: !GetAtt ReplicationRole.Arn
-        Rules:
-          - Id: to-replica-region
-            Status: Enabled
-            Priority: 1
-            Filter: { Prefix: '' }
-            DeleteMarkerReplication: { Status: Disabled }
-            Destination: { Bucket: !Ref ReplicaBucketArn }
       Tags:
         - { Key: Project, Value: fashion-studio }
         - { Key: Env, Value: !Ref EnvName }
-  ReplicationRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal: { Service: s3.amazonaws.com }
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: replicate
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action: ['s3:GetReplicationConfiguration', 's3:ListBucket']
-                Resource: !Sub 'arn:aws:s3:::fashion-${EnvName}-db-backup-${AWS::AccountId}'
-              - Effect: Allow
-                Action: ['s3:GetObjectVersionForReplication', 's3:GetObjectVersionAcl', 's3:GetObjectVersionTagging']
-                Resource: !Sub 'arn:aws:s3:::fashion-${EnvName}-db-backup-${AWS::AccountId}/*'
-              - Effect: Allow
-                Action: ['s3:ReplicateObject', 's3:ReplicateDelete', 's3:ReplicateTags']
-                Resource: !Sub '${ReplicaBucketArn}/*'
   DataRole:
     Type: AWS::IAM::Role
     Properties:
@@ -262,6 +228,12 @@ Resources:
       Threshold: 80
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
+  DbHostParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/fashion/${EnvName}/db-host'
+      Type: String
+      Value: !GetAtt DataInstance.PrivateIp
 Outputs:
   DataPrivateIp:
     Value: !GetAtt DataInstance.PrivateIp

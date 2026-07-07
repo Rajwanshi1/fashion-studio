@@ -24,12 +24,9 @@ deploy_stack() { # region name template extra-params...
 }
 
 cmd_stacks() {
-  deploy_stack "$REPLICA_REGION" "fashion-$ENV_NAME-backup-replica" infra/templates/backup-replica.yaml
   deploy_stack "$PRIMARY_REGION" "fashion-$ENV_NAME-network" infra/templates/network.yaml
-  local replica_arn
-  replica_arn=$(stack_out "$REPLICA_REGION" "fashion-$ENV_NAME-backup-replica" ReplicaBucketArn)
   deploy_stack "$PRIMARY_REGION" "fashion-$ENV_NAME-data" infra/templates/data.yaml \
-    DataInstanceType="$DATA_INSTANCE_TYPE" ReplicaBucketArn="$replica_arn"
+    DataInstanceType="$DATA_INSTANCE_TYPE"
   deploy_stack "$PRIMARY_REGION" "fashion-$ENV_NAME-app" infra/templates/app.yaml \
     AppInstanceType="$APP_INSTANCE_TYPE" AppMin="$APP_MIN" AppMax="$APP_MAX"
   deploy_stack "$WAF_REGION" "fashion-$ENV_NAME-waf" infra/templates/waf.yaml
@@ -122,7 +119,7 @@ cmd_refresh() {
 }
 
 cmd_verify() {
-  for spec in "$REPLICA_REGION:backup-replica" "$PRIMARY_REGION:network" "$PRIMARY_REGION:data" \
+  for spec in "$PRIMARY_REGION:network" "$PRIMARY_REGION:data" \
               "$PRIMARY_REGION:app" "$WAF_REGION:waf" "$PRIMARY_REGION:edge"; do
     local region="${spec%%:*}" name="fashion-$ENV_NAME-${spec##*:}"
     echo "== $name ($region)"

@@ -6,17 +6,18 @@ Everything goes through `infra/deploy.sh <env> <command>` — avoid calling
 
 ## Stack map + deploy order
 
-Six stacks, deployed in this order (`cmd_stacks` in `deploy.sh`):
+Five stacks, deployed in this order (`cmd_stacks` in `deploy.sh`) — pending the
+app/edge stack merge:
 
-1. **backup-replica** (ap-southeast-1) — S3 bucket receiving cross-region backup
-   replication. First, because `data` needs its ARN.
-2. **network** (ap-south-1) — VPC, subnets, security groups.
-3. **data** (ap-south-1) — EC2 + Docker Postgres, EBS volume, DLM snapshots, backup
-   bucket with CRR to stack 1.
-4. **app** (ap-south-1) — ALB, ASG, ECR repo, Secrets Manager (JWT + seed passwords).
-5. **waf** (us-east-1 — required for CloudFront WebACLs).
-6. **edge** (ap-south-1) — CloudFront + S3 for the 3 SPAs and the API distribution.
-   Takes `WafWebAclArn` from stack 5.
+1. **network** (ap-south-1) — VPC, subnets, security groups.
+2. **data** (ap-south-1) — EC2 + Docker Postgres, EBS volume, DLM snapshots, backup
+   bucket (in-region only — cross-region replication has been removed; see
+   "Data-layer protection story" below). Publishes the Postgres host to
+   `/fashion/<env>/db-host` in SSM Parameter Store, for the upcoming app/edge merge.
+3. **app** (ap-south-1) — ALB, ASG, ECR repo, Secrets Manager (JWT + seed passwords).
+4. **waf** (us-east-1 — required for CloudFront WebACLs).
+5. **edge** (ap-south-1) — CloudFront + S3 for the 3 SPAs and the API distribution.
+   Takes `WafWebAclArn` from stack 4.
 
 Every `deploy_stack` call enables stack termination protection right after deploying,
 so deleting a stack first needs `update-termination-protection --no-...`.
@@ -27,7 +28,7 @@ so deleting a stack first needs `update-termination-protection --no-...`.
 infra/deploy.sh staging all       # stacks -> image -> cors -> refresh
 infra/deploy.sh staging seed      # seed the DB over SSM (after refresh finishes)
 infra/deploy.sh staging spas      # build + publish the 3 SPAs, invalidate CloudFront
-infra/deploy.sh staging verify    # read-only: status + protection, all 6 stacks
+infra/deploy.sh staging verify    # read-only: status + protection, all 5 stacks
 ```
 
 `all` stops before `seed`/`spas`/`verify` — the instance refresh needs a few minutes to
@@ -54,15 +55,17 @@ require it, PRODUCTION-TODO #8) — export `VITE_API_URL=http://localhost:3001` 
   backup bucket — survives stack delete/replace.
 - **`DisableApiTermination: true`** on the data EC2 instance.
 - **DLM** — EBS snapshots every 4 hours.
-- **`pg_dump` + CRR** — a cron job dumps Postgres to the backup bucket; S3 replicates
-  it to ap-southeast-1, surviving a regional S3 event too.
+- **`pg_dump` to versioned in-region S3** — a cron job dumps Postgres to the backup
+  bucket (versioned, AES256, 30-day lifecycle). Cross-region replication (CRR) has
+  been removed to simplify the stack; backups are DLM snapshots + nightly `pg_dump`
+  to the same-region bucket only.
 
 ## Restore runbook
 
 1. Scale the `app` ASG to 0 (or suspend processes) so nothing writes against a stale DB.
 2. Recover data: restore a DLM snapshot to a new EBS volume and attach it to a new/
    replacement `data` instance, or (volume lost entirely) `pg_restore` the newest
-   `pg_dump` from the backup bucket or its ap-southeast-1 CRR copy.
+   `pg_dump` from the backup bucket.
 3. The `fashion-<env>-data-private-ip` export updates automatically on the `data`
    stack update — no manual consumer fix-up needed.
 4. Restore `AppMin`/`AppMax`, run `infra/deploy.sh <env> refresh`, then `verify`.
