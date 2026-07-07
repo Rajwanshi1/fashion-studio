@@ -110,7 +110,7 @@ Resources:
           - !ImportValue
             'Fn::Sub': 'fashion-${EnvName}-app-sg'
         MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
-        Monitoring: { Enabled: true }
+        Monitoring: { Enabled: false }
         BlockDeviceMappings:
           - DeviceName: /dev/xvda
             Ebs: { VolumeSize: 20, VolumeType: gp3, Encrypted: true }

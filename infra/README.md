@@ -11,7 +11,8 @@ and `edge` stacks were merged into a single `main` stack (2026-07-07 consolidati
 `infra/templates/main.yaml` is the source of truth — the old `app.yaml`/`edge.yaml`
 templates have been removed:
 
-1. **network** (ap-south-1) — VPC, subnets, security groups.
+1. **network** (ap-south-1) — VPC, subnets, security groups, and a self-managed
+   NAT instance for private-subnet egress (see "Staging cost trims" below).
 2. **data** (ap-south-1) — EC2 + Docker Postgres, EBS volume, DLM snapshots, backup
    bucket (in-region only — cross-region replication has been removed; see
    "Data-layer protection story" below). Publishes the Postgres host to
@@ -23,6 +24,29 @@ templates have been removed:
 
 Every `deploy_stack` call enables stack termination protection right after deploying,
 so deleting a stack first needs `update-termination-protection --no-...`.
+
+## Staging cost trims
+
+Staging trades a little resilience for ~$60/mo of savings vs. the prod-shaped defaults:
+
+- **Self-managed NAT instance (~$38/mo)** — private-subnet egress runs through a
+  `t4g.nano` Amazon Linux 2023 EC2 instance (`NatInstance` in `network.yaml`) instead
+  of a managed NAT Gateway. It has `SourceDestCheck: false` and its user-data enables
+  IP forwarding plus an `iptables` MASQUERADE rule, so it forwards outbound traffic from
+  the private subnets to the internet. `NatRecoveryAlarm` watches
+  `StatusCheckFailed_System` and triggers EC2 auto-recovery — a dead NAT would sever SSM
+  and all egress for every private instance, so this alarm matters. The trade-off is a
+  single-AZ, single-instance SPOF with no throughput guarantees, which is fine for
+  staging. **Prod can switch back to a managed NAT Gateway** by restoring the removed
+  `NatEip` (`AWS::EC2::EIP`) and `Nat` (`AWS::EC2::NatGateway`) resources and pointing
+  `PrivateDefaultRoute` back at `NatGatewayId: !Ref Nat` (the pre-trim configuration).
+- **App ASG floor of 1 (~$16/mo)** — `APP_MIN=1` in `params/staging.env` (prod stays 2),
+  so `DesiredCapacity` follows to 1. A `refresh` with `MinHealthyPercentage=50` may
+  briefly leave 0 healthy targets — accepted for staging.
+- **Basic (5-min) CloudWatch monitoring (~$6/mo)** — detailed 1-minute instance
+  monitoring is off on both the data instance (`Monitoring: false` in `data.yaml`) and
+  the app launch template (`Monitoring: { Enabled: false }` in `main.yaml`); prod can
+  re-enable it. CloudWatch instance metrics land at 5-minute resolution instead of 1.
 
 ## One-command flows
 

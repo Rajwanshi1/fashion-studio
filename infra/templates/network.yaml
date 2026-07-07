@@ -8,6 +8,13 @@ Parameters:
     Type: String
     Default: pl-9aa247f3
     Description: Managed prefix list ID for com.amazonaws.global.cloudfront.origin-facing in ap-south-1 (CloudFront VPC-origin traffic source, used for ALB SG ingress)
+  NatInstanceType:
+    Type: String
+    Default: t4g.nano
+    Description: Instance type for the self-managed NAT instance (arm64/Graviton to match NatAmiId).
+  NatAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
 Resources:
   Vpc:
     Type: AWS::EC2::VPC
@@ -62,20 +69,71 @@ Resources:
   PublicRtB:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties: { SubnetId: !Ref PublicSubnetB, RouteTableId: !Ref PublicRt }
-  NatEip:
-    Type: AWS::EC2::EIP
-    Properties: { Domain: vpc }
-  Nat:
-    Type: AWS::EC2::NatGateway
+  NatSg:
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      AllocationId: !GetAtt NatEip.AllocationId
-      SubnetId: !Ref PublicSubnetA
+      GroupDescription: self-managed NAT instance
+      VpcId: !Ref Vpc
+      # Ingress ALL protocols from the VPC CIDR: the NAT only forwards traffic that a
+      # private instance already chose to send. Each private instance's own egress SG
+      # (AppSg/DataSg above) already constrains what is allowed to leave, so the NAT
+      # itself does not re-filter — it just masquerades whatever reaches it.
+      SecurityGroupIngress:
+        - { IpProtocol: '-1', CidrIp: 10.20.0.0/16 }
+      SecurityGroupEgress:
+        - { IpProtocol: '-1', CidrIp: 0.0.0.0/0 }
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-nat' }]
+  NatInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref NatInstanceType
+      ImageId: !Ref NatAmiId
+      SourceDestCheck: false   # REQUIRED for NAT: the instance forwards packets not addressed to it
+      MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 8, VolumeType: gp3, Encrypted: true }
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          SubnetId: !Ref PublicSubnetA
+          AssociatePublicIpAddress: true
+          GroupSet: [!Ref NatSg]
+      Tags:
+        - { Key: Name, Value: !Sub 'fashion-${EnvName}-nat' }
+        - { Key: Project, Value: fashion-studio }
+        - { Key: Env, Value: !Ref EnvName }
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          exec > /var/log/user-data.log 2>&1
+          sysctl -w net.ipv4.ip_forward=1
+          echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/99-nat.conf
+          dnf -y install iptables-services
+          IFACE=$(ip route list default | awk '{print $5}')
+          iptables -t nat -A POSTROUTING -o $IFACE -j MASQUERADE
+          service iptables save
+          systemctl enable --now iptables
+  NatRecoveryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: auto-recover the NAT instance on system failure - a dead NAT kills SSM + egress for every private instance
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Dimensions: [{ Name: InstanceId, Value: !Ref NatInstance }]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Sub 'arn:aws:automate:${AWS::Region}:ec2:recover'
   PrivateRt:
     Type: AWS::EC2::RouteTable
     Properties: { VpcId: !Ref Vpc }
   PrivateDefaultRoute:
     Type: AWS::EC2::Route
-    Properties: { RouteTableId: !Ref PrivateRt, DestinationCidrBlock: 0.0.0.0/0, NatGatewayId: !Ref Nat }
+    Properties: { RouteTableId: !Ref PrivateRt, DestinationCidrBlock: 0.0.0.0/0, InstanceId: !Ref NatInstance }
   PrivateRtA:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties: { SubnetId: !Ref PrivateSubnetA, RouteTableId: !Ref PrivateRt }
