@@ -27,17 +27,16 @@ cmd_stacks() {
   deploy_stack "$PRIMARY_REGION" "fashion-$ENV_NAME-network" infra/templates/network.yaml
   deploy_stack "$PRIMARY_REGION" "fashion-$ENV_NAME-data" infra/templates/data.yaml \
     DataInstanceType="$DATA_INSTANCE_TYPE"
-  deploy_stack "$PRIMARY_REGION" "fashion-$ENV_NAME-app" infra/templates/app.yaml \
-    AppInstanceType="$APP_INSTANCE_TYPE" AppMin="$APP_MIN" AppMax="$APP_MAX"
   deploy_stack "$WAF_REGION" "fashion-$ENV_NAME-waf" infra/templates/waf.yaml
   local waf_arn
   waf_arn=$(stack_out "$WAF_REGION" "fashion-$ENV_NAME-waf" WebAclArn)
-  deploy_stack "$PRIMARY_REGION" "fashion-$ENV_NAME-edge" infra/templates/edge.yaml WafWebAclArn="$waf_arn"
+  deploy_stack "$PRIMARY_REGION" "fashion-$ENV_NAME-main" infra/templates/main.yaml \
+    AppInstanceType="$APP_INSTANCE_TYPE" AppMin="$APP_MIN" AppMax="$APP_MAX" WafWebAclArn="$waf_arn"
 }
 
 cmd_image() {
   local ecr tag acct
-  ecr=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-app" EcrUri)
+  ecr=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" EcrUri)
   tag=$(git rev-parse --short HEAD)
   acct="${ecr%%.*}"
   aws ecr get-login-password --region "$PRIMARY_REGION" \
@@ -87,12 +86,12 @@ cmd_seed() {
 
 cmd_spas() {
   local api_domain
-  api_domain=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-edge" ApiDomain)
+  api_domain=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" ApiDomain)
   for app in frontend:Storefront admin:Admin socials:Socials; do
     local dir="${app%%:*}" key="${app##*:}"
     local bucket dist
-    bucket=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-edge" "${key}Bucket")
-    dist=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-edge" "${key}DistId")
+    bucket=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" "${key}Bucket")
+    dist=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" "${key}DistId")
     (cd "$dir" && rm -rf dist && VITE_API_URL="https://$api_domain" npm run build)
     aws s3 sync "$dir/dist" "s3://$bucket" --delete --region "$PRIMARY_REGION"
     aws cloudfront create-invalidation --distribution-id "$dist" --paths '/*' > /dev/null
@@ -102,9 +101,9 @@ cmd_spas() {
 
 cmd_cors() {
   local sf admin socials origins
-  sf=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-edge" StorefrontDomain)
-  admin=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-edge" AdminDomain)
-  socials=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-edge" SocialsDomain)
+  sf=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" StorefrontDomain)
+  admin=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" AdminDomain)
+  socials=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-main" SocialsDomain)
   origins="https://$sf,https://$admin,https://$socials"
   aws ssm put-parameter --region "$PRIMARY_REGION" --name "/fashion/$ENV_NAME/cors-origins" \
     --type String --value "$origins" --overwrite
@@ -120,7 +119,7 @@ cmd_refresh() {
 
 cmd_verify() {
   for spec in "$PRIMARY_REGION:network" "$PRIMARY_REGION:data" \
-              "$PRIMARY_REGION:app" "$WAF_REGION:waf" "$PRIMARY_REGION:edge"; do
+              "$WAF_REGION:waf" "$PRIMARY_REGION:main"; do
     local region="${spec%%:*}" name="fashion-$ENV_NAME-${spec##*:}"
     echo "== $name ($region)"
     aws cloudformation describe-stacks --region "$region" --stack-name "$name" \
