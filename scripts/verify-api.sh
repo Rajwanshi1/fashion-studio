@@ -13,6 +13,9 @@ API="${API:-http://localhost:3001}"
 # Defaults match the local docker-compose seed; staging injects ADMIN_PASSWORD.
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@tanviagnihotry.com}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-TanviAdmin@2026}"
+# mock (default) exercises the masked-Razorpay flow; disabled asserts the
+# payments gate (prod: checkout/confirm answer 503, admin marks orders paid).
+PAYMENTS_MODE="${PAYMENTS_MODE:-mock}"
 PASS=0; FAIL=0
 TS="$(date +%s)"
 GUEST_EMAIL="guest${TS}@example.com"
@@ -60,6 +63,17 @@ check "order lookup wrong email -> 404" 404 "$(code "$API/api/orders/$ORDER_NUMB
 check "POST /api/orders empty items -> 400" 400 "$(code -X POST $API/api/orders -H 'content-type: application/json' -d "{\"customer\":{\"email\":\"$GUEST_EMAIL\",\"phone\":\"\",\"firstName\":\"G\",\"lastName\":\"B\",\"addressLine1\":\"x\",\"addressLine2\":\"\",\"city\":\"M\",\"state\":\"MH\",\"pincode\":\"400001\",\"country\":\"India\"},\"deliveryMethod\":\"standard\",\"items\":[]}")"
 check "POST /api/orders stock 409" 409 "$(code -X POST $API/api/orders -H 'content-type: application/json' -d "{\"customer\":{\"email\":\"$GUEST_EMAIL\",\"phone\":\"\",\"firstName\":\"G\",\"lastName\":\"B\",\"addressLine1\":\"x\",\"addressLine2\":\"\",\"city\":\"M\",\"state\":\"MH\",\"pincode\":\"400001\",\"country\":\"India\"},\"deliveryMethod\":\"standard\",\"items\":[{\"variantId\":\"$VARIANT_ID\",\"quantity\":99999}]}")"
 
+if [ "$PAYMENTS_MODE" = "disabled" ]; then
+echo "== payments (disabled — gate answers 503) =="
+check "checkout -> 503 while disabled" 503 "$(code -X POST $API/api/payments/checkout -H 'content-type: application/json' -d "{\"orderId\":\"$ORDER_ID\",\"email\":\"$GUEST_EMAIL\"}")"
+check "confirm -> 503 while disabled" 503 "$(code -X POST $API/api/payments/confirm -H 'content-type: application/json' -d "{\"paymentId\":\"any\",\"outcome\":\"success\",\"email\":\"$GUEST_EMAIL\"}")"
+code "$API/api/orders/$ORDER_NUMBER?email=$GUEST_EMAIL" >/dev/null
+ORDER_STATUS=$(jqget "d.status")
+check "order stays pending_payment" pending_payment "$ORDER_STATUS"
+# Atelier flow while payments are gated: admin marks the order paid, so the
+# admin transition checks below still exercise the paid path.
+check "admin mark order paid" 200 "$(code -X PATCH $API/api/admin/orders/$ORDER_ID -H "authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' -d '{"status":"paid"}')"
+else
 echo "== payments (masked razorpay) =="
 check "checkout without owner email -> 404" 404 "$(code -X POST $API/api/payments/checkout -H 'content-type: application/json' -d "{\"orderId\":\"$ORDER_ID\"}")"
 check "POST /api/payments/checkout" 200 "$(code -X POST $API/api/payments/checkout -H 'content-type: application/json' -d "{\"orderId\":\"$ORDER_ID\",\"email\":\"$GUEST_EMAIL\"}")"
@@ -70,6 +84,7 @@ check "confirm idempotent" 200 "$(code -X POST $API/api/payments/confirm -H 'con
 code "$API/api/orders/$ORDER_NUMBER?email=$GUEST_EMAIL" >/dev/null
 ORDER_STATUS=$(jqget "d.status")
 check "order now paid" paid "$ORDER_STATUS"
+fi
 
 echo "== user orders + wishlist =="
 check "GET /api/me/orders" 200 "$(code $API/api/me/orders -H "authorization: Bearer $TOKEN")"

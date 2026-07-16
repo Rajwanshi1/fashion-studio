@@ -35,7 +35,8 @@ export interface AppDeps {
     scans: ScansRepo;
     clicks: ClicksRepo;
   };
-  paymentProvider: PaymentProvider;
+  /** Masked payments seam — null while payments are disabled (endpoints answer 503). */
+  paymentProvider: PaymentProvider | null;
   /** Masked Google sign-in seam — null/undefined until GOOGLE_CLIENT_ID exists. */
   verifyGoogleToken?: VerifyGoogleToken | null;
   jwtSecret: string;

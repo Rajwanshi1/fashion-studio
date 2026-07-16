@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { mockFetch, ORDER, renderApp, seedCart } from './helpers';
+import { mockFetch, ORDER, renderApp, seedCart, withStatus } from './helpers';
 
 const PAYMENT = {
   paymentId: 'pay1',
@@ -65,6 +65,30 @@ describe('checkout', () => {
     );
     expect(confirmCall).toBeTruthy();
     expect(String(confirmCall?.[1]?.body)).toContain('"outcome":"success"');
+  });
+
+  it('payments disabled: 503 from checkout shows the coming-soon notice, order saved', async () => {
+    seedCart();
+    mockFetch((url, init) => {
+      if (url.includes('/api/payments/checkout'))
+        return withStatus(503, { error: 'Online payments are not available yet' });
+      return checkoutRoutes(url, init);
+    });
+    renderApp('/checkout');
+
+    const user = userEvent.setup();
+    await fillForm(user);
+    await user.click(screen.getByRole('button', { name: 'Place Order · ₹1,84,000' }));
+
+    // Calm notice, not the red error banner and no Razorpay modal.
+    await screen.findByText('Online payments are coming soon.');
+    const note = document.querySelector('.pay-note') as HTMLElement;
+    expect(note).toHaveTextContent('TA-2026-04817');
+    expect(note).toHaveTextContent('aanya@example.com');
+    expect(screen.queryByRole('dialog', { name: 'Razorpay · Test Mode' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    // Placing again is blocked (the order already exists server-side).
+    expect(screen.getByRole('button', { name: /Place Order/ })).toBeDisabled();
   });
 
   it('failure path: simulate failure → retryable error state', async () => {

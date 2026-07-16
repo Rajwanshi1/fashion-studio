@@ -60,8 +60,8 @@
 .page-checkout .legal a { color: var(--gold); }
 
 /* payment failure banner */
-.page-checkout .pay-error { border: 1px solid var(--hairline-gold); background: var(--celadon-50); padding: 1rem 1.2rem; margin-bottom: 1.2rem; font-size: var(--t-sm); color: var(--ink-soft); display: flex; flex-direction: column; gap: 0.8rem; }
-.page-checkout .pay-error strong { color: var(--gold); font-weight: 500; }
+.page-checkout .pay-error, .page-checkout .pay-note { border: 1px solid var(--hairline-gold); background: var(--celadon-50); padding: 1rem 1.2rem; margin-bottom: 1.2rem; font-size: var(--t-sm); color: var(--ink-soft); display: flex; flex-direction: column; gap: 0.8rem; }
+.page-checkout .pay-error strong, .page-checkout .pay-note strong { color: var(--gold); font-weight: 500; }
 .page-checkout .pay-error .btn-outline { width: auto; align-self: flex-start; padding: 0.9em 1.6em; }
 
 /* right: order summary */

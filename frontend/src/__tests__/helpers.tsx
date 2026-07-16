@@ -17,6 +17,11 @@ export function renderApp(route: string) {
 type Handler = (url: string, init?: RequestInit) => unknown | undefined;
 
 /** Install a fetch mock. Handler returns JSON payload, or undefined → 404. */
+/** Wrap a handler return value so mockFetch answers with a non-200 status. */
+export function withStatus(status: number, body: unknown) {
+  return { __status: status, __body: body };
+}
+
 export function mockFetch(handler: Handler) {
   const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -26,6 +31,14 @@ export function mockFetch(handler: Handler) {
         ok: false,
         status: 404,
         json: async () => ({ error: 'Not found' }),
+      } as unknown as Response;
+    }
+    if (body && typeof body === 'object' && '__status' in body) {
+      const wrapped = body as { __status: number; __body: unknown };
+      return {
+        ok: wrapped.__status < 400,
+        status: wrapped.__status,
+        json: async () => wrapped.__body,
       } as unknown as Response;
     }
     return { ok: true, status: 200, json: async () => body } as unknown as Response;

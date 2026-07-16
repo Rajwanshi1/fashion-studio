@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api } from '../lib/api';
+import { api, type ApiError } from '../lib/api';
 import type { DeliveryMethod, Order, PaymentInit } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useAuth } from '../lib/auth';
@@ -41,6 +41,7 @@ export default function Checkout() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [paymentsUnavailable, setPaymentsUnavailable] = useState(false);
 
   const deliveryFee = delivery === 'priority' ? PRIORITY_FEE : 0;
   const total = subtotal + deliveryFee;
@@ -69,9 +70,17 @@ export default function Checkout() {
         });
         setOrder(ord);
       }
-      const pay = await api.post<PaymentInit>('/api/payments/checkout', { orderId: ord.id, email });
-      setPayment(pay);
-      setFailed(false);
+      try {
+        const pay = await api.post<PaymentInit>('/api/payments/checkout', { orderId: ord.id, email });
+        setPayment(pay);
+        setFailed(false);
+      } catch (e) {
+        // 503 = payments not enabled yet; the order itself is saved and the
+        // atelier can follow up, so this is a notice, not an error.
+        if ((e as ApiError).status !== 503) throw e;
+        setPaymentsUnavailable(true);
+        setFailed(false);
+      }
     } catch (e) {
       const err = e as { message?: string };
       setError(err.message ?? 'Something went wrong placing your order.');
@@ -164,7 +173,17 @@ export default function Checkout() {
                 <div className="or">or check out with details</div>
               </div>
 
-              {(failed || error) && (
+              {paymentsUnavailable && order && (
+                <div className="pay-note" role="status">
+                  <span>
+                    <strong>Online payments are coming soon.</strong> Your order{' '}
+                    {order.orderNumber} is saved — the atelier will contact you at {email} to
+                    arrange payment.
+                  </span>
+                </div>
+              )}
+
+              {!paymentsUnavailable && (failed || error) && (
                 <div className="pay-error" role="alert">
                   <span>
                     <strong>{failed ? 'Payment failed.' : 'We hit a snag.'}</strong>{' '}
@@ -452,7 +471,7 @@ export default function Checkout() {
                 </div>
               </div>
 
-              <button className="btn-buy gold place" type="submit" disabled={busy}>
+              <button className="btn-buy gold place" type="submit" disabled={busy || paymentsUnavailable}>
                 {busy ? 'Placing Order…' : `Place Order · ${formatINR(total)}`}
               </button>
               <p className="legal">

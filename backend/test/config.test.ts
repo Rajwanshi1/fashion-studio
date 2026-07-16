@@ -37,6 +37,42 @@ describe('loadConfig', () => {
         })
       ).toThrow(/SEED_ON_START/);
     });
+
+    it('defaults paymentProvider to disabled (fail-closed)', () => {
+      const config = loadConfig({ NODE_ENV: 'production', JWT_SECRET: VALID_SECRET });
+      expect(config.paymentProvider).toBe('disabled');
+    });
+
+    it('throws for PAYMENT_PROVIDER=mock without the ALLOW_MOCK_PAYMENTS escape hatch', () => {
+      expect(() =>
+        loadConfig({ NODE_ENV: 'production', JWT_SECRET: VALID_SECRET, PAYMENT_PROVIDER: 'mock' })
+      ).toThrow(/PAYMENT_PROVIDER=mock is not allowed/);
+    });
+
+    it('loads PAYMENT_PROVIDER=mock with ALLOW_MOCK_PAYMENTS=true (staging)', () => {
+      const config = loadConfig({
+        NODE_ENV: 'production',
+        JWT_SECRET: VALID_SECRET,
+        PAYMENT_PROVIDER: 'mock',
+        ALLOW_MOCK_PAYMENTS: 'true',
+      });
+      expect(config.paymentProvider).toBe('mock');
+    });
+
+    it('loads PAYMENT_PROVIDER=disabled', () => {
+      const config = loadConfig({
+        NODE_ENV: 'production',
+        JWT_SECRET: VALID_SECRET,
+        PAYMENT_PROVIDER: 'disabled',
+      });
+      expect(config.paymentProvider).toBe('disabled');
+    });
+
+    it('throws on an unknown PAYMENT_PROVIDER value', () => {
+      expect(() =>
+        loadConfig({ NODE_ENV: 'production', JWT_SECRET: VALID_SECRET, PAYMENT_PROVIDER: 'razorpay' })
+      ).toThrow(/PAYMENT_PROVIDER/);
+    });
   });
 
   describe('development', () => {
@@ -50,6 +86,14 @@ describe('loadConfig', () => {
     it('loads when SEED_ON_START=true', () => {
       const config = loadConfig({ SEED_ON_START: 'true' });
       expect(config.seedOnStart).toBe(true);
+    });
+
+    it('defaults paymentProvider to mock', () => {
+      expect(loadConfig({}).paymentProvider).toBe('mock');
+    });
+
+    it('honours PAYMENT_PROVIDER=disabled', () => {
+      expect(loadConfig({ PAYMENT_PROVIDER: 'disabled' }).paymentProvider).toBe('disabled');
     });
   });
 });

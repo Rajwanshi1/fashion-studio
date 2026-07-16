@@ -146,6 +146,26 @@ describe('PaymentsService', () => {
     });
   });
 
+  describe('disabled provider (payments gated off)', () => {
+    it('checkout answers NOT_CONFIGURED and creates nothing', async () => {
+      const gated = createPaymentsService({ payments: paymentsRepo, orders: ordersRepo, provider: null });
+      await expect(gated.checkout(order.id, OWNER)).rejects.toMatchObject({ code: 'NOT_CONFIGURED' });
+      expect(await paymentsRepo.getByOrderId(order.id)).toHaveLength(0);
+    });
+
+    it('confirm answers NOT_CONFIGURED even for an existing payment', async () => {
+      // Payment created while the provider was live, confirm attempted after gating off —
+      // the endpoint that trusts client outcomes must never work while disabled.
+      const res = await service.checkout(order.id, OWNER);
+      const gated = createPaymentsService({ payments: paymentsRepo, orders: ordersRepo, provider: null });
+      await expect(gated.confirm(res.paymentId, 'success', OWNER)).rejects.toMatchObject({
+        code: 'NOT_CONFIGURED',
+      });
+      expect((await paymentsRepo.getById(res.paymentId))?.status).toBe('created');
+      expect((await ordersRepo.getById(order.id))?.status).toBe('pending_payment');
+    });
+  });
+
   describe('requester ownership', () => {
     it('checkout: rejects a requester that does not own the order with NOT_FOUND', async () => {
       await expect(service.checkout(order.id, { email: 'stranger@example.com' })).rejects.toMatchObject({
