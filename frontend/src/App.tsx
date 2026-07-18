@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { usePageTracking } from './lib/analytics';
 import { AuthProvider } from './lib/auth';
 import { CartProvider } from './lib/cart';
 import { WishlistProvider } from './lib/wishlist';
@@ -31,6 +32,11 @@ function ScrollToTop() {
   return null;
 }
 
+function PageTracking() {
+  usePageTracking();
+  return null;
+}
+
 /** All app providers (router-dependent ones included) — reused by tests. */
 export function Providers({ children }: { children: ReactNode }) {
   return (
@@ -50,6 +56,7 @@ export function AppRoutes() {
   return (
     <>
       <ScrollToTop />
+      <PageTracking />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/collections" element={<Collections />} />
