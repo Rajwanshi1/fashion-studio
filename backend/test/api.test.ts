@@ -817,4 +817,108 @@ describe('API', () => {
       expect(f.events.rows).toHaveLength(0);
     });
   });
+
+  describe('analytics summary (admin read)', () => {
+    it('GET /api/analytics/summary requires admin auth: 401 anonymous, 403 customer', async () => {
+      expect((await app.request('/api/analytics/summary')).status).toBe(401);
+      const { token: customerToken } = await registerCustomer();
+      expect((await app.request('/api/analytics/summary', bearer(customerToken))).status).toBe(403);
+    });
+
+    it('?days=14 is rejected with 400; 7/30(default)/90 are accepted', async () => {
+      expect((await app.request('/api/analytics/summary?days=14', bearer(adminToken))).status).toBe(400);
+      expect((await app.request('/api/analytics/summary?days=7', bearer(adminToken))).status).toBe(200);
+      expect((await app.request('/api/analytics/summary?days=90', bearer(adminToken))).status).toBe(200);
+      expect((await app.request('/api/analytics/summary', bearer(adminToken))).status).toBe(200); // default 30
+    });
+
+    it('returns the full response contract shape with seeded events', async () => {
+      const V1 = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+      const V2 = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+      // Fake product ids (e.g. 'p-1') aren't valid UUIDs, and the /track schema requires
+      // productId to be a UUID — use a standalone UUID and seed its display name directly.
+      const PRODUCT_ID = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+      const PRODUCT_NAME = 'Sage Sequin Jacket Lehenga';
+      f.events.productNames.set(PRODUCT_ID, PRODUCT_NAME);
+
+      // Session 1: lands via a UTM source, views + carts the product, searches (zero results), then buys.
+      await app.request('/api/track', post({
+        visitorId: V1,
+        sessionId: '11111111-aaaa-aaaa-aaaa-111111111111',
+        events: [
+          { type: 'session_start', props: { utmSource: 'newsletter' } },
+          { type: 'product_view', productId: PRODUCT_ID },
+          { type: 'add_to_cart', productId: PRODUCT_ID, props: { size: 'M', color: 'Sage' } },
+          { type: 'search', props: { query: 'lehenga', results: 0 } },
+          { type: 'checkout_start' },
+          { type: 'order_placed', props: { total: 18400000, items: [{ productId: PRODUCT_ID, qty: 1 }] } },
+        ],
+      }));
+
+      // Session 2: direct visit, just browses (no conversion) — mobile device.
+      await app.request('/api/track', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148',
+        },
+        body: JSON.stringify({
+          visitorId: V2,
+          sessionId: '22222222-bbbb-bbbb-bbbb-222222222222',
+          events: [
+            { type: 'session_start', props: {} },
+            { type: 'search', props: { query: 'gown', results: 4 } },
+          ],
+        }),
+      });
+
+      const res = await app.request('/api/analytics/summary', bearer(adminToken));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.kpis).toMatchObject({
+        sessions: 2,
+        orders: 1,
+        revenue: 18400000,
+      });
+      expect(body.kpis.conversionRate).toBeCloseTo(0.5);
+      expect(typeof body.kpis.aov).toBe('number');
+      expect(Number.isNaN(body.kpis.aov)).toBe(false);
+
+      expect(body.funnel.map((stage: any) => stage.stage)).toEqual([
+        'Sessions',
+        'Product views',
+        'Added to cart',
+        'Checkout',
+        'Purchased',
+      ]);
+      expect(body.funnel.every((stage: any) => typeof stage.sessions === 'number')).toBe(true);
+
+      expect(Array.isArray(body.trend)).toBe(true);
+      expect(body.trend.length).toBe(30); // default days window, gap-filled
+      expect(body.trend[0]).toMatchObject({ orders: expect.any(Number), sessions: expect.any(Number) });
+      expect(body.trend[0].day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+      expect(body.topProducts).toContainEqual(
+        expect.objectContaining({ productId: PRODUCT_ID, name: PRODUCT_NAME, views: 1, carts: 1, purchased: 1 }),
+      );
+
+      expect(body.topSearches).toEqual(expect.arrayContaining([
+        expect.objectContaining({ query: 'lehenga', searches: 1 }),
+        expect.objectContaining({ query: 'gown', searches: 1 }),
+      ]));
+      expect(body.zeroSearches).toEqual([expect.objectContaining({ query: 'lehenga', searches: 1 })]);
+
+      expect(body.sources).toContainEqual({ source: 'newsletter', sessions: 1 });
+      expect(body.sources).toContainEqual({ source: 'direct', sessions: 1 });
+
+      expect(body.devices).toEqual(expect.arrayContaining([
+        expect.objectContaining({ device: 'desktop', sessions: 1 }),
+        expect.objectContaining({ device: 'mobile', sessions: 1 }),
+      ]));
+
+      expect(body.sizes).toContainEqual({ size: 'M', adds: 1 });
+      expect(body.colors).toContainEqual({ color: 'Sage', adds: 1 });
+    });
+  });
 });

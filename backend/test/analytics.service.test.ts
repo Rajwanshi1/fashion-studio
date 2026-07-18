@@ -148,3 +148,117 @@ describe('AnalyticsService.recordBatch', () => {
     expect(events.rows).toHaveLength(2);
   });
 });
+
+describe('AnalyticsService.summary', () => {
+  const SESSION_2 = '55555555-5555-5555-5555-555555555555';
+  const SESSION_3 = '66666666-6666-6666-6666-666666666666';
+
+  function setup() {
+    const events = new FakeEventsRepo();
+    return { events, service: createAnalyticsService({ events }) };
+  }
+
+  it('returns all-zero kpis (never NaN/Infinity) when there is no data at all', async () => {
+    const { service } = setup();
+    const summary = await service.summary(30);
+    expect(summary.kpis).toEqual({
+      sessions: 0,
+      orders: 0,
+      revenue: 0,
+      conversionRate: 0,
+      cartAbandonmentRate: 0,
+      aov: 0,
+    });
+    // trend is gap-filled — always `days` entries, all zero when there's no data.
+    expect(summary.trend).toHaveLength(30);
+    expect(summary.trend.every((d) => d.sessions === 0 && d.orders === 0)).toBe(true);
+    expect(summary.topProducts).toEqual([]);
+  });
+
+  it('funnel stages are the 5 fixed labels in fixed order', async () => {
+    const { service } = setup();
+    const summary = await service.summary(30);
+    expect(summary.funnel.map((f) => f.stage)).toEqual([
+      'Sessions',
+      'Product views',
+      'Added to cart',
+      'Checkout',
+      'Purchased',
+    ]);
+  });
+
+  it('conversionRate and aov are 0 (not NaN) when sessions exist but zero orders', async () => {
+    const { events, service } = setup();
+    await events.insertBatch([
+      { eventType: 'session_start', visitorId: VISITOR, sessionId: SESSION, userId: null, path: null, productId: null, device: 'desktop', props: {} },
+    ]);
+    const summary = await service.summary(30);
+    expect(summary.kpis.sessions).toBe(1);
+    expect(summary.kpis.conversionRate).toBe(0);
+    expect(summary.kpis.cartAbandonmentRate).toBe(0);
+    expect(summary.kpis.aov).toBe(0);
+  });
+
+  it('cartAbandonmentRate is 1 (fully abandoned) when carts exist but zero orders', async () => {
+    const { events, service } = setup();
+    await events.insertBatch([
+      { eventType: 'add_to_cart', visitorId: VISITOR, sessionId: SESSION, userId: null, path: null, productId: PRODUCT, device: 'desktop', props: {} },
+    ]);
+    const summary = await service.summary(30);
+    expect(summary.kpis.cartAbandonmentRate).toBe(1);
+    expect(summary.kpis.aov).toBe(0);
+  });
+
+  it('clamps cartAbandonmentRate to 0 (never negative) when order sessions exceed cart sessions', async () => {
+    const { events, service } = setup();
+    await events.insertBatch([
+      { eventType: 'add_to_cart', visitorId: VISITOR, sessionId: SESSION, userId: null, path: null, productId: null, device: 'desktop', props: {} },
+      { eventType: 'order_placed', visitorId: VISITOR, sessionId: SESSION, userId: null, path: null, productId: null, device: 'desktop', props: { total: 100 } },
+      { eventType: 'order_placed', visitorId: VISITOR, sessionId: SESSION_2, userId: null, path: null, productId: null, device: 'desktop', props: { total: 200 } },
+    ]);
+    const summary = await service.summary(30);
+    expect(summary.kpis.cartAbandonmentRate).toBe(0);
+  });
+
+  it('computes conversionRate, cartAbandonmentRate and a rounded aov from realistic counts', async () => {
+    const { events, service } = setup();
+    // 10 distinct sessions, 5 of which add to cart, 3 of which order.
+    const sessionIds = Array.from({ length: 10 }, (_, i) => `77777777-7777-7777-7777-77777777770${i}`);
+    for (const sid of sessionIds) {
+      await events.insertBatch([
+        { eventType: 'session_start', visitorId: VISITOR, sessionId: sid, userId: null, path: null, productId: null, device: 'desktop', props: {} },
+      ]);
+    }
+    for (const sid of sessionIds.slice(0, 5)) {
+      await events.insertBatch([
+        { eventType: 'add_to_cart', visitorId: VISITOR, sessionId: sid, userId: null, path: null, productId: PRODUCT, device: 'desktop', props: {} },
+      ]);
+    }
+    // orders: 100 + 250 + 175 = 525 paise across 3 orders -> aov = round(525/3) = 175
+    const totals = [100, 250, 175];
+    for (const [i, sid] of sessionIds.slice(0, 3).entries()) {
+      await events.insertBatch([
+        { eventType: 'order_placed', visitorId: VISITOR, sessionId: sid, userId: null, path: null, productId: null, device: 'desktop', props: { total: totals[i] } },
+      ]);
+    }
+    const summary = await service.summary(30);
+    expect(summary.kpis.sessions).toBe(10);
+    expect(summary.kpis.orders).toBe(3);
+    expect(summary.kpis.revenue).toBe(525);
+    expect(summary.kpis.conversionRate).toBeCloseTo(0.3);
+    expect(summary.kpis.cartAbandonmentRate).toBeCloseTo(0.4); // (5-3)/5
+    expect(summary.kpis.aov).toBe(175);
+  });
+
+  it('rounds aov to the nearest integer paise', async () => {
+    const { events, service } = setup();
+    await events.insertBatch([
+      { eventType: 'order_placed', visitorId: VISITOR, sessionId: SESSION, userId: null, path: null, productId: null, device: 'desktop', props: { total: 100 } },
+      { eventType: 'order_placed', visitorId: VISITOR, sessionId: SESSION_2, userId: null, path: null, productId: null, device: 'desktop', props: { total: 101 } },
+      { eventType: 'order_placed', visitorId: VISITOR, sessionId: SESSION_3, userId: null, path: null, productId: null, device: 'desktop', props: { total: 101 } },
+    ]);
+    const summary = await service.summary(30);
+    // 302 / 3 = 100.666... -> rounds to 101
+    expect(summary.kpis.aov).toBe(101);
+  });
+});

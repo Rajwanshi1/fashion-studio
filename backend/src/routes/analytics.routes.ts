@@ -1,7 +1,7 @@
 import { zValidator } from '@hono/zod-validator';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { AuthEnv } from '../middleware/auth';
+import { AuthEnv, requireAdmin, requireAuth } from '../middleware/auth';
 import type { AnalyticsService } from '../services/analytics.service';
 import { zodHook } from './hooks';
 
@@ -26,9 +26,8 @@ const batchSchema = z.object({
   events: z.array(eventSchema).min(1).max(20),
 });
 
-// jwtSecret isn't used by /track (public ingest) — it's accepted here so this
-// factory's signature already matches what Task 4's admin GET on this same
-// route group will need.
+const summaryQuery = z.object({ days: z.enum(['7', '30', '90']).default('30') });
+
 export function analyticsRoutes(analytics: AnalyticsService, jwtSecret: string) {
   const r = new Hono<AuthEnv>();
 
@@ -37,6 +36,17 @@ export function analyticsRoutes(analytics: AnalyticsService, jwtSecret: string) 
     await analytics.recordBatch(c.req.valid('json'), c.req.header('User-Agent') ?? null);
     return c.body(null, 204);
   });
+
+  r.get(
+    '/analytics/summary',
+    requireAuth(jwtSecret),
+    requireAdmin,
+    zValidator('query', summaryQuery, zodHook),
+    async (c) => {
+      const { days } = c.req.valid('query');
+      return c.json(await analytics.summary(Number(days)));
+    },
+  );
 
   return r;
 }
