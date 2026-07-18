@@ -351,6 +351,42 @@ select.inp {
 }
 .qr-preview .form-actions { margin-top: 0; justify-content: center; }
 
+/* ---- Analytics: funnel + trend charts ---- */
+.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; align-items: start; margin-bottom: 1rem; }
+@media (max-width: 980px) { .charts-row { grid-template-columns: 1fr; } }
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  padding: 1.4rem 1.5rem;
+}
+.chart-card svg { display: block; width: 100%; height: auto; }
+
+.funnel-label { font-family: var(--sans); font-size: 11px; fill: var(--ink-soft); }
+.funnel-track { fill: var(--celadon-50); }
+.funnel-bar { fill: var(--celadon-400); }
+.funnel-count { font-family: var(--sans); font-size: 12px; font-weight: 500; fill: var(--ink); }
+.funnel-drop { font-family: var(--sans); font-size: 10px; fill: var(--fg-muted); }
+
+.trend-legend {
+  display: flex;
+  gap: 1.2rem;
+  margin-bottom: 0.8rem;
+  font-size: 0.66rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.trend-legend .sw { display: inline-flex; align-items: center; gap: 0.4em; }
+.trend-legend .sw::before { content: ''; width: 14px; height: 3px; display: inline-block; border-radius: 2px; }
+.trend-legend .sw.sessions::before { background: var(--forest-700); }
+.trend-legend .sw.orders::before { background: var(--gold); }
+.trend-axis-line { stroke: var(--hairline); stroke-width: 1; }
+.trend-axis { font-family: var(--sans); font-size: 10px; fill: var(--fg-muted); }
+.trend-line { stroke-width: 2; }
+.trend-line.sessions { stroke: var(--forest-700); }
+.trend-line.orders { stroke: var(--gold); stroke-dasharray: 4 3; }
+
 /* ---- Loading / error states ---- */
 .state-note { color: var(--fg-muted); font-size: var(--t-sm); padding: 2rem 0; }
 

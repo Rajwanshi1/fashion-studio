@@ -10,6 +10,7 @@ import Orders from './pages/Orders';
 import Payments from './pages/Payments';
 import Users from './pages/Users';
 import Socials from './pages/Socials';
+import Analytics from './pages/Analytics';
 
 function RequireAuth() {
   const { token } = useAuth();
@@ -36,6 +37,7 @@ export default function App() {
               <Route path="/payments" element={<Payments />} />
               <Route path="/users" element={<Users />} />
               <Route path="/socials" element={<Socials />} />
+              <Route path="/analytics" element={<Analytics />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
