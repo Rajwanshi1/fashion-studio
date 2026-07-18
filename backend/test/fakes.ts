@@ -558,6 +558,20 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * everything inserted during a test run falls inside any 7/30/90 window.
  * `productNames` lets a test opt into name resolution for topProducts, mirroring
  * the real repo's `LEFT JOIN products`.
+ *
+ * IMPORTANT: this fake aggregates in plain JS (`Number(...)`, property access,
+ * etc.), which never throws the way Postgres does. `props` is client-controlled
+ * (see events.repo.ts), and the real SQL has to guard every cast of a props
+ * value against a poisoned/mistyped shape, or a bad row throws 22P02 and 500s
+ * the summary read. Those guards are structural — a CASE expression's branch
+ * order is documented SQL semantics (the ELSE/ineligible branch is guaranteed
+ * never to evaluate the cast), not something inferred from a particular query
+ * plan — but this fake still cannot reproduce the failure mode a broken guard
+ * would cause: it never throws the way an unguarded Postgres cast does, so a
+ * regression that weakens/removes one of those CASE guards will NOT be caught
+ * by tests running against FakeEventsRepo. Cast-guard changes must be
+ * verified against real Postgres (see task-4-report.md / the final-fix-report
+ * for the throwaway-container approach).
  */
 export class FakeEventsRepo implements EventsRepo {
   rows: StoredEvent[] = [];

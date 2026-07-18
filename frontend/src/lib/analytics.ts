@@ -3,9 +3,7 @@
 // Owns visitor/session identity, a small in-memory event queue, batched
 // flush to POST /api/track, and the page_view hook wired into the router.
 // Philosophy borrowed from socials/src/track.ts: tracking must never throw,
-// never block rendering, and every network call is fire-and-forget. This
-// task wires only session_start + page_view; instrumenting the rest of the
-// event whitelist is a later task.
+// never block rendering, and every network call is fire-and-forget.
 
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -110,6 +108,18 @@ function getOrRotateSession(): { id: string; rotated: boolean } {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ id, ts: now }));
     return { id, rotated: stale };
   } catch {
+    // Getting/parsing/setting ta.session failed — either storage is blocked
+    // (Safari private mode, "block all cookies") or the stored value was
+    // corrupted (bad JSON, wrong shape). In the corrupted case, clearing it
+    // here lets the *next* load self-heal back to a persisted session instead
+    // of permanently degrading to a fresh in-memory session on every load.
+    // Guarded: if storage is blocked, removeItem throws too, and that must
+    // never propagate out of this catch.
+    try {
+      localStorage.removeItem(SESSION_KEY);
+    } catch {
+      // Storage itself is blocked — nothing to clear, never throw.
+    }
     const stale = !memorySessionId || now - memorySessionTs > SESSION_IDLE_MS;
     if (stale) memorySessionId = randomUUID();
     memorySessionTs = now;

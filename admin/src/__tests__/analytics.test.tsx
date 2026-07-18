@@ -30,7 +30,7 @@ function summaryFixture(): AnalyticsSummary {
     topSearches: [{ query: 'lehenga', searches: 45, lastAt: '2026-07-15T10:00:00Z' }],
     zeroSearches: [{ query: 'red saree size 40', searches: 3, lastAt: '2026-07-14T10:00:00Z' }],
     sources: [{ source: 'instagram', sessions: 300 }],
-    devices: [{ device: 'mobile', sessions: 700 }],
+    devices: [{ device: 'mobile', sessions: 12345 }],
     sizes: [{ size: 'M', adds: 90 }],
     colors: [{ color: 'Emerald', adds: 70 }],
   };
@@ -97,6 +97,10 @@ describe('Analytics', () => {
     expect(screen.getByText('Emerald Court Gown')).toBeInTheDocument();
     expect(screen.getByText('26.7%')).toBeInTheDocument(); // 80/300 view→cart
     expect(screen.getByText('25.0%')).toBeInTheDocument(); // 20/80 cart→buy
+
+    // count cells use en-IN grouping like the KPI cards (Fix 5) — 300 is
+    // below the grouping threshold, so exercise it with a 5-digit count.
+    expect(screen.getByText('12,345')).toBeInTheDocument(); // devices sessions
   });
 
   it('refetches with ?days=7 when the 7 Days toggle is clicked', async () => {

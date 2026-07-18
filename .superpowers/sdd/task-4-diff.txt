@@ -1,0 +1,962 @@
+ backend/src/data/events.repo.ts           | 236 ++++++++++++++++++++++++++++++
+ backend/src/routes/analytics.routes.ts    |  18 ++-
+ backend/src/services/analytics.service.ts |  86 ++++++++++-
+ backend/test/analytics.service.test.ts    | 114 +++++++++++++++
+ backend/test/api.test.ts                  | 104 +++++++++++++
+ backend/test/fakes.ts                     | 184 ++++++++++++++++++++++-
+ 6 files changed, 734 insertions(+), 8 deletions(-)
+
+=== FULL DIFF ===
+diff --git a/backend/src/data/events.repo.ts b/backend/src/data/events.repo.ts
+index 1300d2b..81bb86d 100644
+--- a/backend/src/data/events.repo.ts
++++ b/backend/src/data/events.repo.ts
+@@ -4,22 +4,100 @@ export interface NewEvent {
+   eventType: string;
+   visitorId: string;
+   sessionId: string;
+   userId: string | null;
+   path: string | null;
+   productId: string | null;
+   device: string;
+   props: object;
+ }
+ 
++export interface KpiAndFunnel {
++  sessions: number;
++  pdpSessions: number;
++  cartSessions: number;
++  checkoutSessions: number;
++  orderSessions: number;
++  orders: number;
++  /** Paise. Coerced from pg's bigint-as-string. */
++  revenue: number;
++}
++
++export interface TrendDay {
++  /** YYYY-MM-DD */
++  day: string;
++  sessions: number;
++  orders: number;
++}
++
++export interface TopProduct {
++  productId: string;
++  name: string;
++  views: number;
++  carts: number;
++  purchased: number;
++}
++
++export interface SearchRow {
++  query: string;
++  searches: number;
++  lastAt: string;
++}
++
++export interface SourceRow {
++  source: string;
++  sessions: number;
++}
++
++export interface DeviceRow {
++  device: string;
++  sessions: number;
++}
++
++export interface SizeRow {
++  size: string;
++  adds: number;
++}
++
++export interface ColorRow {
++  color: string;
++  adds: number;
++}
++
+ export interface EventsRepo {
+   insertBatch(rows: NewEvent[]): Promise<void>;
++  kpiAndFunnel(days: number): Promise<KpiAndFunnel>;
++  dailyTrend(days: number): Promise<TrendDay[]>;
++  topProducts(days: number): Promise<TopProduct[]>;
++  topSearches(days: number): Promise<SearchRow[]>;
++  zeroSearches(days: number): Promise<SearchRow[]>;
++  sources(days: number): Promise<SourceRow[]>;
++  devices(days: number): Promise<DeviceRow[]>;
++  sizes(days: number): Promise<SizeRow[]>;
++  colors(days: number): Promise<ColorRow[]>;
++}
++
++// Shared by topSearches/zeroSearches — identical shape, the zero variant adds
++// one extra predicate on props->>'results'.
++async function searchRows(pool: Pool, days: number, zeroOnly: boolean): Promise<SearchRow[]> {
++  const zeroClause = zeroOnly ? `AND (props->>'results')::int = 0` : '';
++  const { rows } = await pool.query(
++    `SELECT props->>'query' AS query, COUNT(*)::int AS searches, MAX(created_at) AS last_at
++     FROM events
++     WHERE event_type = 'search' AND props ? 'query' ${zeroClause}
++       AND created_at > now() - make_interval(days => $1)
++     GROUP BY 1
++     ORDER BY searches DESC
++     LIMIT 20`,
++    [days],
++  );
++  return rows.map((r) => ({ query: r.query, searches: r.searches, lastAt: r.last_at.toISOString() }));
+ }
+ 
+ export function createEventsRepo(pool: Pool): EventsRepo {
+   return {
+     // Single round-trip via UNNEST — one parameterized statement regardless of batch size.
+     async insertBatch(rows) {
+       if (rows.length === 0) return;
+       await pool.query(
+         `INSERT INTO events (event_type, visitor_id, session_id, user_id, path, product_id, device, props)
+          SELECT * FROM UNNEST($1::text[], $2::uuid[], $3::uuid[], $4::uuid[], $5::text[], $6::uuid[], $7::text[], $8::jsonb[])`,
+@@ -28,12 +106,170 @@ export function createEventsRepo(pool: Pool): EventsRepo {
+           rows.map((r) => r.visitorId),
+           rows.map((r) => r.sessionId),
+           rows.map((r) => r.userId),
+           rows.map((r) => r.path),
+           rows.map((r) => r.productId),
+           rows.map((r) => r.device),
+           rows.map((r) => JSON.stringify(r.props)),
+         ],
+       );
+     },
++
++    async kpiAndFunnel(days) {
++      const { rows } = await pool.query(
++        `SELECT
++           COUNT(DISTINCT session_id) FILTER (WHERE event_type = 'session_start')::int   AS sessions,
++           COUNT(DISTINCT session_id) FILTER (WHERE event_type = 'product_view')::int    AS pdp_sessions,
++           COUNT(DISTINCT session_id) FILTER (WHERE event_type = 'add_to_cart')::int     AS cart_sessions,
++           COUNT(DISTINCT session_id) FILTER (WHERE event_type = 'checkout_start')::int  AS checkout_sessions,
++           COUNT(DISTINCT session_id) FILTER (WHERE event_type = 'order_placed')::int    AS order_sessions,
++           COUNT(*)                   FILTER (WHERE event_type = 'order_placed')::int    AS orders,
++           COALESCE(SUM((props->>'total')::bigint) FILTER (WHERE event_type = 'order_placed'), 0)::bigint AS revenue
++         FROM events WHERE created_at > now() - make_interval(days => $1)`,
++        [days],
++      );
++      const row = rows[0];
++      return {
++        sessions: row.sessions,
++        pdpSessions: row.pdp_sessions,
++        cartSessions: row.cart_sessions,
++        checkoutSessions: row.checkout_sessions,
++        orderSessions: row.order_sessions,
++        orders: row.orders,
++        revenue: Number(row.revenue), // pg bigint comes back as string
++      };
++    },
++
++    async dailyTrend(days) {
++      const { rows } = await pool.query(
++        `SELECT d::date AS day, COALESCE(e.sessions,0)::int AS sessions, COALESCE(e.orders,0)::int AS orders
++         FROM generate_series(date_trunc('day', now()) - make_interval(days => $1 - 1), date_trunc('day', now()), interval '1 day') d
++         LEFT JOIN (
++           SELECT date_trunc('day', created_at)::date AS day,
++                  COUNT(DISTINCT session_id) FILTER (WHERE event_type='session_start')::int AS sessions,
++                  COUNT(*) FILTER (WHERE event_type='order_placed')::int AS orders
++           FROM events WHERE created_at > now() - make_interval(days => $1) GROUP BY 1
++         ) e ON e.day = d::date ORDER BY d`,
++        [days],
++      );
++      return rows.map((r) => ({
++        day: r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day).slice(0, 10),
++        sessions: r.sessions,
++        orders: r.orders,
++      }));
++    },
++
++    async topProducts(days) {
++      const { rows } = await pool.query(
++        `WITH views AS (
++           SELECT product_id, COUNT(*)::int AS views
++           FROM events
++           WHERE event_type = 'product_view' AND product_id IS NOT NULL
++             AND created_at > now() - make_interval(days => $1)
++           GROUP BY product_id
++         ),
++         carts AS (
++           SELECT product_id, COUNT(*)::int AS carts
++           FROM events
++           WHERE event_type = 'add_to_cart' AND product_id IS NOT NULL
++             AND created_at > now() - make_interval(days => $1)
++           GROUP BY product_id
++         ),
++         bought AS (
++           SELECT (item->>'productId')::uuid AS product_id, SUM((item->>'qty')::int) AS purchased
++           FROM events, jsonb_array_elements(props->'items') item
++           WHERE event_type = 'order_placed'
++             AND created_at > now() - make_interval(days => $1)
++           GROUP BY 1
++         ),
++         ids AS (
++           SELECT product_id FROM views
++           UNION
++           SELECT product_id FROM carts
++           UNION
++           SELECT product_id FROM bought
++         )
++         SELECT ids.product_id AS product_id,
++                COALESCE(p.name, '(removed product)') AS name,
++                COALESCE(views.views, 0)::int AS views,
++                COALESCE(carts.carts, 0)::int AS carts,
++                COALESCE(bought.purchased, 0)::int AS purchased
++         FROM ids
++         LEFT JOIN views ON views.product_id = ids.product_id
++         LEFT JOIN carts ON carts.product_id = ids.product_id
++         LEFT JOIN bought ON bought.product_id = ids.product_id
++         LEFT JOIN products p ON p.id = ids.product_id
++         ORDER BY views DESC, carts DESC
++         LIMIT 10`,
++        [days],
++      );
++      return rows.map((r) => ({
++        productId: r.product_id,
++        name: r.name,
++        views: r.views,
++        carts: r.carts,
++        purchased: r.purchased,
++      }));
++    },
++
++    topSearches: (days) => searchRows(pool, days, false),
++    zeroSearches: (days) => searchRows(pool, days, true),
++
++    async sources(days) {
++      const { rows } = await pool.query(
++        `SELECT
++           COALESCE(
++             NULLIF(props->>'utmSource',''),
++             CASE WHEN COALESCE(props->>'referrer','')='' THEN 'direct'
++                  ELSE substring(props->>'referrer' from '^https?://([^/]+)') END,
++             'direct'
++           ) AS source,
++           COUNT(DISTINCT session_id)::int AS sessions
++         FROM events
++         WHERE event_type = 'session_start' AND created_at > now() - make_interval(days => $1)
++         GROUP BY 1
++         ORDER BY sessions DESC
++         LIMIT 20`,
++        [days],
++      );
++      return rows.map((r) => ({ source: r.source, sessions: r.sessions }));
++    },
++
++    async devices(days) {
++      const { rows } = await pool.query(
++        `SELECT device, COUNT(DISTINCT session_id)::int AS sessions
++         FROM events
++         WHERE event_type = 'session_start' AND created_at > now() - make_interval(days => $1)
++         GROUP BY 1
++         ORDER BY sessions DESC`,
++        [days],
++      );
++      return rows.map((r) => ({ device: r.device, sessions: r.sessions }));
++    },
++
++    async sizes(days) {
++      const { rows } = await pool.query(
++        `SELECT props->>'size' AS size, COUNT(*)::int AS adds
++         FROM events
++         WHERE event_type = 'add_to_cart' AND props ? 'size'
++           AND created_at > now() - make_interval(days => $1)
++         GROUP BY 1
++         ORDER BY adds DESC`,
++        [days],
++      );
++      return rows.map((r) => ({ size: r.size, adds: r.adds }));
++    },
++
++    async colors(days) {
++      const { rows } = await pool.query(
++        `SELECT props->>'color' AS color, COUNT(*)::int AS adds
++         FROM events
++         WHERE event_type = 'add_to_cart' AND props ? 'color'
++           AND created_at > now() - make_interval(days => $1)
++         GROUP BY 1
++         ORDER BY adds DESC`,
++        [days],
++      );
++      return rows.map((r) => ({ color: r.color, adds: r.adds }));
++    },
+   };
+ }
+diff --git a/backend/src/routes/analytics.routes.ts b/backend/src/routes/analytics.routes.ts
+index 91743f6..7736af0 100644
+--- a/backend/src/routes/analytics.routes.ts
++++ b/backend/src/routes/analytics.routes.ts
+@@ -1,14 +1,14 @@
+ import { zValidator } from '@hono/zod-validator';
+ import { Hono } from 'hono';
+ import { z } from 'zod';
+-import { AuthEnv } from '../middleware/auth';
++import { AuthEnv, requireAdmin, requireAuth } from '../middleware/auth';
+ import type { AnalyticsService } from '../services/analytics.service';
+ import { zodHook } from './hooks';
+ 
+ export const EVENT_TYPES = [
+   'session_start', 'page_view', 'product_view', 'add_to_cart', 'remove_from_cart',
+   'checkout_start', 'checkout_step', 'payment_result', 'order_placed',
+   'search', 'filter_apply', 'sort_change', 'wishlist_add', 'wishlist_remove',
+   'variant_select', 'color_select', 'signup', 'login', 'newsletter_signup', 'contact_submit',
+ ] as const;
+ 
+@@ -19,24 +19,34 @@ const eventSchema = z.object({
+   props: z.record(z.unknown()).optional(),
+ });
+ 
+ const batchSchema = z.object({
+   visitorId: z.string().uuid(),
+   sessionId: z.string().uuid(),
+   userId: z.string().uuid().nullish(),
+   events: z.array(eventSchema).min(1).max(20),
+ });
+ 
+-// jwtSecret isn't used by /track (public ingest) — it's accepted here so this
+-// factory's signature already matches what Task 4's admin GET on this same
+-// route group will need.
++const summaryQuery = z.object({ days: z.enum(['7', '30', '90']).default('30') });
++
+ export function analyticsRoutes(analytics: AnalyticsService, jwtSecret: string) {
+   const r = new Hono<AuthEnv>();
+ 
+   // Public — batched beacon fired by the frontend tracker.
+   r.post('/track', zValidator('json', batchSchema, zodHook), async (c) => {
+     await analytics.recordBatch(c.req.valid('json'), c.req.header('User-Agent') ?? null);
+     return c.body(null, 204);
+   });
+ 
++  r.get(
++    '/analytics/summary',
++    requireAuth(jwtSecret),
++    requireAdmin,
++    zValidator('query', summaryQuery, zodHook),
++    async (c) => {
++      const { days } = c.req.valid('query');
++      return c.json(await analytics.summary(Number(days)));
++    },
++  );
++
+   return r;
+ }
+diff --git a/backend/src/services/analytics.service.ts b/backend/src/services/analytics.service.ts
+index acf048d..791e949 100644
+--- a/backend/src/services/analytics.service.ts
++++ b/backend/src/services/analytics.service.ts
+@@ -1,11 +1,21 @@
+-import type { EventsRepo, NewEvent } from '../data/events.repo';
++import type {
++  ColorRow,
++  DeviceRow,
++  EventsRepo,
++  NewEvent,
++  SearchRow,
++  SizeRow,
++  SourceRow,
++  TopProduct,
++  TrendDay,
++} from '../data/events.repo';
+ 
+ const MAX_PATH_LEN = 512;
+ const MAX_PROPS_LEN = 2048;
+ 
+ export type Device = 'mobile' | 'desktop';
+ 
+ /** One device per batch, derived once from the request's User-Agent header. */
+ export function classifyDevice(userAgent: string | null): Device {
+   return userAgent && /Mobi|Android|iPhone|iPad|iPod/i.test(userAgent) ? 'mobile' : 'desktop';
+ }
+@@ -17,22 +27,50 @@ export interface BatchEvent {
+   props?: Record<string, unknown>;
+ }
+ 
+ export interface EventBatch {
+   visitorId: string;
+   sessionId: string;
+   userId?: string | null;
+   events: BatchEvent[];
+ }
+ 
++export type FunnelStageLabel = 'Sessions' | 'Product views' | 'Added to cart' | 'Checkout' | 'Purchased';
++
++export interface FunnelStage {
++  stage: FunnelStageLabel;
++  sessions: number;
++}
++
++export interface AnalyticsSummary {
++  kpis: {
++    sessions: number;
++    orders: number;
++    revenue: number;
++    conversionRate: number;
++    cartAbandonmentRate: number;
++    aov: number;
++  };
++  funnel: FunnelStage[];
++  trend: TrendDay[];
++  topProducts: TopProduct[];
++  topSearches: SearchRow[];
++  zeroSearches: SearchRow[];
++  sources: SourceRow[];
++  devices: DeviceRow[];
++  sizes: SizeRow[];
++  colors: ColorRow[];
++}
++
+ export interface AnalyticsService {
+   recordBatch(batch: EventBatch, userAgent: string | null): Promise<void>;
++  summary(days: number): Promise<AnalyticsSummary>;
+ }
+ 
+ export function createAnalyticsService(deps: { events: EventsRepo }): AnalyticsService {
+   return {
+     async recordBatch(batch, userAgent) {
+       const device = classifyDevice(userAgent);
+       const userId = batch.userId ?? null;
+ 
+       const rows: NewEvent[] = batch.events.map((event) => {
+         const path = event.path ? event.path.slice(0, MAX_PATH_LEN) : null;
+@@ -48,12 +86,58 @@ export function createAnalyticsService(deps: { events: EventsRepo }): AnalyticsS
+           userId,
+           path,
+           productId: event.productId ?? null,
+           device,
+           props,
+         };
+       });
+ 
+       await deps.events.insertBatch(rows);
+     },
++
++    async summary(days) {
++      const [kpi, trend, topProducts, topSearches, zeroSearches, sources, devices, sizes, colors] = await Promise.all([
++        deps.events.kpiAndFunnel(days),
++        deps.events.dailyTrend(days),
++        deps.events.topProducts(days),
++        deps.events.topSearches(days),
++        deps.events.zeroSearches(days),
++        deps.events.sources(days),
++        deps.events.devices(days),
++        deps.events.sizes(days),
++        deps.events.colors(days),
++      ]);
++
++      // Every rate is zero-guarded: an empty denominator yields 0, never NaN/Infinity.
++      const conversionRate = kpi.sessions > 0 ? kpi.orderSessions / kpi.sessions : 0;
++      const cartAbandonmentRate =
++        kpi.cartSessions > 0 ? Math.max(0, (kpi.cartSessions - kpi.orderSessions) / kpi.cartSessions) : 0;
++      const aov = kpi.orders > 0 ? Math.round(kpi.revenue / kpi.orders) : 0;
++
++      return {
++        kpis: {
++          sessions: kpi.sessions,
++          orders: kpi.orders,
++          revenue: kpi.revenue,
++          conversionRate,
++          cartAbandonmentRate,
++          aov,
++        },
++        funnel: [
++          { stage: 'Sessions', sessions: kpi.sessions },
++          { stage: 'Product views', sessions: kpi.pdpSessions },
++          { stage: 'Added to cart', sessions: kpi.cartSessions },
++          { stage: 'Checkout', sessions: kpi.checkoutSessions },
++          { stage: 'Purchased', sessions: kpi.orderSessions },
++        ],
++        trend,
++        topProducts,
++        topSearches,
++        zeroSearches,
++        sources,
++        devices,
++        sizes,
++        colors,
++      };
++    },
+   };
+ }
+diff --git a/backend/test/analytics.service.test.ts b/backend/test/analytics.service.test.ts
+index 47833fa..2d6e992 100644
+--- a/backend/test/analytics.service.test.ts
++++ b/backend/test/analytics.service.test.ts
+@@ -141,10 +141,124 @@ describe('AnalyticsService.recordBatch', () => {
+     const counting = { insertBatch: (rows: any) => { calls++; return events.insertBatch(rows); } };
+     const service = createAnalyticsService({ events: counting as any });
+     await service.recordBatch(
+       { visitorId: VISITOR, sessionId: SESSION, events: [{ type: 'page_view' }, { type: 'product_view' }] },
+       null,
+     );
+     expect(calls).toBe(1);
+     expect(events.rows).toHaveLength(2);
+   });
+ });
++
++describe('AnalyticsService.summary', () => {
++  const SESSION_2 = '55555555-5555-5555-5555-555555555555';
++  const SESSION_3 = '66666666-6666-6666-6666-666666666666';
++
++  function setup() {
++    const events = new FakeEventsRepo();
++    return { events, service: createAnalyticsService({ events }) };
++  }
++
++  it('returns all-zero kpis (never NaN/Infinity) when there is no data at all', async () => {
++    const { service } = setup();
++    const summary = await service.summary(30);
++    expect(summary.kpis).toEqual({
++      sessions: 0,
++      orders: 0,
++      revenue: 0,
++      conversionRate: 0,
++      cartAbandonmentRate: 0,
++      aov: 0,
++    });
++    // trend is gap-filled — always `days` entries, all zero when there's no data.
++    expect(summary.trend).toHaveLength(30);
++    expect(summary.trend.every((d) => d.sessions === 0 && d.orders === 0)).toBe(true);
++    expect(summary.topProducts).toEqual([]);
++  });
++
++  it('funnel stages are the 5 fixed labels in fixed order', async () => {
++    const { service } = setup();
++    const summary = await service.summary(30);
++    expect(summary.funnel.map((f) => f.stage)).toEqual([
++      'Sessions',
++      'Product views',
++      'Added to cart',
++      'Checkout',
++      'Purchased',
++    ]);
++  });
++
++  it('conversionRate and aov are 0 (not NaN) when sessions exist but zero orders', async () => {
++    const { events, service } = setup();
++    await events.insertBatch([
++      { eventType: 'session_start', visitorId: VISITOR, sessionId: SESSION, userId: null, path: null, productId: null, device: 'desktop', props: {} },
++    ]);
++    const summary = await service.summary(30);
++    expect(summary.kpis.sessions).toBe(1);
++    expect(summary.kpis.conversionRate).toBe(0);
++    expect(summary.kpis.cartAbandonmentRate).toBe(0);
++    expect(summary.kpis.aov).toBe(0);
++  });
++
++  it('cartAbandonmentRate is 1 (fully abandoned) when carts exist but zero orders', async () => {
++    const { events, service } = setup();
++    await events.insertBatch([
++      { eventType: 'add_to_cart', visitorId: VISITOR, sessionId: SESSION, userId: null, path: null, productId: PRODUCT, device: 'desktop', props: {} },
++    ]);
++    const summary = await service.summary(30);
++    expect(summary.kpis.cartAbandonmentRate).toBe(1);
++    expect(summary.kpis.aov).toBe(0);
++  });
++
++  it('clamps cartAbandonmentRate to 0 (never negative) when order sessions exceed cart sessions', async () => {
++    const { events, service } = setup();
++    await events.insertBatch([
++      { eventType: 'add_to_cart', visitorId: VISITOR, sessionId: SESSION, userId: null, path: null, productId: null, device: 'desktop', props: {} },
++      { eventType: 'order_placed', visitorId: VISITOR, sessionId: SESSION, userId: null, path: null, productId: null, device: 'desktop', props: { total: 100 } },
++      { eventType: 'order_placed', visitorId: VISITOR, sessionId: SESSION_2, userId: null, path: null, productId: null, device: 'desktop', props: { total: 200 } },
++    ]);
++    const summary = await service.summary(30);
++    expect(summary.kpis.cartAbandonmentRate).toBe(0);
++  });
++
++  it('computes conversionRate, cartAbandonmentRate and a rounded aov from realistic counts', async () => {
++    const { events, service } = setup();
++    // 10 distinct sessions, 5 of which add to cart, 3 of which order.
++    const sessionIds = Array.from({ length: 10 }, (_, i) => `77777777-7777-7777-7777-77777777770${i}`);
++    for (const sid of sessionIds) {
++      await events.insertBatch([
++        { eventType: 'session_start', visitorId: VISITOR, sessionId: sid, userId: null, path: null, productId: null, device: 'desktop', props: {} },
++      ]);
++    }
++    for (const sid of sessionIds.slice(0, 5)) {
++      await events.insertBatch([
++        { eventType: 'add_to_cart', visitorId: VISITOR, sessionId: sid, userId: null, path: null, productId: PRODUCT, device: 'desktop', props: {} },
++      ]);
++    }
++    // orders: 100 + 250 + 175 = 525 paise across 3 orders -> aov = round(525/3) = 175
++    const totals = [100, 250, 175];
++    for (const [i, sid] of sessionIds.slice(0, 3).entries()) {
++      await events.insertBatch([
++        { eventType: 'order_placed', visitorId: VISITOR, sessionId: sid, userId: null, path: null, productId: null, device: 'desktop', props: { total: totals[i] } },
++      ]);
++    }
++    const summary = await service.summary(30);
++    expect(summary.kpis.sessions).toBe(10);
++    expect(summary.kpis.orders).toBe(3);
++    expect(summary.kpis.revenue).toBe(525);
++    expect(summary.kpis.conversionRate).toBeCloseTo(0.3);
++    expect(summary.kpis.cartAbandonmentRate).toBeCloseTo(0.4); // (5-3)/5
++    expect(summary.kpis.aov).toBe(175);
++  });
++
++  it('rounds aov to the nearest integer paise', async () => {
++    const { events, service } = setup();
++    await events.insertBatch([
++      { eventType: 'order_placed', visitorId: VISITOR, sessionId: SESSION, userId: null, path: null, productId: null, device: 'desktop', props: { total: 100 } },
++      { eventType: 'order_placed', visitorId: VISITOR, sessionId: SESSION_2, userId: null, path: null, productId: null, device: 'desktop', props: { total: 101 } },
++      { eventType: 'order_placed', visitorId: VISITOR, sessionId: SESSION_3, userId: null, path: null, productId: null, device: 'desktop', props: { total: 101 } },
++    ]);
++    const summary = await service.summary(30);
++    // 302 / 3 = 100.666... -> rounds to 101
++    expect(summary.kpis.aov).toBe(101);
++  });
++});
+diff --git a/backend/test/api.test.ts b/backend/test/api.test.ts
+index f1cc0c9..842456d 100644
+--- a/backend/test/api.test.ts
++++ b/backend/test/api.test.ts
+@@ -810,11 +810,115 @@ describe('API', () => {
+       expect(res.status).toBe(400);
+       expect(f.events.rows).toHaveLength(0);
+     });
+ 
+     it('400 on a non-uuid visitorId', async () => {
+       const res = await app.request('/api/track', post({ ...validBatch(), visitorId: 'not-a-uuid' }));
+       expect(res.status).toBe(400);
+       expect(f.events.rows).toHaveLength(0);
+     });
+   });
++
++  describe('analytics summary (admin read)', () => {
++    it('GET /api/analytics/summary requires admin auth: 401 anonymous, 403 customer', async () => {
++      expect((await app.request('/api/analytics/summary')).status).toBe(401);
++      const { token: customerToken } = await registerCustomer();
++      expect((await app.request('/api/analytics/summary', bearer(customerToken))).status).toBe(403);
++    });
++
++    it('?days=14 is rejected with 400; 7/30(default)/90 are accepted', async () => {
++      expect((await app.request('/api/analytics/summary?days=14', bearer(adminToken))).status).toBe(400);
++      expect((await app.request('/api/analytics/summary?days=7', bearer(adminToken))).status).toBe(200);
++      expect((await app.request('/api/analytics/summary?days=90', bearer(adminToken))).status).toBe(200);
++      expect((await app.request('/api/analytics/summary', bearer(adminToken))).status).toBe(200); // default 30
++    });
++
++    it('returns the full response contract shape with seeded events', async () => {
++      const V1 = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
++      const V2 = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
++      // Fake product ids (e.g. 'p-1') aren't valid UUIDs, and the /track schema requires
++      // productId to be a UUID — use a standalone UUID and seed its display name directly.
++      const PRODUCT_ID = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
++      const PRODUCT_NAME = 'Sage Sequin Jacket Lehenga';
++      f.events.productNames.set(PRODUCT_ID, PRODUCT_NAME);
++
++      // Session 1: lands via a UTM source, views + carts the product, searches (zero results), then buys.
++      await app.request('/api/track', post({
++        visitorId: V1,
++        sessionId: '11111111-aaaa-aaaa-aaaa-111111111111',
++        events: [
++          { type: 'session_start', props: { utmSource: 'newsletter' } },
++          { type: 'product_view', productId: PRODUCT_ID },
++          { type: 'add_to_cart', productId: PRODUCT_ID, props: { size: 'M', color: 'Sage' } },
++          { type: 'search', props: { query: 'lehenga', results: 0 } },
++          { type: 'checkout_start' },
++          { type: 'order_placed', props: { total: 18400000, items: [{ productId: PRODUCT_ID, qty: 1 }] } },
++        ],
++      }));
++
++      // Session 2: direct visit, just browses (no conversion) — mobile device.
++      await app.request('/api/track', {
++        method: 'POST',
++        headers: {
++          'Content-Type': 'application/json',
++          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148',
++        },
++        body: JSON.stringify({
++          visitorId: V2,
++          sessionId: '22222222-bbbb-bbbb-bbbb-222222222222',
++          events: [
++            { type: 'session_start', props: {} },
++            { type: 'search', props: { query: 'gown', results: 4 } },
++          ],
++        }),
++      });
++
++      const res = await app.request('/api/analytics/summary', bearer(adminToken));
++      expect(res.status).toBe(200);
++      const body = await res.json();
++
++      expect(body.kpis).toMatchObject({
++        sessions: 2,
++        orders: 1,
++        revenue: 18400000,
++      });
++      expect(body.kpis.conversionRate).toBeCloseTo(0.5);
++      expect(typeof body.kpis.aov).toBe('number');
++      expect(Number.isNaN(body.kpis.aov)).toBe(false);
++
++      expect(body.funnel.map((stage: any) => stage.stage)).toEqual([
++        'Sessions',
++        'Product views',
++        'Added to cart',
++        'Checkout',
++        'Purchased',
++      ]);
++      expect(body.funnel.every((stage: any) => typeof stage.sessions === 'number')).toBe(true);
++
++      expect(Array.isArray(body.trend)).toBe(true);
++      expect(body.trend.length).toBe(30); // default days window, gap-filled
++      expect(body.trend[0]).toMatchObject({ orders: expect.any(Number), sessions: expect.any(Number) });
++      expect(body.trend[0].day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
++
++      expect(body.topProducts).toContainEqual(
++        expect.objectContaining({ productId: PRODUCT_ID, name: PRODUCT_NAME, views: 1, carts: 1, purchased: 1 }),
++      );
++
++      expect(body.topSearches).toEqual(expect.arrayContaining([
++        expect.objectContaining({ query: 'lehenga', searches: 1 }),
++        expect.objectContaining({ query: 'gown', searches: 1 }),
++      ]));
++      expect(body.zeroSearches).toEqual([expect.objectContaining({ query: 'lehenga', searches: 1 })]);
++
++      expect(body.sources).toContainEqual({ source: 'newsletter', sessions: 1 });
++      expect(body.sources).toContainEqual({ source: 'direct', sessions: 1 });
++
++      expect(body.devices).toEqual(expect.arrayContaining([
++        expect.objectContaining({ device: 'desktop', sessions: 1 }),
++        expect.objectContaining({ device: 'mobile', sessions: 1 }),
++      ]));
++
++      expect(body.sizes).toContainEqual({ size: 'M', adds: 1 });
++      expect(body.colors).toContainEqual({ color: 'Sage', adds: 1 });
++    });
++  });
+ });
+diff --git a/backend/test/fakes.ts b/backend/test/fakes.ts
+index 89ca099..27430b0 100644
+--- a/backend/test/fakes.ts
++++ b/backend/test/fakes.ts
+@@ -3,21 +3,32 @@ import type { AdminPayment, CreatePaymentInput, PaymentsRepo } from '../src/data
+ import type {
+   AdminProduct,
+   CreateCategoryInput,
+   CreateProductInput,
+   ProductsRepo,
+   UpdateProductInput,
+   VariantForOrder,
+   WishlistRepo,
+ } from '../src/data/products.repo';
+ import type { ClicksRepo, LinkStats } from '../src/data/clicks.repo';
+-import type { EventsRepo, NewEvent } from '../src/data/events.repo';
++import type {
++  ColorRow,
++  DeviceRow,
++  EventsRepo,
++  KpiAndFunnel,
++  NewEvent,
++  SearchRow,
++  SizeRow,
++  SourceRow,
++  TopProduct,
++  TrendDay,
++} from '../src/data/events.repo';
+ import type { ScansRepo, SourceStats } from '../src/data/scans.repo';
+ import type { AdminUser, CreateUserInput, UsersRepo } from '../src/data/users.repo';
+ import type { GoogleTokenClaims, VerifyGoogleToken } from '../src/services/auth.service';
+ import type { PaymentProvider } from '../src/services/payments.service';
+ import {
+   Category,
+   DomainError,
+   Order,
+   OrderItem,
+   OrderStatus,
+@@ -530,25 +541,192 @@ export class FakeClicksRepo implements ClicksRepo {
+         source: rows[0].source,
+         total: rows.length,
+         last7: rows.filter((r) => now - new Date(r.createdAt).getTime() <= 7 * DAY_MS).length,
+         last30: rows.filter((r) => now - new Date(r.createdAt).getTime() <= 30 * DAY_MS).length,
+         lastClickAt: rows.map((r) => r.createdAt).sort().at(-1)!,
+       }))
+       .sort((a, b) => b.total - a.total);
+   }
+ }
+ 
++type StoredEvent = NewEvent & { createdAt: Date };
++
++const DAY_MS = 24 * 60 * 60 * 1000;
++
++/**
++ * In-memory stand-in for the aggregate reads. Rows are timestamped at insert
++ * time (like FakeScansRepo/FakeClicksRepo) so `days`-windowing is meaningful;
++ * everything inserted during a test run falls inside any 7/30/90 window.
++ * `productNames` lets a test opt into name resolution for topProducts, mirroring
++ * the real repo's `LEFT JOIN products`.
++ */
+ export class FakeEventsRepo implements EventsRepo {
+-  rows: NewEvent[] = [];
++  rows: StoredEvent[] = [];
++  productNames = new Map<string, string>();
+ 
+   async insertBatch(rows: NewEvent[]): Promise<void> {
+-    this.rows.push(...rows);
++    const now = new Date();
++    this.rows.push(...rows.map((r) => ({ ...r, createdAt: now })));
++  }
++
++  private within(days: number): StoredEvent[] {
++    const cutoff = Date.now() - days * DAY_MS;
++    return this.rows.filter((r) => r.createdAt.getTime() > cutoff);
++  }
++
++  async kpiAndFunnel(days: number): Promise<KpiAndFunnel> {
++    const rows = this.within(days);
++    const distinctSessions = (type: string) =>
++      new Set(rows.filter((r) => r.eventType === type).map((r) => r.sessionId)).size;
++    const orderRows = rows.filter((r) => r.eventType === 'order_placed');
++    const revenue = orderRows.reduce((sum, r) => sum + Number((r.props as any)?.total ?? 0), 0);
++    return {
++      sessions: distinctSessions('session_start'),
++      pdpSessions: distinctSessions('product_view'),
++      cartSessions: distinctSessions('add_to_cart'),
++      checkoutSessions: distinctSessions('checkout_start'),
++      orderSessions: distinctSessions('order_placed'),
++      orders: orderRows.length,
++      revenue,
++    };
++  }
++
++  async dailyTrend(days: number): Promise<TrendDay[]> {
++    const rows = this.within(days);
++    const byDay = new Map<string, { sessions: Set<string>; orders: number }>();
++    const today = new Date();
++    for (let i = days - 1; i >= 0; i--) {
++      const d = new Date(today);
++      d.setUTCDate(d.getUTCDate() - i);
++      byDay.set(d.toISOString().slice(0, 10), { sessions: new Set(), orders: 0 });
++    }
++    for (const r of rows) {
++      const bucket = byDay.get(r.createdAt.toISOString().slice(0, 10));
++      if (!bucket) continue;
++      if (r.eventType === 'session_start') bucket.sessions.add(r.sessionId);
++      if (r.eventType === 'order_placed') bucket.orders++;
++    }
++    return [...byDay.entries()].map(([day, v]) => ({ day, sessions: v.sessions.size, orders: v.orders }));
++  }
++
++  async topProducts(days: number): Promise<TopProduct[]> {
++    const rows = this.within(days);
++    const views = new Map<string, number>();
++    const carts = new Map<string, number>();
++    const purchased = new Map<string, number>();
++    for (const r of rows) {
++      if (!r.productId) continue;
++      if (r.eventType === 'product_view') views.set(r.productId, (views.get(r.productId) ?? 0) + 1);
++      if (r.eventType === 'add_to_cart') carts.set(r.productId, (carts.get(r.productId) ?? 0) + 1);
++    }
++    for (const r of rows) {
++      if (r.eventType !== 'order_placed') continue;
++      const items = ((r.props as any)?.items ?? []) as { productId?: string; qty?: number }[];
++      for (const item of items) {
++        if (!item.productId) continue;
++        purchased.set(item.productId, (purchased.get(item.productId) ?? 0) + (item.qty ?? 0));
++      }
++    }
++    const ids = new Set([...views.keys(), ...carts.keys(), ...purchased.keys()]);
++    return [...ids]
++      .map((productId) => ({
++        productId,
++        name: this.productNames.get(productId) ?? '(removed product)',
++        views: views.get(productId) ?? 0,
++        carts: carts.get(productId) ?? 0,
++        purchased: purchased.get(productId) ?? 0,
++      }))
++      .sort((a, b) => b.views - a.views || b.carts - a.carts)
++      .slice(0, 10);
++  }
++
++  private searchGroups(days: number, zeroOnly: boolean): SearchRow[] {
++    const groups = new Map<string, { searches: number; lastAt: Date }>();
++    for (const r of this.within(days)) {
++      if (r.eventType !== 'search') continue;
++      const props = r.props as any;
++      if (props?.query === undefined) continue;
++      if (zeroOnly && Number(props?.results) !== 0) continue;
++      const g = groups.get(props.query) ?? { searches: 0, lastAt: r.createdAt };
++      g.searches++;
++      if (r.createdAt > g.lastAt) g.lastAt = r.createdAt;
++      groups.set(props.query, g);
++    }
++    return [...groups.entries()]
++      .map(([query, g]) => ({ query, searches: g.searches, lastAt: g.lastAt.toISOString() }))
++      .sort((a, b) => b.searches - a.searches)
++      .slice(0, 20);
++  }
++
++  async topSearches(days: number): Promise<SearchRow[]> {
++    return this.searchGroups(days, false);
++  }
++
++  async zeroSearches(days: number): Promise<SearchRow[]> {
++    return this.searchGroups(days, true);
++  }
++
++  async sources(days: number): Promise<SourceRow[]> {
++    const counts = new Map<string, Set<string>>();
++    for (const r of this.within(days)) {
++      if (r.eventType !== 'session_start') continue;
++      const props = r.props as any;
++      let source = 'direct';
++      if (props?.utmSource) {
++        source = props.utmSource;
++      } else if (props?.referrer) {
++        const match = /^https?:\/\/([^/]+)/.exec(props.referrer);
++        source = match ? match[1] : 'direct';
++      }
++      const set = counts.get(source) ?? new Set<string>();
++      set.add(r.sessionId);
++      counts.set(source, set);
++    }
++    return [...counts.entries()]
++      .map(([source, sessions]) => ({ source, sessions: sessions.size }))
++      .sort((a, b) => b.sessions - a.sessions)
++      .slice(0, 20);
++  }
++
++  async devices(days: number): Promise<DeviceRow[]> {
++    const counts = new Map<string, Set<string>>();
++    for (const r of this.within(days)) {
++      if (r.eventType !== 'session_start') continue;
++      const set = counts.get(r.device) ?? new Set<string>();
++      set.add(r.sessionId);
++      counts.set(r.device, set);
++    }
++    return [...counts.entries()]
++      .map(([device, sessions]) => ({ device, sessions: sessions.size }))
++      .sort((a, b) => b.sessions - a.sessions);
++  }
++
++  async sizes(days: number): Promise<SizeRow[]> {
++    const counts = new Map<string, number>();
++    for (const r of this.within(days)) {
++      if (r.eventType !== 'add_to_cart') continue;
++      const size = (r.props as any)?.size;
++      if (size === undefined) continue;
++      counts.set(size, (counts.get(size) ?? 0) + 1);
++    }
++    return [...counts.entries()].map(([size, adds]) => ({ size, adds })).sort((a, b) => b.adds - a.adds);
++  }
++
++  async colors(days: number): Promise<ColorRow[]> {
++    const counts = new Map<string, number>();
++    for (const r of this.within(days)) {
++      if (r.eventType !== 'add_to_cart') continue;
++      const color = (r.props as any)?.color;
++      if (color === undefined) continue;
++      counts.set(color, (counts.get(color) ?? 0) + 1);
++    }
++    return [...counts.entries()].map(([color, adds]) => ({ color, adds })).sort((a, b) => b.adds - a.adds);
+   }
+ }
+ 
+ export interface Fakes {
+   users: FakeUsersRepo;
+   products: FakeProductsRepo;
+   wishlist: FakeWishlistRepo;
+   orders: FakeOrdersRepo;
+   payments: FakePaymentsRepo;
+   scans: FakeScansRepo;

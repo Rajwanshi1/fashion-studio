@@ -185,6 +185,39 @@ describe('analytics', () => {
     expect(eventTypes(body)).toEqual(['session_start', 'page_view']);
   });
 
+  it('self-heals a corrupted ta.session by clearing it, so the next load can persist a session again', async () => {
+    // Deliberately corrupt the stored session record (bad JSON) rather than
+    // block localStorage outright — this exercises the JSON.parse failure
+    // path specifically, distinct from the "storage blocked entirely" test
+    // above. Both fall into the same catch, whose in-memory fallback is
+    // module-level state shared across this file's tests — so, unlike other
+    // tests here, this one intentionally avoids asserting *which* session id
+    // comes back or whether it rotated (that depends on fallback state the
+    // test above already touched). What Fix 4 guarantees, and all this test
+    // asserts, is that the corrupted stored value itself gets cleared instead
+    // of poisoning every future read.
+    vi.useFakeTimers();
+    localStorage.setItem('ta.session', 'not-valid-json{');
+    const removeSpy = vi.spyOn(Storage.prototype, 'removeItem');
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // The corrupted read falls into the catch path; the call must never throw.
+    expect(() => track('page_view')).not.toThrow();
+    await vi.advanceTimersByTimeAsync(FLUSH_MS);
+
+    expect(removeSpy).toHaveBeenCalledWith('ta.session');
+    // Cleared, not left corrupted — the next load's getItem sees null
+    // (missing) rather than unparseable JSON, so it can self-heal back to a
+    // persisted session instead of permanently degrading to per-load ones.
+    expect(localStorage.getItem('ta.session')).toBeNull();
+
+    const body = lastBody(fetchMock);
+    expect(body.sessionId).toMatch(UUID_RE);
+
+    removeSpy.mockRestore();
+  });
+
   it('uses sendBeacon on pagehide when present', async () => {
     track('page_view');
 

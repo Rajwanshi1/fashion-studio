@@ -1,0 +1,1144 @@
+ .../src/__tests__/collection-tracking.test.tsx     | 58 ++++++++++++++++++
+ frontend/src/__tests__/plp.test.tsx                | 55 ++++++++++++++++-
+ frontend/src/__tests__/product-tracking.test.tsx   | 57 ++++++++++++++++++
+ frontend/src/__tests__/search.test.tsx             | 51 ++++++++++++++++
+ frontend/src/__tests__/wishlist-tracking.test.tsx  | 68 ++++++++++++++++++++++
+ frontend/src/lib/auth.tsx                          |  4 ++
+ frontend/src/lib/cart.tsx                          |  7 +++
+ frontend/src/lib/wishlist.tsx                      | 28 +++++----
+ frontend/src/pages/Checkout.tsx                    | 49 ++++++++++++++--
+ frontend/src/pages/Collection.tsx                  | 28 ++++++++-
+ frontend/src/pages/Contact.tsx                     |  2 +
+ frontend/src/pages/Home.tsx                        |  2 +
+ frontend/src/pages/Product.tsx                     | 22 ++++++-
+ frontend/src/pages/Search.tsx                      |  8 ++-
+ 14 files changed, 416 insertions(+), 23 deletions(-)
+
+=== FULL DIFF ===
+diff --git a/frontend/src/__tests__/collection-tracking.test.tsx b/frontend/src/__tests__/collection-tracking.test.tsx
+new file mode 100644
+index 0000000..1872e40
+--- /dev/null
++++ b/frontend/src/__tests__/collection-tracking.test.tsx
+@@ -0,0 +1,58 @@
++import { describe, expect, it, vi } from 'vitest';
++import { StrictMode } from 'react';
++import { render, screen } from '@testing-library/react';
++import { MemoryRouter, Route, Routes } from 'react-router-dom';
++import { Providers } from '../App';
++import Collection from '../pages/Collection';
++import { CATEGORIES, mockFetch } from './helpers';
++
++// Collection's filter_apply effect watches [colors, priceMax]. StrictMode
++// double-invokes that effect on mount: a naive one-shot boolean guard
++// ("have I run before?") is flipped false by invocation 1 and then read as
++// false by invocation 2, which arms a real debounce timer and fires a
++// spurious filter_apply with the *initial* filter values. The fix compares
++// against a snapshot of the last-tracked {colors, priceMax} instead, so both
++// StrictMode invocations see "unchanged" and bail. This test renders under
++// StrictMode (the plain renderApp() helper does not use StrictMode, which
++// is why the original bug slipped past the Task 3 test suite) and proves no
++// filter_apply fires merely from mounting.
++vi.mock('../lib/analytics', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('../lib/analytics')>();
++  return { ...actual, track: vi.fn() };
++});
++
++import { track } from '../lib/analytics';
++
++function productsPayload() {
++  return { items: [], total: 0, page: 1, pages: 1 };
++}
++
++describe('Collection page — filter_apply mount guard', () => {
++  it('does not fire filter_apply on mount, even under StrictMode double-invoke', async () => {
++    mockFetch((url) => {
++      if (url.includes('/api/categories')) return CATEGORIES;
++      if (url.includes('/api/products')) return productsPayload();
++      return undefined;
++    });
++
++    render(
++      <StrictMode>
++        <MemoryRouter initialEntries={['/collection/lehenga-sets']}>
++          <Providers>
++            <Routes>
++              <Route path="/collection/:categorySlug" element={<Collection />} />
++            </Routes>
++          </Providers>
++        </MemoryRouter>
++      </StrictMode>,
++    );
++
++    await screen.findByRole('heading', { level: 1, name: 'Lehenga Sets' });
++
++    // Give the (buggy version's) 500ms debounce timer a chance to fire.
++    await new Promise((resolve) => setTimeout(resolve, 600));
++
++    const filterCalls = vi.mocked(track).mock.calls.filter(([type]) => type === 'filter_apply');
++    expect(filterCalls).toHaveLength(0);
++  });
++});
+diff --git a/frontend/src/__tests__/plp.test.tsx b/frontend/src/__tests__/plp.test.tsx
+index f345424..fb23ee3 100644
+--- a/frontend/src/__tests__/plp.test.tsx
++++ b/frontend/src/__tests__/plp.test.tsx
+@@ -1,20 +1,36 @@
+-import { describe, expect, it } from 'vitest';
+-import { screen, waitFor } from '@testing-library/react';
++import { afterEach, describe, expect, it, vi } from 'vitest';
++import { fireEvent, screen, waitFor } from '@testing-library/react';
+ import userEvent from '@testing-library/user-event';
+ import { CATEGORIES, mockFetch, mockFetchDown, P1, P2, renderApp } from './helpers';
+ 
++// Mocked so the new filter_apply/sort_change instrumentation (wired in this
++// task) can be asserted directly, without coupling these tests to the
++// analytics module's batching/flush network mechanics (already covered by
++// analytics.test.ts).
++vi.mock('../lib/analytics', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('../lib/analytics')>();
++  return { ...actual, track: vi.fn() };
++});
++
++import { track } from '../lib/analytics';
++
+ function productsPayload() {
+   return { items: [P1, P2], total: 2, page: 1, pages: 1 };
+ }
+ 
+ describe('PLP', () => {
++  afterEach(() => {
++    vi.mocked(track).mockClear();
++    vi.useRealTimers();
++  });
++
+   it('renders products from the API', async () => {
+     mockFetch((url) => {
+       if (url.includes('/api/categories')) return CATEGORIES;
+       if (url.includes('/api/products')) return productsPayload();
+       return undefined;
+     });
+ 
+     renderApp('/collection/lehenga-sets');
+ 
+     expect((await screen.findAllByText('Sage Sequin Jacket Lehenga')).length).toBeGreaterThan(0);
+@@ -35,20 +51,55 @@ describe('PLP', () => {
+ 
+     const user = userEvent.setup();
+     await user.selectOptions(screen.getByLabelText('Sort'), 'price_asc');
+ 
+     await waitFor(() => {
+       const productCalls = fetchMock.mock.calls
+         .map((c) => String(c[0]))
+         .filter((u) => u.includes('/api/products'));
+       expect(productCalls.some((u) => u.includes('sort=price_asc'))).toBe(true);
+     });
++
++    expect(track).toHaveBeenCalledWith('sort_change', {
++      props: { category: 'lehenga-sets', sort: 'price_asc' },
++    });
++  });
++
++  it('filter_apply: skips the initial mount, debounces rapid changes, then fires once', async () => {
++    mockFetch((url) => {
++      if (url.includes('/api/categories')) return CATEGORIES;
++      if (url.includes('/api/products')) return productsPayload();
++      return undefined;
++    });
++
++    renderApp('/collection/lehenga-sets');
++    await screen.findAllByText('Sage Sequin Jacket Lehenga');
++
++    // Initial render establishes colors/priceMax without firing an event
++    // (skip-initial-render guard).
++    expect(track).not.toHaveBeenCalledWith('filter_apply', expect.anything());
++
++    vi.useFakeTimers();
++    fireEvent.click(screen.getByRole('button', { name: 'Sage' }));
++    fireEvent.click(screen.getByRole('button', { name: 'Moss' }));
++
++    // Still inside the 500ms debounce window — the price-slider-storm case.
++    await vi.advanceTimersByTimeAsync(400);
++    expect(track).not.toHaveBeenCalledWith('filter_apply', expect.anything());
++
++    await vi.advanceTimersByTimeAsync(150);
++
++    const filterCalls = vi.mocked(track).mock.calls.filter(([type]) => type === 'filter_apply');
++    expect(filterCalls).toHaveLength(1);
++    expect(filterCalls[0][1]).toEqual({
++      props: { category: 'lehenga-sets', colors: ['Sage', 'Moss'], priceMax: 300000 },
++    });
+   });
+ 
+   it('shows a graceful error state on API 404s', async () => {
+     mockFetch(() => undefined);
+     renderApp('/collection/lehenga-sets');
+     expect(await screen.findByText('Not found')).toBeInTheDocument();
+   });
+ 
+   it('renders gracefully when the API is unreachable', async () => {
+     mockFetchDown();
+diff --git a/frontend/src/__tests__/product-tracking.test.tsx b/frontend/src/__tests__/product-tracking.test.tsx
+new file mode 100644
+index 0000000..14ca35f
+--- /dev/null
++++ b/frontend/src/__tests__/product-tracking.test.tsx
+@@ -0,0 +1,57 @@
++import { describe, expect, it, vi } from 'vitest';
++import { StrictMode } from 'react';
++import { render, screen } from '@testing-library/react';
++import { MemoryRouter, Route, Routes } from 'react-router-dom';
++import { Providers } from '../App';
++import Product from '../pages/Product';
++import { DETAIL1, mockFetch } from './helpers';
++
++// Product's product-load effect fetches by slug; StrictMode double-invokes
++// that effect in dev, firing two independent requests that both land in
++// setProduct(). A useRef guard (lastTrackedSlugRef) ensures product_view
++// only tracks once per slug regardless. We mock the analytics module's
++// `track` export directly (rather than asserting on the network layer) so
++// this test is about the guard, not about batching/flush mechanics already
++// covered by analytics.test.ts.
++vi.mock('../lib/analytics', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('../lib/analytics')>();
++  return { ...actual, track: vi.fn() };
++});
++
++import { track } from '../lib/analytics';
++
++describe('Product page — product_view tracking', () => {
++  it('fires product_view exactly once despite StrictMode double-invoking the load effect', async () => {
++    mockFetch((url) => {
++      if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;
++      return undefined;
++    });
++
++    render(
++      <StrictMode>
++        <MemoryRouter initialEntries={['/product/sage-sequin-jacket-lehenga']}>
++          <Providers>
++            <Routes>
++              <Route path="/product/:slug" element={<Product />} />
++            </Routes>
++          </Providers>
++        </MemoryRouter>
++      </StrictMode>,
++    );
++
++    await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
++
++    const productViewCalls = vi
++      .mocked(track)
++      .mock.calls.filter(([type]) => type === 'product_view');
++    expect(productViewCalls).toHaveLength(1);
++    expect(productViewCalls[0][1]).toEqual({
++      productId: 'p1',
++      props: {
++        slug: 'sage-sequin-jacket-lehenga',
++        name: 'Sage Sequin Jacket Lehenga',
++        price: 18400000,
++      },
++    });
++  });
++});
+diff --git a/frontend/src/__tests__/search.test.tsx b/frontend/src/__tests__/search.test.tsx
+new file mode 100644
+index 0000000..1854bf4
+--- /dev/null
++++ b/frontend/src/__tests__/search.test.tsx
+@@ -0,0 +1,51 @@
++import { afterEach, describe, expect, it, vi } from 'vitest';
++import { act, fireEvent, screen } from '@testing-library/react';
++import { mockFetch, renderApp } from './helpers';
++
++// Mocked so the search dedupe-ref guard can be asserted directly, without
++// coupling this test to the analytics module's batching/flush network
++// mechanics (already covered by analytics.test.ts).
++vi.mock('../lib/analytics', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('../lib/analytics')>();
++  return { ...actual, track: vi.fn() };
++});
++
++import { track } from '../lib/analytics';
++
++function resultsPayload(total: number) {
++  return { items: [], total, page: 1, pages: 1 };
++}
++
++describe('Search', () => {
++  afterEach(() => {
++    vi.mocked(track).mockClear();
++    vi.useRealTimers();
++  });
++
++  it('dedupes consecutive identical queries via ref, firing search only once', async () => {
++    mockFetch((url) => {
++      if (url.includes('/api/products?search=sage')) return resultsPayload(3);
++      return undefined;
++    });
++
++    renderApp('/search');
++    vi.useFakeTimers();
++
++    const input = screen.getByRole('textbox', { name: 'Search' });
++    fireEvent.change(input, { target: { value: 'sage' } });
++    await act(() => vi.advanceTimersByTimeAsync(300));
++
++    let searchCalls = vi.mocked(track).mock.calls.filter(([type]) => type === 'search');
++    expect(searchCalls).toHaveLength(1);
++    expect(searchCalls[0][1]).toEqual({ props: { query: 'sage', results: 3 } });
++
++    // Re-typed to the same trimmed query — the debounced fetch re-runs, but
++    // the dedupe ref must suppress a second identical `search` event.
++    fireEvent.change(input, { target: { value: 'sag' } });
++    fireEvent.change(input, { target: { value: 'sage' } });
++    await act(() => vi.advanceTimersByTimeAsync(300));
++
++    searchCalls = vi.mocked(track).mock.calls.filter(([type]) => type === 'search');
++    expect(searchCalls).toHaveLength(1);
++  });
++});
+diff --git a/frontend/src/__tests__/wishlist-tracking.test.tsx b/frontend/src/__tests__/wishlist-tracking.test.tsx
+new file mode 100644
+index 0000000..543dfc7
+--- /dev/null
++++ b/frontend/src/__tests__/wishlist-tracking.test.tsx
+@@ -0,0 +1,68 @@
++import { describe, expect, it, vi } from 'vitest';
++import { StrictMode } from 'react';
++import { render, screen, fireEvent } from '@testing-library/react';
++import { MemoryRouter } from 'react-router-dom';
++import { Providers } from '../App';
++import { useWishlist } from '../lib/wishlist';
++
++// toggle() previously computed `exists` and called track() inside the
++// setIds functional updater. React 18 StrictMode double-invokes functional
++// updaters passed to setState (not just mount effects — every call), so
++// every click fired the event twice in dev, corrupting wishlist funnel
++// counts. The fix reads `exists` from `ids` outside the updater so track()
++// runs exactly once per click, independent of how many times React
++// re-invokes the (now side-effect-free) updater. This test renders under
++// StrictMode to exercise that guarantee directly.
++vi.mock('../lib/analytics', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('../lib/analytics')>();
++  return { ...actual, track: vi.fn() };
++});
++
++import { track } from '../lib/analytics';
++
++function ToggleButton() {
++  const { toggle } = useWishlist();
++  return (
++    <button type="button" onClick={() => toggle('p1')}>
++      toggle
++    </button>
++  );
++}
++
++describe('Wishlist — toggle tracking', () => {
++  it('fires exactly one wishlist_add per click despite StrictMode double-invoking the setState updater', () => {
++    render(
++      <StrictMode>
++        <MemoryRouter>
++          <Providers>
++            <ToggleButton />
++          </Providers>
++        </MemoryRouter>
++      </StrictMode>,
++    );
++
++    fireEvent.click(screen.getByText('toggle'));
++
++    const addCalls = vi.mocked(track).mock.calls.filter(([type]) => type === 'wishlist_add');
++    expect(addCalls).toHaveLength(1);
++    expect(addCalls[0][1]).toEqual({ productId: 'p1' });
++  });
++
++  it('fires exactly one wishlist_remove when toggled back off', () => {
++    render(
++      <StrictMode>
++        <MemoryRouter>
++          <Providers>
++            <ToggleButton />
++          </Providers>
++        </MemoryRouter>
++      </StrictMode>,
++    );
++
++    fireEvent.click(screen.getByText('toggle')); // add
++    fireEvent.click(screen.getByText('toggle')); // remove
++
++    const removeCalls = vi.mocked(track).mock.calls.filter(([type]) => type === 'wishlist_remove');
++    expect(removeCalls).toHaveLength(1);
++  });
++});
+diff --git a/frontend/src/lib/auth.tsx b/frontend/src/lib/auth.tsx
+index 82507d0..fcaea48 100644
+--- a/frontend/src/lib/auth.tsx
++++ b/frontend/src/lib/auth.tsx
+@@ -1,19 +1,20 @@
+ import {
+   createContext,
+   useCallback,
+   useContext,
+   useMemo,
+   useState,
+   type ReactNode,
+ } from 'react';
+ import { api } from './api';
++import { track } from './analytics';
+ import type { AuthResponse, PublicUser } from './types';
+ 
+ const STORAGE_KEY = 'ta.auth';
+ 
+ interface AuthContextValue {
+   token: string | null;
+   user: PublicUser | null;
+   login: (email: string, password: string) => Promise<void>;
+   loginWithGoogle: (credential: string) => Promise<void>;
+   register: (
+@@ -47,36 +48,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
+       if (token) localStorage.setItem(STORAGE_KEY, JSON.stringify({ token, user }));
+       else localStorage.removeItem(STORAGE_KEY);
+     } catch {
+       /* storage unavailable */
+     }
+   };
+ 
+   const login = useCallback(async (email: string, password: string) => {
+     const res = await api.post<AuthResponse>('/api/auth/login', { email, password });
+     persist(res.token, res.user);
++    track('login', { props: { method: 'password' } });
+   }, []);
+ 
+   const loginWithGoogle = useCallback(async (credential: string) => {
+     const res = await api.post<AuthResponse>('/api/auth/google', { credential });
+     persist(res.token, res.user);
++    track('login', { props: { method: 'google' } });
+   }, []);
+ 
+   const register = useCallback(
+     async (firstName: string, lastName: string, email: string, password: string) => {
+       const res = await api.post<AuthResponse>('/api/auth/register', {
+         firstName,
+         lastName,
+         email,
+         password,
+       });
+       persist(res.token, res.user);
++      track('signup', { props: { method: 'password' } });
+     },
+     [],
+   );
+ 
+   const logout = useCallback(() => persist(null, null), []);
+ 
+   const value = useMemo(
+     () => ({ token: state.token, user: state.user, login, loginWithGoogle, register, logout }),
+     [state, login, loginWithGoogle, register, logout],
+   );
+diff --git a/frontend/src/lib/cart.tsx b/frontend/src/lib/cart.tsx
+index 0348465..dab9743 100644
+--- a/frontend/src/lib/cart.tsx
++++ b/frontend/src/lib/cart.tsx
+@@ -1,19 +1,20 @@
+ import {
+   createContext,
+   useCallback,
+   useContext,
+   useEffect,
+   useMemo,
+   useState,
+   type ReactNode,
+ } from 'react';
++import { track } from './analytics';
+ 
+ const STORAGE_KEY = 'ta.cart';
+ 
+ export interface CartItem {
+   variantId: string;
+   productId: string;
+   productSlug: string;
+   name: string;
+   size: string;
+   color: string;
+@@ -50,40 +51,46 @@ export function CartProvider({ children }: { children: ReactNode }) {
+ 
+   useEffect(() => {
+     try {
+       localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+     } catch {
+       /* storage unavailable */
+     }
+   }, [items]);
+ 
+   const add = useCallback((item: Omit<CartItem, 'qty'>, qty = 1) => {
++    track('add_to_cart', {
++      productId: item.productId,
++      props: { variantId: item.variantId, size: item.size, color: item.color, qty, price: item.unitPrice },
++    });
+     setItems((prev) => {
+       const existing = prev.find((i) => i.variantId === item.variantId);
+       if (existing) {
+         return prev.map((i) =>
+           i.variantId === item.variantId ? { ...i, qty: i.qty + qty } : i,
+         );
+       }
+       return [...prev, { ...item, qty }];
+     });
+   }, []);
+ 
+   const setQty = useCallback((variantId: string, qty: number) => {
++    if (qty < 1) track('remove_from_cart', { props: { variantId } });
+     setItems((prev) =>
+       qty < 1
+         ? prev.filter((i) => i.variantId !== variantId)
+         : prev.map((i) => (i.variantId === variantId ? { ...i, qty } : i)),
+     );
+   }, []);
+ 
+   const remove = useCallback((variantId: string) => {
++    track('remove_from_cart', { props: { variantId } });
+     setItems((prev) => prev.filter((i) => i.variantId !== variantId));
+   }, []);
+ 
+   const clear = useCallback(() => setItems([]), []);
+ 
+   const subtotal = useMemo(
+     () => items.reduce((sum, i) => sum + i.unitPrice * i.qty, 0),
+     [items],
+   );
+   const count = useMemo(() => items.reduce((sum, i) => sum + i.qty, 0), [items]);
+diff --git a/frontend/src/lib/wishlist.tsx b/frontend/src/lib/wishlist.tsx
+index a5e7c58..8917f92 100644
+--- a/frontend/src/lib/wishlist.tsx
++++ b/frontend/src/lib/wishlist.tsx
+@@ -2,20 +2,21 @@ import {
+   createContext,
+   useCallback,
+   useContext,
+   useEffect,
+   useMemo,
+   useState,
+   type ReactNode,
+ } from 'react';
+ import { api } from './api';
+ import { useAuth } from './auth';
++import { track } from './analytics';
+ 
+ const STORAGE_KEY = 'ta.wishlist';
+ 
+ interface WishlistContextValue {
+   ids: string[];
+   has: (productId: string) => boolean;
+   toggle: (productId: string) => void;
+   remove: (productId: string) => void;
+   count: number;
+ }
+@@ -89,40 +90,45 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
+     })();
+     return () => {
+       cancelled = true;
+     };
+   }, [token]);
+ 
+   const has = useCallback((productId: string) => ids.includes(productId), [ids]);
+ 
+   const remove = useCallback(
+     (productId: string) => {
++      track('wishlist_remove', { productId });
+       setIds((prev) => prev.filter((id) => id !== productId));
+       if (token) api.del(`/api/me/wishlist/${productId}`).catch(() => undefined);
+     },
+     [token],
+   );
+ 
+   const toggle = useCallback(
+     (productId: string) => {
+-      setIds((prev) => {
+-        const exists = prev.includes(productId);
+-        if (token) {
+-          (exists
+-            ? api.del(`/api/me/wishlist/${productId}`)
+-            : api.put(`/api/me/wishlist/${productId}`)
+-          ).catch(() => undefined);
+-        }
+-        return exists ? prev.filter((id) => id !== productId) : [...prev, productId];
+-      });
++      // `exists` is read from `ids` here — not recomputed inside the setIds
++      // updater — so track() (and the api call) run exactly once per click.
++      // React 18 StrictMode double-invokes functional updaters passed to
++      // setState; the api.del/put calls already tolerate that (idempotent),
++      // but a countable analytics event must not double-fire.
++      const exists = ids.includes(productId);
++      track(exists ? 'wishlist_remove' : 'wishlist_add', { productId });
++      if (token) {
++        (exists
++          ? api.del(`/api/me/wishlist/${productId}`)
++          : api.put(`/api/me/wishlist/${productId}`)
++        ).catch(() => undefined);
++      }
++      setIds((prev) => (exists ? prev.filter((id) => id !== productId) : [...prev, productId]));
+     },
+-    [token],
++    [ids, token],
+   );
+ 
+   const value = useMemo(
+     () => ({ ids, has, toggle, remove, count: ids.length }),
+     [ids, has, toggle, remove],
+   );
+ 
+   return <WishlistContext.Provider value={value}>{children}</WishlistContext.Provider>;
+ }
+ 
+diff --git a/frontend/src/pages/Checkout.tsx b/frontend/src/pages/Checkout.tsx
+index dfe6a8e..0beba31 100644
+--- a/frontend/src/pages/Checkout.tsx
++++ b/frontend/src/pages/Checkout.tsx
+@@ -1,31 +1,32 @@
+-import { useState, type FormEvent } from 'react';
++import { useEffect, useRef, useState, type FormEvent } from 'react';
+ import { Link, useNavigate } from 'react-router-dom';
+ import { api, type ApiError } from '../lib/api';
+ import type { DeliveryMethod, Order, PaymentInit } from '../lib/types';
+ import { useCart } from '../lib/cart';
+ import { useAuth } from '../lib/auth';
++import { track } from '../lib/analytics';
+ import { formatINR } from '../lib/format';
+ import { useToast } from '../components/Toast';
+ import ImageSlot from '../components/ImageSlot';
+ import RazorpayMock from '../components/RazorpayMock';
+ import '../styles/checkout.css';
+ 
+ const PRIORITY_FEE = 250000; // paise (₹2,500)
+ 
+ const STATES = ['Maharashtra', 'Delhi', 'Karnataka', 'Gujarat', 'Tamil Nadu', 'West Bengal'];
+ const COUNTRIES = ['India', 'United Arab Emirates', 'United Kingdom', 'United States', 'Singapore'];
+ 
+ type PayMethod = 'card' | 'upi' | 'cod';
+ 
+ export default function Checkout() {
+-  const { items, subtotal, clear } = useCart();
++  const { items, subtotal, count, clear } = useCart();
+   const { user } = useAuth();
+   const { showToast } = useToast();
+   const navigate = useNavigate();
+ 
+   const [email, setEmail] = useState(user?.email ?? '');
+   const [phone, setPhone] = useState('');
+   const [firstName, setFirstName] = useState(user?.firstName ?? '');
+   const [lastName, setLastName] = useState(user?.lastName ?? '');
+   const [addressLine1, setAddressLine1] = useState('');
+   const [addressLine2, setAddressLine2] = useState('');
+@@ -39,20 +40,28 @@ export default function Checkout() {
+   const [order, setOrder] = useState<Order | null>(null);
+   const [payment, setPayment] = useState<PaymentInit | null>(null);
+   const [busy, setBusy] = useState(false);
+   const [error, setError] = useState<string | null>(null);
+   const [failed, setFailed] = useState(false);
+   const [paymentsUnavailable, setPaymentsUnavailable] = useState(false);
+ 
+   const deliveryFee = delivery === 'priority' ? PRIORITY_FEE : 0;
+   const total = subtotal + deliveryFee;
+ 
++  const checkoutStartedRef = useRef(false);
++  useEffect(() => {
++    if (checkoutStartedRef.current || items.length === 0) return;
++    checkoutStartedRef.current = true;
++    track('checkout_start', { props: { itemCount: count, subtotal } });
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, []);
++
+   const startPayment = async (existing: Order | null) => {
+     setBusy(true);
+     setError(null);
+     try {
+       let ord = existing;
+       if (!ord) {
+         ord = await api.post<Order>('/api/orders', {
+           customer: {
+             email,
+             phone,
+@@ -66,64 +75,85 @@ export default function Checkout() {
+             country,
+           },
+           deliveryMethod: delivery,
+           items: items.map((i) => ({ variantId: i.variantId, quantity: i.qty })),
+         });
+         setOrder(ord);
+       }
+       try {
+         const pay = await api.post<PaymentInit>('/api/payments/checkout', { orderId: ord.id, email });
+         setPayment(pay);
++        track('checkout_step', { props: { step: 'payment_opened' } });
+         setFailed(false);
+       } catch (e) {
+         // 503 = payments not enabled yet; the order itself is saved and the
+         // atelier can follow up, so this is a notice, not an error.
+         if ((e as ApiError).status !== 503) throw e;
+         setPaymentsUnavailable(true);
+         setFailed(false);
+       }
+     } catch (e) {
+       const err = e as { message?: string };
+       setError(err.message ?? 'Something went wrong placing your order.');
+     } finally {
+       setBusy(false);
+     }
+   };
+ 
+   const placeOrder = (e: FormEvent) => {
+     e.preventDefault();
+     if (items.length === 0 || busy) return;
++    track('checkout_step', { props: { step: 'info_submitted' } });
+     void startPayment(order);
+   };
+ 
+   const onPay = async () => {
+     if (!payment || !order) return;
+     setBusy(true);
+     try {
+       await api.post('/api/payments/confirm', { paymentId: payment.paymentId, outcome: 'success', email });
++      track('payment_result', { props: { outcome: 'success' } });
++      track('order_placed', {
++        props: {
++          orderId: order.id,
++          orderNumber: order.orderNumber,
++          total,
++          subtotal,
++          deliveryFee,
++          itemCount: count,
++          items: items.map((i) => ({
++            productId: i.productId,
++            variantId: i.variantId,
++            qty: i.qty,
++            unitPrice: i.unitPrice,
++          })),
++        },
++      });
+       clear();
+       navigate(`/order/${order.orderNumber}?email=${encodeURIComponent(email)}`, {
+         state: { order: { ...order, status: 'paid' } },
+       });
+     } catch (e) {
+       const err = e as { message?: string };
++      track('payment_result', { props: { outcome: 'failure' } });
+       setPayment(null);
+       setFailed(true);
+       setError(err.message ?? 'Payment could not be confirmed.');
+     } finally {
+       setBusy(false);
+     }
+   };
+ 
+   const onFail = async () => {
+     if (!payment) return;
+     setBusy(true);
++    track('payment_result', { props: { outcome: 'failure' } });
+     try {
+       await api.post('/api/payments/confirm', { paymentId: payment.paymentId, outcome: 'failure', email });
+     } catch {
+       /* the failure state below covers it */
+     } finally {
+       setPayment(null);
+       setFailed(true);
+       setError(null);
+       setBusy(false);
+     }
+@@ -404,21 +434,24 @@ export default function Checkout() {
+               </div>
+ 
+               {/* payment */}
+               <div className="block">
+                 <div className="bh">
+                   <h3>Payment</h3>
+                   <span className="num">03 / 03</span>
+                 </div>
+                 <div
+                   className={`opt-row${payMethod === 'card' ? ' sel' : ''}`}
+-                  onClick={() => setPayMethod('card')}
++                  onClick={() => {
++                    setPayMethod('card');
++                    track('checkout_step', { props: { step: 'method_selected', method: 'card' } });
++                  }}
+                 >
+                   <span className="radio"></span>
+                   <div className="ot">
+                     <div className="t">Credit / Debit Card</div>
+                   </div>
+                   <span className="op small">Visa · MC · Amex</span>
+                 </div>
+                 {payMethod === 'card' && (
+                   <div className="pay-fields" id="cardFields">
+                     <div className="field">
+@@ -444,31 +477,37 @@ export default function Checkout() {
+                     <div className="field">
+                       <label className="lab" htmlFor="co-name">
+                         Name on Card
+                       </label>
+                       <input id="co-name" className="inp" placeholder="Full name" />
+                     </div>
+                   </div>
+                 )}
+                 <div
+                   className={`opt-row${payMethod === 'upi' ? ' sel' : ''}`}
+-                  onClick={() => setPayMethod('upi')}
++                  onClick={() => {
++                    setPayMethod('upi');
++                    track('checkout_step', { props: { step: 'method_selected', method: 'upi' } });
++                  }}
+                 >
+                   <span className="radio"></span>
+                   <div className="ot">
+                     <div className="t">UPI</div>
+                     <div className="d">Google Pay · PhonePe · Paytm</div>
+                   </div>
+                 </div>
+                 <div
+                   className={`opt-row${payMethod === 'cod' ? ' sel' : ''}`}
+-                  onClick={() => setPayMethod('cod')}
++                  onClick={() => {
++                    setPayMethod('cod');
++                    track('checkout_step', { props: { step: 'method_selected', method: 'cod' } });
++                  }}
+                 >
+                   <span className="radio"></span>
+                   <div className="ot">
+                     <div className="t">Cash on Delivery</div>
+                     <div className="d">Available on standard sizes only</div>
+                   </div>
+                 </div>
+               </div>
+ 
+               <button className="btn-buy gold place" type="submit" disabled={busy || paymentsUnavailable}>
+diff --git a/frontend/src/pages/Collection.tsx b/frontend/src/pages/Collection.tsx
+index 0313d39..7f13be9 100644
+--- a/frontend/src/pages/Collection.tsx
++++ b/frontend/src/pages/Collection.tsx
+@@ -1,13 +1,14 @@
+-import { Fragment, useEffect, useMemo, useState } from 'react';
++import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+ import { api } from '../lib/api';
++import { track } from '../lib/analytics';
+ import type { Category, ProductSort, ProductsResponse, ProductSummary } from '../lib/types';
+ import Shop from '../components/Shop';
+ import ProductCard from '../components/ProductCard';
+ import ImageSlot from '../components/ImageSlot';
+ import Reveal from '../components/Reveal';
+ import Ambient from '../components/Ambient';
+ import '../styles/plp.css';
+ 
+ const COLOR_CLASS: Record<string, string> = {
+   Sage: 'c-sage',
+@@ -90,31 +91,56 @@ export default function Collection() {
+       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+       .join(' ');
+ 
+   const items = useMemo(() => {
+     let list = data?.items ?? [];
+     if (colors.length) list = list.filter((p) => colors.includes(p.color));
+     if (priceMax < PRICE_MAX) list = list.filter((p) => p.price <= priceMax * 100);
+     return list;
+   }, [data, colors, priceMax]);
+ 
++  // Value-based guard (not a one-shot boolean): a plain "have we run before"
++  // flag is inverted by StrictMode's mount double-invoke (invocation 1 flips
++  // it false and bails, invocation 2 then sees it false and arms a spurious
++  // timer for the *initial* values). Comparing against a snapshot of the
++  // last-tracked filter state is immune to that, the same way product_view's
++  // slug ref is: both StrictMode invocations see the snapshot still matches
++  // the initial values and bail, and the snapshot only advances once an
++  // event actually fires.
++  const lastFilterRef = useRef<{ colors: string[]; priceMax: number }>({ colors, priceMax });
++  useEffect(() => {
++    const last = lastFilterRef.current;
++    const sameColors =
++      last.colors.length === colors.length && last.colors.every((c, i) => c === colors[i]);
++    if (sameColors && last.priceMax === priceMax) return;
++    const t = setTimeout(() => {
++      lastFilterRef.current = { colors, priceMax };
++      track('filter_apply', { props: { category: categorySlug, colors, priceMax } });
++    }, 500);
++    return () => clearTimeout(t);
++    // categorySlug intentionally excluded: only colors/priceMax changes should
++    // re-arm the debounce, not a category navigation on its own.
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [colors, priceMax]);
++
+   const toggleIn = (list: string[], v: string) =>
+     list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
+ 
+   const clearAll = () => {
+     setColors([]);
+     setSizes([]);
+     setOccasions([]);
+     setPriceMax(PRICE_MAX);
+   };
+ 
+   const setSort = (v: string) => {
++    track('sort_change', { props: { category: categorySlug, sort: v } });
+     const next = new URLSearchParams(params);
+     next.set('sort', v);
+     next.delete('page');
+     setParams(next);
+   };
+   const setPage = (p: number) => {
+     const next = new URLSearchParams(params);
+     next.set('page', String(p));
+     setParams(next);
+     window.scrollTo(0, 0);
+diff --git a/frontend/src/pages/Contact.tsx b/frontend/src/pages/Contact.tsx
+index e337697..2280499 100644
+--- a/frontend/src/pages/Contact.tsx
++++ b/frontend/src/pages/Contact.tsx
+@@ -1,23 +1,25 @@
+ import { useState, type FormEvent } from 'react';
+ import { Link } from 'react-router-dom';
+ import Shop from '../components/Shop';
+ import Reveal from '../components/Reveal';
+ import Ambient from '../components/Ambient';
++import { track } from '../lib/analytics';
+ import '../styles/contact.css';
+ 
+ export default function Contact() {
+   const [tab, setTab] = useState<'appointment' | 'enquiry'>('appointment');
+   const [sent, setSent] = useState(false);
+ 
+   const onSubmit = (e: FormEvent) => {
+     e.preventDefault();
++    track('contact_submit', { props: { tab } });
+     setSent(true);
+   };
+ 
+   return (
+     <Shop page="page-contact">
+       <div className="crumbs">
+         <Link to="/">Home</Link>
+         <span className="sep">/</span>
+         <span className="here">Contact</span>
+       </div>
+diff --git a/frontend/src/pages/Home.tsx b/frontend/src/pages/Home.tsx
+index 682cd88..fc0f846 100644
+--- a/frontend/src/pages/Home.tsx
++++ b/frontend/src/pages/Home.tsx
+@@ -1,17 +1,18 @@
+ import { useEffect, useState } from 'react';
+ import { Link, useNavigate } from 'react-router-dom';
+ import { api } from '../lib/api';
+ import type { Category, ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
+ import { useCart } from '../lib/cart';
+ import { useCartDrawer } from '../components/CartDrawer';
+ import { useToast } from '../components/Toast';
++import { track } from '../lib/analytics';
+ import Nav from '../components/Nav';
+ import Footer from '../components/Footer';
+ import ImageSlot from '../components/ImageSlot';
+ import Price from '../components/Price';
+ import Reveal from '../components/Reveal';
+ import Ambient from '../components/Ambient';
+ import '../styles/home.css';
+ 
+ const FALLBACK_CATS: Array<Pick<Category, 'slug' | 'name'>> = [
+   { slug: 'lehenga-sets', name: 'Lehenga Sets' },
+@@ -242,20 +243,21 @@ function NewsletterSection() {
+   const [done, setDone] = useState(false);
+   const [email, setEmail] = useState('');
+   return (
+     <section className="news">
+       <span className="eyebrow">The Letter</span>
+       <h2>Join the atelier</h2>
+       <p>Private previews, made-to-order openings and the occasional letter from the studio.</p>
+       <form
+         onSubmit={(e) => {
+           e.preventDefault();
++          track('newsletter_signup');
+           setEmail('');
+           setDone(true);
+         }}
+       >
+         <input
+           type="email"
+           placeholder="Your email address"
+           required
+           value={email}
+           onChange={(e) => setEmail(e.target.value)}
+diff --git a/frontend/src/pages/Product.tsx b/frontend/src/pages/Product.tsx
+index c299073..57da01f 100644
+--- a/frontend/src/pages/Product.tsx
++++ b/frontend/src/pages/Product.tsx
+@@ -1,16 +1,17 @@
+-import { useEffect, useMemo, useState } from 'react';
++import { useEffect, useMemo, useRef, useState } from 'react';
+ import { Link, useNavigate, useParams } from 'react-router-dom';
+ import { api } from '../lib/api';
+ import type { ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
+ import { useCart } from '../lib/cart';
+ import { useWishlist } from '../lib/wishlist';
++import { track } from '../lib/analytics';
+ import { useCartDrawer } from '../components/CartDrawer';
+ import { useToast } from '../components/Toast';
+ import Shop from '../components/Shop';
+ import ImageSlot from '../components/ImageSlot';
+ import Price from '../components/Price';
+ import Reveal from '../components/Reveal';
+ import Ambient from '../components/Ambient';
+ import '../styles/pdp.css';
+ 
+ const COLOR_CLASS: Record<string, string> = {
+@@ -37,36 +38,45 @@ export default function Product() {
+   const [product, setProduct] = useState<ProductDetail | null>(null);
+   const [related, setRelated] = useState<ProductSummary[]>([]);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState<string | null>(null);
+ 
+   const [thumb, setThumb] = useState(0);
+   const [color, setColor] = useState('');
+   const [variantId, setVariantId] = useState('');
+   const [qty, setQty] = useState(1);
+ 
++  const lastTrackedSlugRef = useRef<string | null>(null);
++
+   useEffect(() => {
+     let cancelled = false;
+     setLoading(true);
+     setError(null);
+     setThumb(0);
+     setQty(1);
+     api
+       .get<ProductDetail | { product: ProductDetail; related?: ProductSummary[] }>(
+         `/api/products/${encodeURIComponent(slug)}`,
+       )
+       .then(async (raw) => {
+         const detail = 'product' in raw && raw.product ? raw.product : (raw as ProductDetail);
+         const rel =
+           ('related' in raw ? raw.related : undefined) ?? detail.related ?? [];
+         if (cancelled) return;
+         setProduct(detail);
++        if (lastTrackedSlugRef.current !== detail.slug) {
++          lastTrackedSlugRef.current = detail.slug;
++          track('product_view', {
++            productId: detail.id,
++            props: { slug: detail.slug, name: detail.name, price: detail.price },
++          });
++        }
+         setColor(detail.color);
+         const firstInStock = detail.variants.find((v) => v.stock > 0) ?? detail.variants[0];
+         setVariantId(firstInStock?.id ?? '');
+         if (rel.length) {
+           setRelated(rel.filter((r) => r.id !== detail.id).slice(0, 4));
+         } else {
+           try {
+             const more = await api.get<ProductsResponse>(
+               `/api/products?category=${encodeURIComponent(detail.categorySlug)}&page=1&limit=5`,
+             );
+@@ -202,38 +212,44 @@ export default function Product() {
+               Colour — <strong id="colorName">{color}</strong>
+             </span>
+           </div>
+           <div className="swatches" id="swatches">
+             {swatches.map((c) => (
+               <button
+                 key={c}
+                 className={`swatch ${COLOR_CLASS[c] ?? 'c-default'}${c === color ? ' active' : ''}`}
+                 aria-label={c}
+                 title={c}
+-                onClick={() => setColor(c)}
++                onClick={() => {
++                  setColor(c);
++                  track('color_select', { productId: product.id, props: { color: c } });
++                }}
+               />
+             ))}
+           </div>
+ 
+           <div className="opt-label">
+             <span>Size</span>
+             <span className="help" onClick={() => navigate('/size-guide')}>
+               Size &amp; Fit Guide
+             </span>
+           </div>
+           <div className="sizes" id="sizes">
+             {product.variants.map((v) => (
+               <button
+                 key={v.id}
+                 className={`size${v.id === variantId ? ' active' : ''}`}
+                 disabled={v.stock === 0}
+-                onClick={() => setVariantId(v.id)}
++                onClick={() => {
++                  setVariantId(v.id);
++                  track('variant_select', { productId: product.id, props: { variantId: v.id, size: v.size } });
++                }}
+               >
+                 {v.size}
+               </button>
+             ))}
+             <button className="size custom" onClick={() => navigate('/contact')}>
+               Made to Measure
+             </button>
+           </div>
+ 
+           <div className="mto">
+diff --git a/frontend/src/pages/Search.tsx b/frontend/src/pages/Search.tsx
+index d58d783..7cce6fa 100644
+--- a/frontend/src/pages/Search.tsx
++++ b/frontend/src/pages/Search.tsx
+@@ -1,50 +1,56 @@
+-import { useEffect, useState } from 'react';
++import { useEffect, useRef, useState } from 'react';
+ import { useSearchParams } from 'react-router-dom';
+ import { api } from '../lib/api';
++import { track } from '../lib/analytics';
+ import type { ProductsResponse, ProductSummary } from '../lib/types';
+ import Shop from '../components/Shop';
+ import ProductCard from '../components/ProductCard';
+ import Reveal from '../components/Reveal';
+ import Ambient from '../components/Ambient';
+ import '../styles/search.css';
+ 
+ const POPULAR = ['Lehenga', 'Anarkali', 'Bridal', 'Sage', 'Made to Measure'];
+ 
+ export default function Search() {
+   const [params, setParams] = useSearchParams();
+   const [query, setQuery] = useState(params.get('q') ?? '');
+   const [results, setResults] = useState<ProductSummary[]>([]);
+   const [total, setTotal] = useState(0);
+   const [loading, setLoading] = useState(false);
+   const [error, setError] = useState<string | null>(null);
+   const [searched, setSearched] = useState('');
++  const lastTrackedQueryRef = useRef<string | null>(null);
+ 
+   // Live results — debounced fetch.
+   useEffect(() => {
+     const q = query.trim();
+     if (!q) {
+       setResults([]);
+       setTotal(0);
+       setSearched('');
+       setError(null);
+       return;
+     }
+     setLoading(true);
+     const t = setTimeout(() => {
+       api
+         .get<ProductsResponse>(`/api/products?search=${encodeURIComponent(q)}&page=1&limit=12`)
+         .then((d) => {
+           setResults(d.items);
+           setTotal(d.total);
+           setSearched(q);
+           setError(null);
++          if (lastTrackedQueryRef.current !== q) {
++            lastTrackedQueryRef.current = q;
++            track('search', { props: { query: q, results: d.total } });
++          }
+         })
+         .catch((e: { message?: string }) => {
+           setError(e.message ?? 'Search is unavailable right now.');
+           setResults([]);
+           setSearched(q);
+         })
+         .finally(() => setLoading(false));
+     }, 300);
+     return () => clearTimeout(t);
+   }, [query]);

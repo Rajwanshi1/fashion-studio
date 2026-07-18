@@ -77,9 +77,20 @@ export interface EventsRepo {
 }
 
 // Shared by topSearches/zeroSearches — identical shape, the zero variant adds
-// one extra predicate on props->>'results'.
+// one extra predicate on props->>'results'. `props` is client-controlled
+// (only size-capped, see analytics.service.ts), so the cast is guarded: a
+// bare `AND jsonb_typeof(...)='number' AND (...)::int = 0` pair sits in one
+// qual list, and Postgres is free to reorder/evaluate conjuncts by estimated
+// cost rather than left-to-right — the cast could still run on a row the
+// typeof check meant to exclude. A single CASE expression has a documented,
+// guaranteed branch order (the ELSE only evaluates when WHEN is false), so
+// the cast is structurally unreachable for a non-numeric 'results' value.
+// An unguarded ::int on a non-numeric 'results' value (e.g. a string) would
+// throw 22P02 and 500 every summary read in that window.
 async function searchRows(pool: Pool, days: number, zeroOnly: boolean): Promise<SearchRow[]> {
-  const zeroClause = zeroOnly ? `AND (props->>'results')::int = 0` : '';
+  const zeroClause = zeroOnly
+    ? `AND CASE WHEN jsonb_typeof(props->'results') = 'number' THEN (props->>'results')::int = 0 ELSE false END`
+    : '';
   const { rows } = await pool.query(
     `SELECT props->>'query' AS query, COUNT(*)::int AS searches, MAX(created_at) AS last_at
      FROM events
@@ -123,7 +134,11 @@ export function createEventsRepo(pool: Pool): EventsRepo {
            COUNT(DISTINCT session_id) FILTER (WHERE event_type = 'checkout_start')::int  AS checkout_sessions,
            COUNT(DISTINCT session_id) FILTER (WHERE event_type = 'order_placed')::int    AS order_sessions,
            COUNT(*)                   FILTER (WHERE event_type = 'order_placed')::int    AS orders,
-           COALESCE(SUM((props->>'total')::bigint) FILTER (WHERE event_type = 'order_placed'), 0)::bigint AS revenue
+           COALESCE(
+             SUM(CASE WHEN jsonb_typeof(props->'total') = 'number' THEN (props->>'total')::bigint END)
+               FILTER (WHERE event_type = 'order_placed'),
+             0
+           )::bigint AS revenue
          FROM events WHERE created_at > now() - make_interval(days => $1)`,
         [days],
       );
@@ -140,8 +155,12 @@ export function createEventsRepo(pool: Pool): EventsRepo {
     },
 
     async dailyTrend(days) {
+      // `day` is rendered to text in SQL (to_char) rather than left as a `date`
+      // column: node-postgres parses `date` into a JS Date at LOCAL midnight,
+      // and re-rendering with toISOString() (UTC) shifts every label back a
+      // day on any server whose local timezone is ahead of UTC (e.g. IST).
       const { rows } = await pool.query(
-        `SELECT d::date AS day, COALESCE(e.sessions,0)::int AS sessions, COALESCE(e.orders,0)::int AS orders
+        `SELECT to_char(d::date, 'YYYY-MM-DD') AS day, COALESCE(e.sessions,0)::int AS sessions, COALESCE(e.orders,0)::int AS orders
          FROM generate_series(date_trunc('day', now()) - make_interval(days => $1 - 1), date_trunc('day', now()), interval '1 day') d
          LEFT JOIN (
            SELECT date_trunc('day', created_at)::date AS day,
@@ -152,7 +171,7 @@ export function createEventsRepo(pool: Pool): EventsRepo {
         [days],
       );
       return rows.map((r) => ({
-        day: r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day).slice(0, 10),
+        day: r.day,
         sessions: r.sessions,
         orders: r.orders,
       }));
@@ -175,10 +194,27 @@ export function createEventsRepo(pool: Pool): EventsRepo {
            GROUP BY product_id
          ),
          bought AS (
-           SELECT (item->>'productId')::uuid AS product_id, SUM((item->>'qty')::int) AS purchased
-           FROM events, jsonb_array_elements(props->'items') item
+           -- props is client-controlled (only size-capped on the way in), so every
+           -- cast below is guarded: the array-ness of 'items' is checked *inside*
+           -- the jsonb_array_elements() argument itself (CASE WHEN ... THEN
+           -- props->'items' ELSE '[]'::jsonb END) — a bare WHERE predicate next to
+           -- an SRF call in the FROM clause is plan-order-dependent (Postgres may
+           -- evaluate the SRF before the qual), so the guard has to live inside the
+           -- argument expression to be unconditionally safe. Each item's
+           -- 'productId' must be a string matching the uuid shape before we cast
+           -- it, and 'qty' must be a jsonb number before we cast it (both via CASE,
+           -- same reasoning). An unguarded cast on a poisoned row throws 22P02 and
+           -- 500s the whole summary read for any window containing that row.
+           SELECT (item->>'productId')::uuid AS product_id,
+                  SUM(CASE WHEN jsonb_typeof(item->'qty') = 'number' THEN (item->>'qty')::int END) AS purchased
+           FROM events,
+                jsonb_array_elements(
+                  CASE WHEN jsonb_typeof(props->'items') = 'array' THEN props->'items' ELSE '[]'::jsonb END
+                ) item
            WHERE event_type = 'order_placed'
              AND created_at > now() - make_interval(days => $1)
+             AND jsonb_typeof(item->'productId') = 'string'
+             AND item->>'productId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
            GROUP BY 1
          ),
          ids AS (

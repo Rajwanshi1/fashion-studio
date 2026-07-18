@@ -23,39 +23,44 @@ function pct(num: number, den: number): string {
   return den > 0 ? `${((num / den) * 100).toFixed(1)}%` : '—';
 }
 
+/** Matches the KPI cards' number formatting (StatCard values use en-IN grouping). */
+function count(n: number): string {
+  return n.toLocaleString('en-IN');
+}
+
 const productColumns: Column<TopProduct>[] = [
   { key: 'name', label: 'Product', render: (r) => <span className="nm">{r.name}</span> },
-  { key: 'views', label: 'Views', align: 'right', render: (r) => r.views },
-  { key: 'carts', label: 'Carts', align: 'right', render: (r) => r.carts },
-  { key: 'purchased', label: 'Purchased', align: 'right', render: (r) => r.purchased },
+  { key: 'views', label: 'Views', align: 'right', render: (r) => count(r.views) },
+  { key: 'carts', label: 'Carts', align: 'right', render: (r) => count(r.carts) },
+  { key: 'purchased', label: 'Purchased', align: 'right', render: (r) => count(r.purchased) },
   { key: 'v2c', label: 'View → Cart', align: 'right', render: (r) => pct(r.carts, r.views) },
   { key: 'c2b', label: 'Cart → Buy', align: 'right', render: (r) => pct(r.purchased, r.carts) },
 ];
 
 const searchColumns: Column<SearchRow>[] = [
   { key: 'query', label: 'Query', render: (r) => <span className="nm">{r.query}</span> },
-  { key: 'searches', label: 'Searches', align: 'right', render: (r) => r.searches },
+  { key: 'searches', label: 'Searches', align: 'right', render: (r) => count(r.searches) },
   { key: 'lastAt', label: 'Last searched', render: (r) => formatDate(r.lastAt) },
 ];
 
 const sourceColumns: Column<SourceRow>[] = [
   { key: 'source', label: 'Source', render: (r) => r.source },
-  { key: 'sessions', label: 'Sessions', align: 'right', render: (r) => r.sessions },
+  { key: 'sessions', label: 'Sessions', align: 'right', render: (r) => count(r.sessions) },
 ];
 
 const deviceColumns: Column<DeviceRow>[] = [
   { key: 'device', label: 'Device', render: (r) => r.device },
-  { key: 'sessions', label: 'Sessions', align: 'right', render: (r) => r.sessions },
+  { key: 'sessions', label: 'Sessions', align: 'right', render: (r) => count(r.sessions) },
 ];
 
 const sizeColumns: Column<SizeRow>[] = [
   { key: 'size', label: 'Size', render: (r) => r.size },
-  { key: 'adds', label: 'Adds to cart', align: 'right', render: (r) => r.adds },
+  { key: 'adds', label: 'Adds to cart', align: 'right', render: (r) => count(r.adds) },
 ];
 
 const colorColumns: Column<ColorRow>[] = [
   { key: 'color', label: 'Color', render: (r) => r.color },
-  { key: 'adds', label: 'Adds to cart', align: 'right', render: (r) => r.adds },
+  { key: 'adds', label: 'Adds to cart', align: 'right', render: (r) => count(r.adds) },
 ];
 
 export default function Analytics() {
