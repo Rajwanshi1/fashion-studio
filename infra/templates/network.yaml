@@ -15,6 +15,16 @@ Parameters:
   NatAmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+  NatMode:
+    Type: String
+    AllowedValues: [instance, gateway]
+    Default: instance
+    Description: >-
+      instance = self-managed t4g.nano NAT (staging cost trim, single-AZ SPOF);
+      gateway = managed NAT Gateway (prod).
+Conditions:
+  UseNatInstance: !Equals [!Ref NatMode, instance]
+  UseNatGateway: !Equals [!Ref NatMode, gateway]
 Resources:
   Vpc:
     Type: AWS::EC2::VPC
@@ -71,6 +81,7 @@ Resources:
     Properties: { SubnetId: !Ref PublicSubnetB, RouteTableId: !Ref PublicRt }
   NatSg:
     Type: AWS::EC2::SecurityGroup
+    Condition: UseNatInstance
     Properties:
       GroupDescription: self-managed NAT instance
       VpcId: !Ref Vpc
@@ -85,6 +96,7 @@ Resources:
       Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-nat' }]
   NatInstance:
     Type: AWS::EC2::Instance
+    Condition: UseNatInstance
     Properties:
       InstanceType: !Ref NatInstanceType
       ImageId: !Ref NatAmiId
@@ -116,6 +128,7 @@ Resources:
           systemctl enable --now iptables
   NatRecoveryAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: UseNatInstance
     Properties:
       AlarmDescription: auto-recover the NAT instance on system failure - a dead NAT kills SSM + egress for every private instance
       Namespace: AWS/EC2
@@ -128,12 +141,36 @@ Resources:
       ComparisonOperator: GreaterThanThreshold
       AlarmActions:
         - !Sub 'arn:aws:automate:${AWS::Region}:ec2:recover'
+  # Managed NAT Gateway (prod) — the pre-trim configuration; multi-tenant HA
+  # within its AZ, no instance to maintain.
+  NatEip:
+    Type: AWS::EC2::EIP
+    Condition: UseNatGateway
+    Properties:
+      Domain: vpc
+      Tags: [{ Key: Name, Value: !Sub 'fashion-${EnvName}-nat' }]
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Condition: UseNatGateway
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - { Key: Name, Value: !Sub 'fashion-${EnvName}-nat' }
+        - { Key: Project, Value: fashion-studio }
+        - { Key: Env, Value: !Ref EnvName }
   PrivateRt:
     Type: AWS::EC2::RouteTable
     Properties: { VpcId: !Ref Vpc }
   PrivateDefaultRoute:
     Type: AWS::EC2::Route
-    Properties: { RouteTableId: !Ref PrivateRt, DestinationCidrBlock: 0.0.0.0/0, InstanceId: !Ref NatInstance }
+    Properties:
+      RouteTableId: !Ref PrivateRt
+      DestinationCidrBlock: 0.0.0.0/0
+      # Exactly one of the two targets resolves; staging renders the identical
+      # InstanceId-only route it has today (no-op on update).
+      InstanceId: !If [UseNatInstance, !Ref NatInstance, !Ref 'AWS::NoValue']
+      NatGatewayId: !If [UseNatGateway, !Ref NatGateway, !Ref 'AWS::NoValue']
   PrivateRtA:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties: { SubnetId: !Ref PrivateSubnetA, RouteTableId: !Ref PrivateRt }

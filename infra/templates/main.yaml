@@ -18,11 +18,44 @@ Parameters:
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
   WafWebAclArn:
     Type: String
+  # Default preserves staging's pre-existing repo name; prod passes
+  # fashion-prod-api (RepositoryName changes force replacement, so the default
+  # must stay byte-identical for staging).
+  EcrRepoName:
+    Type: String
+    Default: fashion-studio-api
+  DetailedMonitoring:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+  # Fail-closed payments contract: staging explicitly passes mock/'true';
+  # anything else boots with payments disabled (checkout/confirm answer 503).
+  PaymentProvider:
+    Type: String
+    AllowedValues: [mock, disabled]
+    Default: disabled
+  AllowMockPayments:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+  # All three empty for domainless envs (staging).
+  DomainName:
+    Type: String
+    Default: ''
+  CertificateArn:
+    Type: String
+    Default: ''
+  HostedZoneId:
+    Type: String
+    Default: ''
+Conditions:
+  DetailedMonitoringOn: !Equals [!Ref DetailedMonitoring, 'true']
+  HasDomain: !Not [!Equals [!Ref DomainName, '']]
 Resources:
   EcrRepo:
     Type: AWS::ECR::Repository
     Properties:
-      RepositoryName: fashion-studio-api
+      RepositoryName: !Ref EcrRepoName
       ImageScanningConfiguration: { ScanOnPush: true }
       LifecyclePolicy:
         LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"keep last 10","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}'
@@ -110,7 +143,7 @@ Resources:
           - !ImportValue
             'Fn::Sub': 'fashion-${EnvName}-app-sg'
         MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
-        Monitoring: { Enabled: false }
+        Monitoring: { Enabled: !If [DetailedMonitoringOn, true, false] }
         BlockDeviceMappings:
           - DeviceName: /dev/xvda
             Ebs: { VolumeSize: 20, VolumeType: gp3, Encrypted: true }
@@ -129,7 +162,7 @@ Resources:
             systemctl enable --now docker
 
             REGION=${AWS::Region}
-            REPO=${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/fashion-studio-api
+            REPO=${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepoName}
             TAG=$(aws ssm get-parameter --name /fashion/${EnvName}/api-image-tag --region $REGION --query Parameter.Value --output text)
             aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
             for i in $(seq 1 80); do docker pull $REPO:$TAG && break; echo "image $TAG not ready, retry $i"; sleep 15; done
@@ -148,6 +181,7 @@ Resources:
               -e NODE_ENV=production -e PORT=3001 \
               -e DATABASE_URL="postgres://boutique:$DB_PW@$DATA_IP:5432/boutique" \
               -e JWT_SECRET="$JWT" -e CORS_ORIGINS="$CORS" -e SEED_ON_START=false \
+              -e PAYMENT_PROVIDER=${PaymentProvider} -e ALLOW_MOCK_PAYMENTS=${AllowMockPayments} \
               $REPO:$TAG
   Alb:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -328,6 +362,11 @@ Resources:
         HttpVersion: http2
         PriceClass: PriceClass_200
         WebACLId: !Ref WafWebAclArn
+        Aliases: !If [HasDomain, [!Ref DomainName, !Sub 'www.${DomainName}'], !Ref 'AWS::NoValue']
+        ViewerCertificate: !If
+          - HasDomain
+          - { AcmCertificateArn: !Ref CertificateArn, SslSupportMethod: sni-only, MinimumProtocolVersion: TLSv1.2_2021 }
+          - !Ref 'AWS::NoValue'
         Origins:
           - Id: s3
             DomainName: !GetAtt StorefrontBucket.RegionalDomainName
@@ -382,6 +421,11 @@ Resources:
         HttpVersion: http2
         PriceClass: PriceClass_200
         WebACLId: !Ref WafWebAclArn
+        Aliases: !If [HasDomain, [!Sub 'admin.${DomainName}'], !Ref 'AWS::NoValue']
+        ViewerCertificate: !If
+          - HasDomain
+          - { AcmCertificateArn: !Ref CertificateArn, SslSupportMethod: sni-only, MinimumProtocolVersion: TLSv1.2_2021 }
+          - !Ref 'AWS::NoValue'
         Origins:
           - Id: s3
             DomainName: !GetAtt AdminBucket.RegionalDomainName
@@ -428,6 +472,11 @@ Resources:
         HttpVersion: http2
         PriceClass: PriceClass_200
         WebACLId: !Ref WafWebAclArn
+        Aliases: !If [HasDomain, [!Sub 'api.${DomainName}'], !Ref 'AWS::NoValue']
+        ViewerCertificate: !If
+          - HasDomain
+          - { AcmCertificateArn: !Ref CertificateArn, SslSupportMethod: sni-only, MinimumProtocolVersion: TLSv1.2_2021 }
+          - !Ref 'AWS::NoValue'
         Origins:
           - Id: alb
             DomainName: !GetAtt Alb.DNSName
@@ -440,6 +489,22 @@ Resources:
           Compress: true
           CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad          # Managed-CachingDisabled
           OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # Managed-AllViewerExceptHostHeader
+  # A + AAAA aliases for every hostname -> its CloudFront distribution.
+  # Z2FDTNDATAQYW2 is CloudFront's fixed hosted-zone ID for alias targets.
+  DnsRecords:
+    Type: AWS::Route53::RecordSetGroup
+    Condition: HasDomain
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      RecordSets:
+        - { Name: !Ref DomainName, Type: A, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt StorefrontDist.DomainName } }
+        - { Name: !Ref DomainName, Type: AAAA, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt StorefrontDist.DomainName } }
+        - { Name: !Sub 'www.${DomainName}', Type: A, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt StorefrontDist.DomainName } }
+        - { Name: !Sub 'www.${DomainName}', Type: AAAA, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt StorefrontDist.DomainName } }
+        - { Name: !Sub 'admin.${DomainName}', Type: A, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt AdminDist.DomainName } }
+        - { Name: !Sub 'admin.${DomainName}', Type: AAAA, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt AdminDist.DomainName } }
+        - { Name: !Sub 'api.${DomainName}', Type: A, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt ApiDist.DomainName } }
+        - { Name: !Sub 'api.${DomainName}', Type: AAAA, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt ApiDist.DomainName } }
 Outputs:
   EcrUri:
     Value: !GetAtt EcrRepo.RepositoryUri

@@ -1,0 +1,26 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: fashion - Route 53 public hosted zone (only deployed when the env has a custom domain)
+Parameters:
+  EnvName:
+    Type: String
+    AllowedValues: [staging, prod]
+  DomainName:
+    Type: String
+    MinLength: 1
+    Description: Apex domain served by this environment (e.g. tanviagnihotry.com)
+Resources:
+  # Retain on delete: recreating a hosted zone assigns a NEW set of nameservers,
+  # which silently breaks the registrar delegation until someone re-updates it.
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Ref DomainName
+      HostedZoneConfig:
+        Comment: !Sub 'fashion-${EnvName} public zone'
+Outputs:
+  HostedZoneId:
+    Value: !Ref HostedZone
+  NameServers:
+    Value: !Join [',', !GetAtt HostedZone.NameServers]

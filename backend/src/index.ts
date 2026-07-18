@@ -41,7 +41,7 @@ async function main() {
       scans: createScansRepo(pool),
       clicks: createClicksRepo(pool),
     },
-    paymentProvider: new MockRazorpayProvider(),
+    paymentProvider: config.paymentProvider === 'mock' ? new MockRazorpayProvider() : null,
     verifyGoogleToken: config.googleClientId ? createGoogleVerifier(config.googleClientId) : null,
     jwtSecret: config.jwtSecret,
     corsOrigins: config.corsOrigins,
@@ -51,7 +51,11 @@ async function main() {
     },
   });
 
-  console.warn('payments: MOCK Razorpay provider active — do not use in production');
+  if (config.paymentProvider === 'mock') {
+    console.warn('payments: MOCK Razorpay provider active — do not use in production');
+  } else {
+    console.log('payments: disabled — checkout/confirm answer 503 until a real provider is configured');
+  }
   if (config.googleClientId) console.log('auth: Google sign-in enabled');
   else console.warn('auth: Google sign-in masked — set GOOGLE_CLIENT_ID to enable');
 

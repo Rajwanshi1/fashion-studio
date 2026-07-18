@@ -13,6 +13,7 @@ async function main() {
   const seeded = await seed(pool, {
     adminPassword: process.env.SEED_ADMIN_PASSWORD,
     customerPassword: process.env.SEED_CUSTOMER_PASSWORD,
+    demoCustomer: process.env.SEED_DEMO_CUSTOMER !== 'false',
   });
   console.log(seeded ? 'Seeded catalog + users' : 'Seed skipped (products already exist)');
   await pool.end();

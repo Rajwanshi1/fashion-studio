@@ -6,25 +6,34 @@ Everything goes through `infra/deploy.sh <env> <command>` — avoid calling
 
 ## Stack map + deploy order
 
-Four stacks, deployed in this order (`cmd_stacks` in `deploy.sh`). The former `app`
-and `edge` stacks were merged into a single `main` stack (2026-07-07 consolidation);
-`infra/templates/main.yaml` is the source of truth — the old `app.yaml`/`edge.yaml`
-templates have been removed:
+Four stacks (five for a domain-bearing env like prod), deployed in this order
+(`cmd_stacks` in `deploy.sh`). The former `app` and `edge` stacks were merged into a
+single `main` stack (2026-07-07 consolidation); `infra/templates/main.yaml` is the
+source of truth — the old `app.yaml`/`edge.yaml` templates have been removed:
 
-1. **network** (ap-south-1) — VPC, subnets, security groups, and a self-managed
-   NAT instance for private-subnet egress (see "Staging cost trims" below).
+1. **network** (ap-south-1) — VPC, subnets, security groups, and private-subnet
+   egress via `NAT_MODE`: a self-managed NAT instance (staging, see "Staging cost
+   trims" below) or a managed NAT Gateway (prod).
 2. **data** (ap-south-1) — EC2 + Docker Postgres, EBS volume, DLM snapshots, backup
    bucket (in-region only — cross-region replication has been removed; see
    "Data-layer protection story" below). Publishes the Postgres host to
    `/fashion/<env>/db-host` in SSM Parameter Store, consumed by the `main` stack.
-3. **waf** (us-east-1 — required for CloudFront WebACLs).
-4. **main** (ap-south-1) — ALB, ASG, ECR repo, Secrets Manager (JWT + seed
+3. **dns** (ap-south-1, only when `DOMAIN_NAME` is set) — Route 53 public hosted
+   zone for the env's custom domain. `Retain` on delete: recreating a zone changes
+   its nameserver set and silently breaks registrar delegation. After this stack,
+   `deploy.sh` runs a **delegation gate** (see "Custom domain flow" below).
+4. **waf** (us-east-1 — required for CloudFront WebACLs). Also owns the ACM
+   certificate for the custom domain (CloudFront requires us-east-1 certs);
+   conditional on `DomainName`, DNS-validated against the hosted zone.
+5. **main** (ap-south-1) — ALB, ASG, ECR repo, Secrets Manager (JWT + seed
    passwords), plus CloudFront + S3 for the SPAs and the API distribution. Takes
-   `WafWebAclArn` from the `waf` stack. Two web distributions: storefront (also
-   serves the socials SPA under `/qr-socials/` via a viewer-request CloudFront
-   Function that rewrites the two entry paths to `qr-socials/index.html`) and
-   admin. The socials app has no distribution or bucket of its own — its build
-   is synced to the `qr-socials/` prefix of the storefront bucket.
+   `WafWebAclArn` (+ `CertificateArn` when domain-bearing) from the `waf` stack.
+   Two web distributions: storefront (also serves the socials SPA under
+   `/qr-socials/` via a viewer-request CloudFront Function that rewrites the two
+   entry paths to `qr-socials/index.html`) and admin. The socials app has no
+   distribution or bucket of its own — its build is synced to the `qr-socials/`
+   prefix of the storefront bucket. With a domain: CloudFront aliases + A/AAAA
+   alias records for apex/www (storefront), `admin.` and `api.`.
 
 Every `deploy_stack` call enables stack termination protection right after deploying,
 so deleting a stack first needs `update-termination-protection --no-...`.
@@ -41,9 +50,9 @@ Staging trades a little resilience for ~$60/mo of savings vs. the prod-shaped de
   `StatusCheckFailed_System` and triggers EC2 auto-recovery — a dead NAT would sever SSM
   and all egress for every private instance, so this alarm matters. The trade-off is a
   single-AZ, single-instance SPOF with no throughput guarantees, which is fine for
-  staging. **Prod can switch back to a managed NAT Gateway** by restoring the removed
-  `NatEip` (`AWS::EC2::EIP`) and `Nat` (`AWS::EC2::NatGateway`) resources and pointing
-  `PrivateDefaultRoute` back at `NatGatewayId: !Ref Nat` (the pre-trim configuration).
+  staging. **Prod uses a managed NAT Gateway instead** — `NAT_MODE=gateway` in
+  `params/prod.env` flips the `NatMode` template condition (`NatEip` + `NatGateway`
+  replace the NAT instance and `PrivateDefaultRoute` targets the gateway).
 - **App ASG floor of 1 (~$16/mo)** — `APP_MIN=1` in `params/staging.env` (prod stays 2),
   so `DesiredCapacity` follows to 1. A `refresh` with `MinHealthyPercentage=50` may
   briefly leave 0 healthy targets — accepted for staging.
@@ -86,6 +95,37 @@ this template update to an existing environment needs, in order:
 4. `infra/deploy.sh <env> spas` — publishes the socials build to the new prefix.
 5. Reprint/replace any QR codes pointing at the old
    `https://<socials-dist>.cloudfront.net` URL — it is gone, not redirected.
+
+## Custom domain flow (prod)
+
+`DOMAIN_NAME` in `params/<env>.env` turns on the whole chain: dns stack (hosted
+zone) → ACM cert in the waf stack → CloudFront aliases + Route 53 records in main.
+The cert can only DNS-validate once the registrar delegates the domain to the
+Route 53 zone, so the **first** `deploy.sh prod stacks` run stops after
+network/data/dns and prints the four nameservers to set at the registrar
+(`require_delegation` in deploy.sh). Once `dig +short NS <domain>` shows them,
+re-run `deploy.sh prod stacks` — the deployed stacks no-op and waf (cert) + main
+complete. `cmd_cors` and `cmd_spas` automatically use the domain URLs
+(`https://<domain>`, `https://www.<domain>`, `https://admin.<domain>`,
+`VITE_API_URL=https://api.<domain>`) instead of the CloudFront domains.
+
+## Payments gate
+
+Prod must not expose the mock Razorpay flow (it trusts client-supplied payment
+outcomes). The API's payment provider is driven by two env vars injected via the
+launch template (`PAYMENT_PROVIDER`, `ALLOW_MOCK_PAYMENTS`, from `params/<env>.env`):
+
+- staging: `PAYMENT_PROVIDER=mock` + `ALLOW_MOCK_PAYMENTS=true` (explicit escape
+  hatch — staging runs `NODE_ENV=production`, which otherwise refuses the mock).
+- prod: `PAYMENT_PROVIDER=disabled` — `/api/payments/checkout` and `/confirm`
+  answer 503, the storefront shows an "online payments are coming soon" notice,
+  orders stay in `pending_payment`, and the admin marks them paid manually until
+  the real Razorpay integration lands (PRODUCTION-TODO #1).
+
+## Seeding
+
+`cmd_seed` runs migrations + seed over SSM. `SEED_DEMO_CUSTOMER=false` (prod)
+seeds the admin user only — no known-password demo customer.
 
 ## Secrets/params flow
 

@@ -4,7 +4,37 @@ Parameters:
   EnvName:
     Type: String
     AllowedValues: [staging, prod]
+  # Both empty for domainless envs (staging). The cert lives here because
+  # CloudFront requires ACM certs in us-east-1, and this is the one stack
+  # already deployed there.
+  DomainName:
+    Type: String
+    Default: ''
+  HostedZoneId:
+    Type: String
+    Default: ''
+Conditions:
+  HasDomain: !Not [!Equals [!Ref DomainName, '']]
 Resources:
+  # DNS validation completes only after the registrar delegates to the Route 53
+  # zone — deploy.sh gates this stack behind an NS-delegation check so the
+  # deployment fails fast instead of hanging here.
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Condition: HasDomain
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames:
+        - !Sub 'www.${DomainName}'
+        - !Sub 'admin.${DomainName}'
+        - !Sub 'api.${DomainName}'
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - { DomainName: !Ref DomainName, HostedZoneId: !Ref HostedZoneId }
+        - { DomainName: !Sub 'www.${DomainName}', HostedZoneId: !Ref HostedZoneId }
+        - { DomainName: !Sub 'admin.${DomainName}', HostedZoneId: !Ref HostedZoneId }
+        - { DomainName: !Sub 'api.${DomainName}', HostedZoneId: !Ref HostedZoneId }
+      Tags: [{ Key: Project, Value: fashion-studio }, { Key: Env, Value: !Ref EnvName }]
   WebAcl:
     Type: AWS::WAFv2::WebACL
     Properties:
@@ -39,3 +69,6 @@ Resources:
 Outputs:
   WebAclArn:
     Value: !GetAtt WebAcl.Arn
+  CertificateArn:
+    Condition: HasDomain
+    Value: !Ref Certificate

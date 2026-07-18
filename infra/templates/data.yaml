@@ -10,6 +10,13 @@ Parameters:
   AmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  DetailedMonitoring:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+    Description: 1-minute CloudWatch instance metrics (prod); staging keeps 5-minute basic.
+Conditions:
+  DetailedMonitoringOn: !Equals [!Ref DetailedMonitoring, 'true']
 Resources:
   DataKmsKey:
     Type: AWS::KMS::Key
@@ -117,7 +124,7 @@ Resources:
           'Fn::Sub': 'fashion-${EnvName}-data-sg'
       IamInstanceProfile: !Ref DataInstanceProfile
       DisableApiTermination: true
-      Monitoring: false
+      Monitoring: !If [DetailedMonitoringOn, true, false]
       MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
       BlockDeviceMappings:
         - DeviceName: /dev/xvda

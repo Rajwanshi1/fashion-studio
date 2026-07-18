@@ -43,10 +43,18 @@ export interface PaymentsService {
 export function createPaymentsService(deps: {
   payments: PaymentsRepo;
   orders: OrdersRepo;
-  provider: PaymentProvider;
+  /** Masked payments seam — null until a real provider is configured (both endpoints answer 503). */
+  provider: PaymentProvider | null;
 }): PaymentsService {
+  // Confirm is gated too, not just checkout: it is the endpoint that trusts a
+  // client-supplied outcome, so it must never work while payments are disabled.
+  const requireProvider = (): PaymentProvider => {
+    if (!deps.provider) throw new DomainError('NOT_CONFIGURED', 'Online payments are not available yet');
+    return deps.provider;
+  };
   return {
     async checkout(orderId, requester) {
+      const provider = requireProvider();
       const order = await deps.orders.getById(orderId);
       // A non-owning requester gets the same 404 as a missing order — no leaking.
       if (!order || !requesterOwnsOrder(order, requester)) {
@@ -61,7 +69,7 @@ export function createPaymentsService(deps: {
       if (existing.some((p) => p.status === 'captured')) {
         throw new DomainError('PAYMENT_ALREADY_FINAL', 'This order has already been paid');
       }
-      const { providerOrderId } = await deps.provider.createProviderOrder(order.total, order.orderNumber);
+      const { providerOrderId } = await provider.createProviderOrder(order.total, order.orderNumber);
       const payment = await deps.payments.create({
         orderId,
         provider: 'razorpay_mock',
@@ -74,7 +82,7 @@ export function createPaymentsService(deps: {
       return {
         paymentId: payment.id,
         providerOrderId,
-        keyId: deps.provider.keyId,
+        keyId: provider.keyId,
         amount: payment.amount,
         currency: payment.currency,
         mock: true,
@@ -86,6 +94,7 @@ export function createPaymentsService(deps: {
     // MUST NOT trust the client — it must verify Razorpay's HMAC signature
     // server-side and/or rely on the signed webhook (see TODO-THIRD-PARTY.md).
     async confirm(paymentId, outcome, requester) {
+      requireProvider();
       const payment = await deps.payments.getById(paymentId);
       const order = payment && (await deps.orders.getById(payment.orderId));
       // A non-owning requester gets the same 404 as a missing payment — no leaking.

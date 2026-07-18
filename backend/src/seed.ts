@@ -239,11 +239,19 @@ const STANDARD_SIZES = ['XS', 'S', 'M', 'L', 'XL'];
 export interface SeedOverrides {
   adminPassword?: string;
   customerPassword?: string;
+  /** false skips the demo customer (prod seeds the admin only). */
+  demoCustomer?: boolean;
 }
 
 /** Idempotent seed: catalog is skipped when any product exists; users are upsert-checked. */
 export async function seed(pool: Pool, overrides: SeedOverrides = {}): Promise<boolean> {
-  const USERS = [
+  const USERS: Array<{
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    role: 'admin' | 'customer';
+  }> = [
     {
       email: 'admin@tanviagnihotry.com',
       password: overrides.adminPassword ?? 'TanviAdmin@2026',
@@ -251,14 +259,16 @@ export async function seed(pool: Pool, overrides: SeedOverrides = {}): Promise<b
       lastName: 'Agnihotry',
       role: 'admin' as const,
     },
-    {
+  ];
+  if (overrides.demoCustomer !== false) {
+    USERS.push({
       email: 'aanya@example.com',
       password: overrides.customerPassword ?? 'Aanya@2026',
       firstName: 'Aanya',
       lastName: 'Mehra',
       role: 'customer' as const,
-    },
-  ];
+    });
+  }
   const products = createProductsRepo(pool);
   const users = createUsersRepo(pool);
 
