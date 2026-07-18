@@ -3,6 +3,7 @@ import path from 'path';
 import { createApp } from './app';
 import { loadConfig } from './config';
 import { createClicksRepo } from './data/clicks.repo';
+import { createEventsRepo } from './data/events.repo';
 import { createOrdersRepo } from './data/orders.repo';
 import { createPaymentsRepo } from './data/payments.repo';
 import { createProductsRepo, createWishlistRepo } from './data/products.repo';
@@ -40,6 +41,7 @@ async function main() {
       payments: createPaymentsRepo(pool),
       scans: createScansRepo(pool),
       clicks: createClicksRepo(pool),
+      events: createEventsRepo(pool),
     },
     paymentProvider: config.paymentProvider === 'mock' ? new MockRazorpayProvider() : null,
     verifyGoogleToken: config.googleClientId ? createGoogleVerifier(config.googleClientId) : null,

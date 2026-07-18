@@ -10,6 +10,7 @@ import type {
   WishlistRepo,
 } from '../src/data/products.repo';
 import type { ClicksRepo, LinkStats } from '../src/data/clicks.repo';
+import type { EventsRepo, NewEvent } from '../src/data/events.repo';
 import type { ScansRepo, SourceStats } from '../src/data/scans.repo';
 import type { AdminUser, CreateUserInput, UsersRepo } from '../src/data/users.repo';
 import type { GoogleTokenClaims, VerifyGoogleToken } from '../src/services/auth.service';
@@ -536,6 +537,14 @@ export class FakeClicksRepo implements ClicksRepo {
   }
 }
 
+export class FakeEventsRepo implements EventsRepo {
+  rows: NewEvent[] = [];
+
+  async insertBatch(rows: NewEvent[]): Promise<void> {
+    this.rows.push(...rows);
+  }
+}
+
 export interface Fakes {
   users: FakeUsersRepo;
   products: FakeProductsRepo;
@@ -544,6 +553,7 @@ export interface Fakes {
   payments: FakePaymentsRepo;
   scans: FakeScansRepo;
   clicks: FakeClicksRepo;
+  events: FakeEventsRepo;
 }
 
 export function makeFakes(): Fakes {
@@ -554,7 +564,8 @@ export function makeFakes(): Fakes {
   const payments = new FakePaymentsRepo(orders);
   const scans = new FakeScansRepo();
   const clicks = new FakeClicksRepo();
-  return { users, products, wishlist, orders, payments, scans, clicks };
+  const events = new FakeEventsRepo();
+  return { users, products, wishlist, orders, payments, scans, clicks, events };
 }
 
 /** Small catalog covering both categories, all flags, an inactive product and low stock. */

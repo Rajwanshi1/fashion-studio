@@ -738,4 +738,83 @@ describe('API', () => {
       expect(clicks[0]).toHaveProperty('lastClickAt');
     });
   });
+
+  describe('analytics', () => {
+    const VISITOR = '11111111-1111-1111-1111-111111111111';
+    const SESSION = '22222222-2222-2222-2222-222222222222';
+    const validBatch = () => ({
+      visitorId: VISITOR,
+      sessionId: SESSION,
+      events: [{ type: 'page_view', path: '/shop' }],
+    });
+
+    it('POST /api/track records a valid batch and returns empty 204', async () => {
+      const res = await app.request('/api/track', post(validBatch()));
+      expect(res.status).toBe(204);
+      expect(await res.text()).toBe('');
+      expect(f.events.rows).toHaveLength(1);
+      expect(f.events.rows[0]).toMatchObject({
+        eventType: 'page_view',
+        visitorId: VISITOR,
+        sessionId: SESSION,
+        path: '/shop',
+        userId: null,
+        productId: null,
+        device: 'desktop',
+        props: {},
+      });
+    });
+
+    it('maps userId, productId and props through to the repo', async () => {
+      const res = await app.request(
+        '/api/track',
+        post({
+          visitorId: VISITOR,
+          sessionId: SESSION,
+          userId: '33333333-3333-3333-3333-333333333333',
+          events: [
+            { type: 'product_view', productId: '44444444-4444-4444-4444-444444444444', props: { color: 'sage' } },
+          ],
+        }),
+      );
+      expect(res.status).toBe(204);
+      expect(f.events.rows[0]).toMatchObject({
+        eventType: 'product_view',
+        userId: '33333333-3333-3333-3333-333333333333',
+        productId: '44444444-4444-4444-4444-444444444444',
+        props: { color: 'sage' },
+      });
+    });
+
+    it('400 {error:string} on an unknown event type', async () => {
+      const res = await app.request('/api/track', post({ ...validBatch(), events: [{ type: 'made_up_event' }] }));
+      expect(res.status).toBe(400);
+      expect(typeof (await res.json()).error).toBe('string');
+      expect(f.events.rows).toHaveLength(0);
+    });
+
+    it('accepts a batch of exactly 20 events but rejects 21 with 400', async () => {
+      const twenty = Array.from({ length: 20 }, () => ({ type: 'page_view' }));
+      const ok = await app.request('/api/track', post({ ...validBatch(), events: twenty }));
+      expect(ok.status).toBe(204);
+      expect(f.events.rows).toHaveLength(20);
+
+      const twentyOne = Array.from({ length: 21 }, () => ({ type: 'page_view' }));
+      const tooMany = await app.request('/api/track', post({ ...validBatch(), events: twentyOne }));
+      expect(tooMany.status).toBe(400);
+      expect(f.events.rows).toHaveLength(20); // unchanged — the rejected batch inserted nothing
+    });
+
+    it('400 on an empty events array', async () => {
+      const res = await app.request('/api/track', post({ ...validBatch(), events: [] }));
+      expect(res.status).toBe(400);
+      expect(f.events.rows).toHaveLength(0);
+    });
+
+    it('400 on a non-uuid visitorId', async () => {
+      const res = await app.request('/api/track', post({ ...validBatch(), visitorId: 'not-a-uuid' }));
+      expect(res.status).toBe(400);
+      expect(f.events.rows).toHaveLength(0);
+    });
+  });
 });
