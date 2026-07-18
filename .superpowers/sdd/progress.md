@@ -1,6 +1,0 @@
-Task 1: complete (da79465..c33814d, review clean; minors: dead service-level path truncation behind zod max, empty-string path -> null idiom, no HTTP-level explicit-null userId test)
-Task 2: complete (c33814d..0192791, review clean; minors: ta.session JSON-parse self-heal gap, rotation-overflow path untested, extra page-tracking.test.tsx file)
-Task 3: complete (0192791..f3335da, review approved after fix loop: filter_apply value-snapshot guard + wishlist toggle track outside updater, both with StrictMode regression tests; minors: theoretical same-tick toggle stale-closure, one real-timer 600ms test)
-Task 4: complete (f3335da..e6762a0, review clean; minors: fake dup of SQL semantics, dailyTrend window alignment (plan-inherited), stale Task-2 header comment in analytics.ts)
-Task 5: complete (e6762a0..95a550a, review approved after fix loop: rate x100 scaling + raw-fraction fixtures + unit comments; minors: table cells lack toLocaleString, TrendLine y-min hardcoded 0)
-Task 6: complete (95a550a..5f9f1b5, review clean; minors: trackFlush single-204 comment, future-refinements numbering style)
