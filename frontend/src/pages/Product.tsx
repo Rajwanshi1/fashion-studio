@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useWishlist } from '../lib/wishlist';
+import { track } from '../lib/analytics';
 import { useCartDrawer } from '../components/CartDrawer';
 import { useToast } from '../components/Toast';
 import Shop from '../components/Shop';
@@ -44,6 +45,8 @@ export default function Product() {
   const [variantId, setVariantId] = useState('');
   const [qty, setQty] = useState(1);
 
+  const lastTrackedSlugRef = useRef<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -60,6 +63,13 @@ export default function Product() {
           ('related' in raw ? raw.related : undefined) ?? detail.related ?? [];
         if (cancelled) return;
         setProduct(detail);
+        if (lastTrackedSlugRef.current !== detail.slug) {
+          lastTrackedSlugRef.current = detail.slug;
+          track('product_view', {
+            productId: detail.id,
+            props: { slug: detail.slug, name: detail.name, price: detail.price },
+          });
+        }
         setColor(detail.color);
         const firstInStock = detail.variants.find((v) => v.stock > 0) ?? detail.variants[0];
         setVariantId(firstInStock?.id ?? '');
@@ -209,7 +219,10 @@ export default function Product() {
                 className={`swatch ${COLOR_CLASS[c] ?? 'c-default'}${c === color ? ' active' : ''}`}
                 aria-label={c}
                 title={c}
-                onClick={() => setColor(c)}
+                onClick={() => {
+                  setColor(c);
+                  track('color_select', { productId: product.id, props: { color: c } });
+                }}
               />
             ))}
           </div>
@@ -226,7 +239,10 @@ export default function Product() {
                 key={v.id}
                 className={`size${v.id === variantId ? ' active' : ''}`}
                 disabled={v.stock === 0}
-                onClick={() => setVariantId(v.id)}
+                onClick={() => {
+                  setVariantId(v.id);
+                  track('variant_select', { productId: product.id, props: { variantId: v.id, size: v.size } });
+                }}
               >
                 {v.size}
               </button>

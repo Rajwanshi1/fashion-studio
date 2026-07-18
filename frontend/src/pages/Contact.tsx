@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Shop from '../components/Shop';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
+import { track } from '../lib/analytics';
 import '../styles/contact.css';
 
 export default function Contact() {
@@ -11,6 +12,7 @@ export default function Contact() {
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
+    track('contact_submit', { props: { tab } });
     setSent(true);
   };
 

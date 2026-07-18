@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api } from './api';
+import { track } from './analytics';
 import type { AuthResponse, PublicUser } from './types';
 
 const STORAGE_KEY = 'ta.auth';
@@ -54,11 +55,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const res = await api.post<AuthResponse>('/api/auth/login', { email, password });
     persist(res.token, res.user);
+    track('login', { props: { method: 'password' } });
   }, []);
 
   const loginWithGoogle = useCallback(async (credential: string) => {
     const res = await api.post<AuthResponse>('/api/auth/google', { credential });
     persist(res.token, res.user);
+    track('login', { props: { method: 'google' } });
   }, []);
 
   const register = useCallback(
@@ -70,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
       });
       persist(res.token, res.user);
+      track('signup', { props: { method: 'password' } });
     },
     [],
   );

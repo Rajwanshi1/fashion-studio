@@ -5,6 +5,7 @@ import type { Category, ProductDetail, ProductSummary, ProductsResponse } from '
 import { useCart } from '../lib/cart';
 import { useCartDrawer } from '../components/CartDrawer';
 import { useToast } from '../components/Toast';
+import { track } from '../lib/analytics';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import ImageSlot from '../components/ImageSlot';
@@ -249,6 +250,7 @@ function NewsletterSection() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          track('newsletter_signup');
           setEmail('');
           setDone(true);
         }}

@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { api } from './api';
 import { useAuth } from './auth';
+import { track } from './analytics';
 
 const STORAGE_KEY = 'ta.wishlist';
 
@@ -96,6 +97,7 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
 
   const remove = useCallback(
     (productId: string) => {
+      track('wishlist_remove', { productId });
       setIds((prev) => prev.filter((id) => id !== productId));
       if (token) api.del(`/api/me/wishlist/${productId}`).catch(() => undefined);
     },
@@ -104,18 +106,22 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
 
   const toggle = useCallback(
     (productId: string) => {
-      setIds((prev) => {
-        const exists = prev.includes(productId);
-        if (token) {
-          (exists
-            ? api.del(`/api/me/wishlist/${productId}`)
-            : api.put(`/api/me/wishlist/${productId}`)
-          ).catch(() => undefined);
-        }
-        return exists ? prev.filter((id) => id !== productId) : [...prev, productId];
-      });
+      // `exists` is read from `ids` here — not recomputed inside the setIds
+      // updater — so track() (and the api call) run exactly once per click.
+      // React 18 StrictMode double-invokes functional updaters passed to
+      // setState; the api.del/put calls already tolerate that (idempotent),
+      // but a countable analytics event must not double-fire.
+      const exists = ids.includes(productId);
+      track(exists ? 'wishlist_remove' : 'wishlist_add', { productId });
+      if (token) {
+        (exists
+          ? api.del(`/api/me/wishlist/${productId}`)
+          : api.put(`/api/me/wishlist/${productId}`)
+        ).catch(() => undefined);
+      }
+      setIds((prev) => (exists ? prev.filter((id) => id !== productId) : [...prev, productId]));
     },
-    [token],
+    [ids, token],
   );
 
   const value = useMemo(

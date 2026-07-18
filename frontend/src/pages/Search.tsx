@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
+import { track } from '../lib/analytics';
 import type { ProductsResponse, ProductSummary } from '../lib/types';
 import Shop from '../components/Shop';
 import ProductCard from '../components/ProductCard';
@@ -18,6 +19,7 @@ export default function Search() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState('');
+  const lastTrackedQueryRef = useRef<string | null>(null);
 
   // Live results — debounced fetch.
   useEffect(() => {
@@ -38,6 +40,10 @@ export default function Search() {
           setTotal(d.total);
           setSearched(q);
           setError(null);
+          if (lastTrackedQueryRef.current !== q) {
+            lastTrackedQueryRef.current = q;
+            track('search', { props: { query: q, results: d.total } });
+          }
         })
         .catch((e: { message?: string }) => {
           setError(e.message ?? 'Search is unavailable right now.');
