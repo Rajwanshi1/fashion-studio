@@ -120,6 +120,10 @@ CI — see the still-open items below, especially #1, #20, #22, #23, #25.
   content; put the atelier's real email/phone/socials in Contact + Footer.
   Where: `frontend/src/App.tsx`, `frontend/src/pages/Contact.tsx`,
   `frontend/src/components/Footer.tsx`, `frontend/src/pages/ClientCare.tsx`.
+  **Note:** now that first-party storefront analytics exists (#31), the Privacy
+  Policy content must also disclose it — an anonymous visitor id is stored in
+  `localStorage` (no cookies, no third-party trackers) and behavioral events are
+  sent to our own `/api/track` endpoint.
 
 - [x] **8. `VITE_API_URL` set per Amplify app — and fail loud when missing** ⚠
   Both SPAs silently fall back to `http://localhost:3001` if the build-time var is
@@ -291,6 +295,17 @@ CI — see the still-open items below, especially #1, #20, #22, #23, #25.
 
 - [ ] **31. Analytics + monitoring** — web analytics for the storefront; uptime/log
   monitoring for the API containers.
+  **Partially done (2026-07-18):** first-party storefront web analytics shipped —
+  the storefront batches ~18 event types (page/product views, cart, checkout steps,
+  search, wishlist, auth, etc.) to `POST /api/track`, which the admin `/analytics`
+  dashboard reads back as session/conversion/abandonment/AOV KPIs, a funnel and
+  trend chart, and top-product/search/source/device/size/color breakdowns. **Still
+  open:** uptime/log monitoring for the API containers is untouched. **Future
+  refinements:** (1) the `events` table grows unbounded with no pruning/retention
+  job — `events_created_idx` (on `created_at`) makes a cheap `DELETE ... WHERE
+  created_at < now() - interval` easy to add later; (2) events are recorded
+  unfiltered for bots/crawlers, same gap as the existing `socials/` scan/click
+  tracking.
 
 - [ ] **32. Decorative UI: wire or remove** — newsletter form (local state only),
   cart promo-code field (no handler), dead card-number/expiry/CVV inputs on checkout

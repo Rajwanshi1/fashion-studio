@@ -151,6 +151,27 @@ export interface LinkClickStat {
   lastClickAt: string;
 }
 
+/** Mirrors backend/src/services/analytics.service.ts summary() — GET /api/analytics/summary. */
+export interface AnalyticsSummary {
+  kpis: {
+    sessions: number;
+    orders: number;
+    revenue: number; // paise
+    conversionRate: number; // fraction 0..1
+    cartAbandonmentRate: number; // fraction 0..1
+    aov: number;
+  };
+  funnel: Array<{ stage: string; sessions: number }>;
+  trend: Array<{ day: string; sessions: number; orders: number }>;
+  topProducts: Array<{ productId: string; name: string; views: number; carts: number; purchased: number }>;
+  topSearches: Array<{ query: string; searches: number; lastAt: string }>;
+  zeroSearches: Array<{ query: string; searches: number; lastAt: string }>;
+  sources: Array<{ source: string; sessions: number }>;
+  devices: Array<{ device: string; sessions: number }>;
+  sizes: Array<{ size: string; adds: number }>;
+  colors: Array<{ color: string; adds: number }>;
+}
+
 /** Valid next order-status transitions, mirrored from the backend state machine. */
 export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending_payment: ['paid', 'cancelled'],

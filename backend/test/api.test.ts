@@ -738,4 +738,187 @@ describe('API', () => {
       expect(clicks[0]).toHaveProperty('lastClickAt');
     });
   });
+
+  describe('analytics', () => {
+    const VISITOR = '11111111-1111-1111-1111-111111111111';
+    const SESSION = '22222222-2222-2222-2222-222222222222';
+    const validBatch = () => ({
+      visitorId: VISITOR,
+      sessionId: SESSION,
+      events: [{ type: 'page_view', path: '/shop' }],
+    });
+
+    it('POST /api/track records a valid batch and returns empty 204', async () => {
+      const res = await app.request('/api/track', post(validBatch()));
+      expect(res.status).toBe(204);
+      expect(await res.text()).toBe('');
+      expect(f.events.rows).toHaveLength(1);
+      expect(f.events.rows[0]).toMatchObject({
+        eventType: 'page_view',
+        visitorId: VISITOR,
+        sessionId: SESSION,
+        path: '/shop',
+        userId: null,
+        productId: null,
+        device: 'desktop',
+        props: {},
+      });
+    });
+
+    it('maps userId, productId and props through to the repo', async () => {
+      const res = await app.request(
+        '/api/track',
+        post({
+          visitorId: VISITOR,
+          sessionId: SESSION,
+          userId: '33333333-3333-3333-3333-333333333333',
+          events: [
+            { type: 'product_view', productId: '44444444-4444-4444-4444-444444444444', props: { color: 'sage' } },
+          ],
+        }),
+      );
+      expect(res.status).toBe(204);
+      expect(f.events.rows[0]).toMatchObject({
+        eventType: 'product_view',
+        userId: '33333333-3333-3333-3333-333333333333',
+        productId: '44444444-4444-4444-4444-444444444444',
+        props: { color: 'sage' },
+      });
+    });
+
+    it('400 {error:string} on an unknown event type', async () => {
+      const res = await app.request('/api/track', post({ ...validBatch(), events: [{ type: 'made_up_event' }] }));
+      expect(res.status).toBe(400);
+      expect(typeof (await res.json()).error).toBe('string');
+      expect(f.events.rows).toHaveLength(0);
+    });
+
+    it('accepts a batch of exactly 20 events but rejects 21 with 400', async () => {
+      const twenty = Array.from({ length: 20 }, () => ({ type: 'page_view' }));
+      const ok = await app.request('/api/track', post({ ...validBatch(), events: twenty }));
+      expect(ok.status).toBe(204);
+      expect(f.events.rows).toHaveLength(20);
+
+      const twentyOne = Array.from({ length: 21 }, () => ({ type: 'page_view' }));
+      const tooMany = await app.request('/api/track', post({ ...validBatch(), events: twentyOne }));
+      expect(tooMany.status).toBe(400);
+      expect(f.events.rows).toHaveLength(20); // unchanged — the rejected batch inserted nothing
+    });
+
+    it('400 on an empty events array', async () => {
+      const res = await app.request('/api/track', post({ ...validBatch(), events: [] }));
+      expect(res.status).toBe(400);
+      expect(f.events.rows).toHaveLength(0);
+    });
+
+    it('400 on a non-uuid visitorId', async () => {
+      const res = await app.request('/api/track', post({ ...validBatch(), visitorId: 'not-a-uuid' }));
+      expect(res.status).toBe(400);
+      expect(f.events.rows).toHaveLength(0);
+    });
+  });
+
+  describe('analytics summary (admin read)', () => {
+    it('GET /api/analytics/summary requires admin auth: 401 anonymous, 403 customer', async () => {
+      expect((await app.request('/api/analytics/summary')).status).toBe(401);
+      const { token: customerToken } = await registerCustomer();
+      expect((await app.request('/api/analytics/summary', bearer(customerToken))).status).toBe(403);
+    });
+
+    it('?days=14 is rejected with 400; 7/30(default)/90 are accepted', async () => {
+      expect((await app.request('/api/analytics/summary?days=14', bearer(adminToken))).status).toBe(400);
+      expect((await app.request('/api/analytics/summary?days=7', bearer(adminToken))).status).toBe(200);
+      expect((await app.request('/api/analytics/summary?days=90', bearer(adminToken))).status).toBe(200);
+      expect((await app.request('/api/analytics/summary', bearer(adminToken))).status).toBe(200); // default 30
+    });
+
+    it('returns the full response contract shape with seeded events', async () => {
+      const V1 = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+      const V2 = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+      // Fake product ids (e.g. 'p-1') aren't valid UUIDs, and the /track schema requires
+      // productId to be a UUID — use a standalone UUID and seed its display name directly.
+      const PRODUCT_ID = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+      const PRODUCT_NAME = 'Sage Sequin Jacket Lehenga';
+      f.events.productNames.set(PRODUCT_ID, PRODUCT_NAME);
+
+      // Session 1: lands via a UTM source, views + carts the product, searches (zero results), then buys.
+      await app.request('/api/track', post({
+        visitorId: V1,
+        sessionId: '11111111-aaaa-aaaa-aaaa-111111111111',
+        events: [
+          { type: 'session_start', props: { utmSource: 'newsletter' } },
+          { type: 'product_view', productId: PRODUCT_ID },
+          { type: 'add_to_cart', productId: PRODUCT_ID, props: { size: 'M', color: 'Sage' } },
+          { type: 'search', props: { query: 'lehenga', results: 0 } },
+          { type: 'checkout_start' },
+          { type: 'order_placed', props: { total: 18400000, items: [{ productId: PRODUCT_ID, qty: 1 }] } },
+        ],
+      }));
+
+      // Session 2: direct visit, just browses (no conversion) — mobile device.
+      await app.request('/api/track', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148',
+        },
+        body: JSON.stringify({
+          visitorId: V2,
+          sessionId: '22222222-bbbb-bbbb-bbbb-222222222222',
+          events: [
+            { type: 'session_start', props: {} },
+            { type: 'search', props: { query: 'gown', results: 4 } },
+          ],
+        }),
+      });
+
+      const res = await app.request('/api/analytics/summary', bearer(adminToken));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.kpis).toMatchObject({
+        sessions: 2,
+        orders: 1,
+        revenue: 18400000,
+      });
+      expect(body.kpis.conversionRate).toBeCloseTo(0.5);
+      expect(typeof body.kpis.aov).toBe('number');
+      expect(Number.isNaN(body.kpis.aov)).toBe(false);
+
+      expect(body.funnel.map((stage: any) => stage.stage)).toEqual([
+        'Sessions',
+        'Product views',
+        'Added to cart',
+        'Checkout',
+        'Purchased',
+      ]);
+      expect(body.funnel.every((stage: any) => typeof stage.sessions === 'number')).toBe(true);
+
+      expect(Array.isArray(body.trend)).toBe(true);
+      expect(body.trend.length).toBe(30); // default days window, gap-filled
+      expect(body.trend[0]).toMatchObject({ orders: expect.any(Number), sessions: expect.any(Number) });
+      expect(body.trend[0].day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+      expect(body.topProducts).toContainEqual(
+        expect.objectContaining({ productId: PRODUCT_ID, name: PRODUCT_NAME, views: 1, carts: 1, purchased: 1 }),
+      );
+
+      expect(body.topSearches).toEqual(expect.arrayContaining([
+        expect.objectContaining({ query: 'lehenga', searches: 1 }),
+        expect.objectContaining({ query: 'gown', searches: 1 }),
+      ]));
+      expect(body.zeroSearches).toEqual([expect.objectContaining({ query: 'lehenga', searches: 1 })]);
+
+      expect(body.sources).toContainEqual({ source: 'newsletter', sessions: 1 });
+      expect(body.sources).toContainEqual({ source: 'direct', sessions: 1 });
+
+      expect(body.devices).toEqual(expect.arrayContaining([
+        expect.objectContaining({ device: 'desktop', sessions: 1 }),
+        expect.objectContaining({ device: 'mobile', sessions: 1 }),
+      ]));
+
+      expect(body.sizes).toContainEqual({ size: 'M', adds: 1 });
+      expect(body.colors).toContainEqual({ color: 'Sage', adds: 1 });
+    });
+  });
 });

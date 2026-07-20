@@ -10,6 +10,18 @@ import type {
   WishlistRepo,
 } from '../src/data/products.repo';
 import type { ClicksRepo, LinkStats } from '../src/data/clicks.repo';
+import type {
+  ColorRow,
+  DeviceRow,
+  EventsRepo,
+  KpiAndFunnel,
+  NewEvent,
+  SearchRow,
+  SizeRow,
+  SourceRow,
+  TopProduct,
+  TrendDay,
+} from '../src/data/events.repo';
 import type { ScansRepo, SourceStats } from '../src/data/scans.repo';
 import type { AdminUser, CreateUserInput, UsersRepo } from '../src/data/users.repo';
 import type { GoogleTokenClaims, VerifyGoogleToken } from '../src/services/auth.service';
@@ -536,6 +548,195 @@ export class FakeClicksRepo implements ClicksRepo {
   }
 }
 
+type StoredEvent = NewEvent & { createdAt: Date };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * In-memory stand-in for the aggregate reads. Rows are timestamped at insert
+ * time (like FakeScansRepo/FakeClicksRepo) so `days`-windowing is meaningful;
+ * everything inserted during a test run falls inside any 7/30/90 window.
+ * `productNames` lets a test opt into name resolution for topProducts, mirroring
+ * the real repo's `LEFT JOIN products`.
+ *
+ * IMPORTANT: this fake aggregates in plain JS (`Number(...)`, property access,
+ * etc.), which never throws the way Postgres does. `props` is client-controlled
+ * (see events.repo.ts), and the real SQL has to guard every cast of a props
+ * value against a poisoned/mistyped shape, or a bad row throws 22P02 and 500s
+ * the summary read. Those guards are structural — a CASE expression's branch
+ * order is documented SQL semantics (the ELSE/ineligible branch is guaranteed
+ * never to evaluate the cast), not something inferred from a particular query
+ * plan — but this fake still cannot reproduce the failure mode a broken guard
+ * would cause: it never throws the way an unguarded Postgres cast does, so a
+ * regression that weakens/removes one of those CASE guards will NOT be caught
+ * by tests running against FakeEventsRepo. Cast-guard changes must be
+ * verified against real Postgres (see task-4-report.md / the final-fix-report
+ * for the throwaway-container approach).
+ */
+export class FakeEventsRepo implements EventsRepo {
+  rows: StoredEvent[] = [];
+  productNames = new Map<string, string>();
+
+  async insertBatch(rows: NewEvent[]): Promise<void> {
+    const now = new Date();
+    this.rows.push(...rows.map((r) => ({ ...r, createdAt: now })));
+  }
+
+  private within(days: number): StoredEvent[] {
+    const cutoff = Date.now() - days * DAY_MS;
+    return this.rows.filter((r) => r.createdAt.getTime() > cutoff);
+  }
+
+  async kpiAndFunnel(days: number): Promise<KpiAndFunnel> {
+    const rows = this.within(days);
+    const distinctSessions = (type: string) =>
+      new Set(rows.filter((r) => r.eventType === type).map((r) => r.sessionId)).size;
+    const orderRows = rows.filter((r) => r.eventType === 'order_placed');
+    const revenue = orderRows.reduce((sum, r) => sum + Number((r.props as any)?.total ?? 0), 0);
+    return {
+      sessions: distinctSessions('session_start'),
+      pdpSessions: distinctSessions('product_view'),
+      cartSessions: distinctSessions('add_to_cart'),
+      checkoutSessions: distinctSessions('checkout_start'),
+      orderSessions: distinctSessions('order_placed'),
+      orders: orderRows.length,
+      revenue,
+    };
+  }
+
+  async dailyTrend(days: number): Promise<TrendDay[]> {
+    const rows = this.within(days);
+    const byDay = new Map<string, { sessions: Set<string>; orders: number }>();
+    const today = new Date();
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setUTCDate(d.getUTCDate() - i);
+      byDay.set(d.toISOString().slice(0, 10), { sessions: new Set(), orders: 0 });
+    }
+    for (const r of rows) {
+      const bucket = byDay.get(r.createdAt.toISOString().slice(0, 10));
+      if (!bucket) continue;
+      if (r.eventType === 'session_start') bucket.sessions.add(r.sessionId);
+      if (r.eventType === 'order_placed') bucket.orders++;
+    }
+    return [...byDay.entries()].map(([day, v]) => ({ day, sessions: v.sessions.size, orders: v.orders }));
+  }
+
+  async topProducts(days: number): Promise<TopProduct[]> {
+    const rows = this.within(days);
+    const views = new Map<string, number>();
+    const carts = new Map<string, number>();
+    const purchased = new Map<string, number>();
+    for (const r of rows) {
+      if (!r.productId) continue;
+      if (r.eventType === 'product_view') views.set(r.productId, (views.get(r.productId) ?? 0) + 1);
+      if (r.eventType === 'add_to_cart') carts.set(r.productId, (carts.get(r.productId) ?? 0) + 1);
+    }
+    for (const r of rows) {
+      if (r.eventType !== 'order_placed') continue;
+      const items = ((r.props as any)?.items ?? []) as { productId?: string; qty?: number }[];
+      for (const item of items) {
+        if (!item.productId) continue;
+        purchased.set(item.productId, (purchased.get(item.productId) ?? 0) + (item.qty ?? 0));
+      }
+    }
+    const ids = new Set([...views.keys(), ...carts.keys(), ...purchased.keys()]);
+    return [...ids]
+      .map((productId) => ({
+        productId,
+        name: this.productNames.get(productId) ?? '(removed product)',
+        views: views.get(productId) ?? 0,
+        carts: carts.get(productId) ?? 0,
+        purchased: purchased.get(productId) ?? 0,
+      }))
+      .sort((a, b) => b.views - a.views || b.carts - a.carts)
+      .slice(0, 10);
+  }
+
+  private searchGroups(days: number, zeroOnly: boolean): SearchRow[] {
+    const groups = new Map<string, { searches: number; lastAt: Date }>();
+    for (const r of this.within(days)) {
+      if (r.eventType !== 'search') continue;
+      const props = r.props as any;
+      if (props?.query === undefined) continue;
+      if (zeroOnly && Number(props?.results) !== 0) continue;
+      const g = groups.get(props.query) ?? { searches: 0, lastAt: r.createdAt };
+      g.searches++;
+      if (r.createdAt > g.lastAt) g.lastAt = r.createdAt;
+      groups.set(props.query, g);
+    }
+    return [...groups.entries()]
+      .map(([query, g]) => ({ query, searches: g.searches, lastAt: g.lastAt.toISOString() }))
+      .sort((a, b) => b.searches - a.searches)
+      .slice(0, 20);
+  }
+
+  async topSearches(days: number): Promise<SearchRow[]> {
+    return this.searchGroups(days, false);
+  }
+
+  async zeroSearches(days: number): Promise<SearchRow[]> {
+    return this.searchGroups(days, true);
+  }
+
+  async sources(days: number): Promise<SourceRow[]> {
+    const counts = new Map<string, Set<string>>();
+    for (const r of this.within(days)) {
+      if (r.eventType !== 'session_start') continue;
+      const props = r.props as any;
+      let source = 'direct';
+      if (props?.utmSource) {
+        source = props.utmSource;
+      } else if (props?.referrer) {
+        const match = /^https?:\/\/([^/]+)/.exec(props.referrer);
+        source = match ? match[1] : 'direct';
+      }
+      const set = counts.get(source) ?? new Set<string>();
+      set.add(r.sessionId);
+      counts.set(source, set);
+    }
+    return [...counts.entries()]
+      .map(([source, sessions]) => ({ source, sessions: sessions.size }))
+      .sort((a, b) => b.sessions - a.sessions)
+      .slice(0, 20);
+  }
+
+  async devices(days: number): Promise<DeviceRow[]> {
+    const counts = new Map<string, Set<string>>();
+    for (const r of this.within(days)) {
+      if (r.eventType !== 'session_start') continue;
+      const set = counts.get(r.device) ?? new Set<string>();
+      set.add(r.sessionId);
+      counts.set(r.device, set);
+    }
+    return [...counts.entries()]
+      .map(([device, sessions]) => ({ device, sessions: sessions.size }))
+      .sort((a, b) => b.sessions - a.sessions);
+  }
+
+  async sizes(days: number): Promise<SizeRow[]> {
+    const counts = new Map<string, number>();
+    for (const r of this.within(days)) {
+      if (r.eventType !== 'add_to_cart') continue;
+      const size = (r.props as any)?.size;
+      if (size === undefined) continue;
+      counts.set(size, (counts.get(size) ?? 0) + 1);
+    }
+    return [...counts.entries()].map(([size, adds]) => ({ size, adds })).sort((a, b) => b.adds - a.adds);
+  }
+
+  async colors(days: number): Promise<ColorRow[]> {
+    const counts = new Map<string, number>();
+    for (const r of this.within(days)) {
+      if (r.eventType !== 'add_to_cart') continue;
+      const color = (r.props as any)?.color;
+      if (color === undefined) continue;
+      counts.set(color, (counts.get(color) ?? 0) + 1);
+    }
+    return [...counts.entries()].map(([color, adds]) => ({ color, adds })).sort((a, b) => b.adds - a.adds);
+  }
+}
+
 export interface Fakes {
   users: FakeUsersRepo;
   products: FakeProductsRepo;
@@ -544,6 +745,7 @@ export interface Fakes {
   payments: FakePaymentsRepo;
   scans: FakeScansRepo;
   clicks: FakeClicksRepo;
+  events: FakeEventsRepo;
 }
 
 export function makeFakes(): Fakes {
@@ -554,7 +756,8 @@ export function makeFakes(): Fakes {
   const payments = new FakePaymentsRepo(orders);
   const scans = new FakeScansRepo();
   const clicks = new FakeClicksRepo();
-  return { users, products, wishlist, orders, payments, scans, clicks };
+  const events = new FakeEventsRepo();
+  return { users, products, wishlist, orders, payments, scans, clicks, events };
 }
 
 /** Small catalog covering both categories, all flags, an inactive product and low stock. */

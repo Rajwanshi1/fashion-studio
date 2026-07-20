@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { track } from './analytics';
 
 const STORAGE_KEY = 'ta.cart';
 
@@ -57,6 +58,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [items]);
 
   const add = useCallback((item: Omit<CartItem, 'qty'>, qty = 1) => {
+    track('add_to_cart', {
+      productId: item.productId,
+      props: { variantId: item.variantId, size: item.size, color: item.color, qty, price: item.unitPrice },
+    });
     setItems((prev) => {
       const existing = prev.find((i) => i.variantId === item.variantId);
       if (existing) {
@@ -69,6 +74,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setQty = useCallback((variantId: string, qty: number) => {
+    if (qty < 1) track('remove_from_cart', { props: { variantId } });
     setItems((prev) =>
       qty < 1
         ? prev.filter((i) => i.variantId !== variantId)
@@ -77,6 +83,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const remove = useCallback((variantId: string) => {
+    track('remove_from_cart', { props: { variantId } });
     setItems((prev) => prev.filter((i) => i.variantId !== variantId));
   }, []);
 

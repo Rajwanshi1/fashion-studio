@@ -1,6 +1,7 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
+import { track } from '../lib/analytics';
 import type { Category, ProductSort, ProductsResponse, ProductSummary } from '../lib/types';
 import Shop from '../components/Shop';
 import ProductCard from '../components/ProductCard';
@@ -97,6 +98,30 @@ export default function Collection() {
     return list;
   }, [data, colors, priceMax]);
 
+  // Value-based guard (not a one-shot boolean): a plain "have we run before"
+  // flag is inverted by StrictMode's mount double-invoke (invocation 1 flips
+  // it false and bails, invocation 2 then sees it false and arms a spurious
+  // timer for the *initial* values). Comparing against a snapshot of the
+  // last-tracked filter state is immune to that, the same way product_view's
+  // slug ref is: both StrictMode invocations see the snapshot still matches
+  // the initial values and bail, and the snapshot only advances once an
+  // event actually fires.
+  const lastFilterRef = useRef<{ colors: string[]; priceMax: number }>({ colors, priceMax });
+  useEffect(() => {
+    const last = lastFilterRef.current;
+    const sameColors =
+      last.colors.length === colors.length && last.colors.every((c, i) => c === colors[i]);
+    if (sameColors && last.priceMax === priceMax) return;
+    const t = setTimeout(() => {
+      lastFilterRef.current = { colors, priceMax };
+      track('filter_apply', { props: { category: categorySlug, colors, priceMax } });
+    }, 500);
+    return () => clearTimeout(t);
+    // categorySlug intentionally excluded: only colors/priceMax changes should
+    // re-arm the debounce, not a category navigation on its own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colors, priceMax]);
+
   const toggleIn = (list: string[], v: string) =>
     list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
 
@@ -108,6 +133,7 @@ export default function Collection() {
   };
 
   const setSort = (v: string) => {
+    track('sort_change', { props: { category: categorySlug, sort: v } });
     const next = new URLSearchParams(params);
     next.set('sort', v);
     next.delete('page');

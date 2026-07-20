@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, type ApiError } from '../lib/api';
 import type { DeliveryMethod, Order, PaymentInit } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useAuth } from '../lib/auth';
+import { track } from '../lib/analytics';
 import { formatINR } from '../lib/format';
 import { useToast } from '../components/Toast';
 import ImageSlot from '../components/ImageSlot';
@@ -18,7 +19,7 @@ const COUNTRIES = ['India', 'United Arab Emirates', 'United Kingdom', 'United St
 type PayMethod = 'card' | 'upi' | 'cod';
 
 export default function Checkout() {
-  const { items, subtotal, clear } = useCart();
+  const { items, subtotal, count, clear } = useCart();
   const { user } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -45,6 +46,14 @@ export default function Checkout() {
 
   const deliveryFee = delivery === 'priority' ? PRIORITY_FEE : 0;
   const total = subtotal + deliveryFee;
+
+  const checkoutStartedRef = useRef(false);
+  useEffect(() => {
+    if (checkoutStartedRef.current || items.length === 0) return;
+    checkoutStartedRef.current = true;
+    track('checkout_start', { props: { itemCount: count, subtotal } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const startPayment = async (existing: Order | null) => {
     setBusy(true);
@@ -73,6 +82,7 @@ export default function Checkout() {
       try {
         const pay = await api.post<PaymentInit>('/api/payments/checkout', { orderId: ord.id, email });
         setPayment(pay);
+        track('checkout_step', { props: { step: 'payment_opened' } });
         setFailed(false);
       } catch (e) {
         // 503 = payments not enabled yet; the order itself is saved and the
@@ -92,6 +102,7 @@ export default function Checkout() {
   const placeOrder = (e: FormEvent) => {
     e.preventDefault();
     if (items.length === 0 || busy) return;
+    track('checkout_step', { props: { step: 'info_submitted' } });
     void startPayment(order);
   };
 
@@ -100,12 +111,30 @@ export default function Checkout() {
     setBusy(true);
     try {
       await api.post('/api/payments/confirm', { paymentId: payment.paymentId, outcome: 'success', email });
+      track('payment_result', { props: { outcome: 'success' } });
+      track('order_placed', {
+        props: {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          total,
+          subtotal,
+          deliveryFee,
+          itemCount: count,
+          items: items.map((i) => ({
+            productId: i.productId,
+            variantId: i.variantId,
+            qty: i.qty,
+            unitPrice: i.unitPrice,
+          })),
+        },
+      });
       clear();
       navigate(`/order/${order.orderNumber}?email=${encodeURIComponent(email)}`, {
         state: { order: { ...order, status: 'paid' } },
       });
     } catch (e) {
       const err = e as { message?: string };
+      track('payment_result', { props: { outcome: 'failure' } });
       setPayment(null);
       setFailed(true);
       setError(err.message ?? 'Payment could not be confirmed.');
@@ -117,6 +146,7 @@ export default function Checkout() {
   const onFail = async () => {
     if (!payment) return;
     setBusy(true);
+    track('payment_result', { props: { outcome: 'failure' } });
     try {
       await api.post('/api/payments/confirm', { paymentId: payment.paymentId, outcome: 'failure', email });
     } catch {
@@ -411,7 +441,10 @@ export default function Checkout() {
                 </div>
                 <div
                   className={`opt-row${payMethod === 'card' ? ' sel' : ''}`}
-                  onClick={() => setPayMethod('card')}
+                  onClick={() => {
+                    setPayMethod('card');
+                    track('checkout_step', { props: { step: 'method_selected', method: 'card' } });
+                  }}
                 >
                   <span className="radio"></span>
                   <div className="ot">
@@ -451,7 +484,10 @@ export default function Checkout() {
                 )}
                 <div
                   className={`opt-row${payMethod === 'upi' ? ' sel' : ''}`}
-                  onClick={() => setPayMethod('upi')}
+                  onClick={() => {
+                    setPayMethod('upi');
+                    track('checkout_step', { props: { step: 'method_selected', method: 'upi' } });
+                  }}
                 >
                   <span className="radio"></span>
                   <div className="ot">
@@ -461,7 +497,10 @@ export default function Checkout() {
                 </div>
                 <div
                   className={`opt-row${payMethod === 'cod' ? ' sel' : ''}`}
-                  onClick={() => setPayMethod('cod')}
+                  onClick={() => {
+                    setPayMethod('cod');
+                    track('checkout_step', { props: { step: 'method_selected', method: 'cod' } });
+                  }}
                 >
                   <span className="radio"></span>
                   <div className="ot">

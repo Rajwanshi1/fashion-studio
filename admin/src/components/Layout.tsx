@@ -40,6 +40,9 @@ export default function Layout() {
           <NavLink to="/socials" className={navClass}>
             Socials
           </NavLink>
+          <NavLink to="/analytics" className={navClass}>
+            Analytics
+          </NavLink>
         </nav>
         <div className="side-foot">
           {user && (
