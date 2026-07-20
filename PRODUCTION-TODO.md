@@ -235,17 +235,13 @@ CI — see the still-open items below, especially #1, #20, #22, #23, #25.
   S3+CloudFront (code only needs URLs), populate `products.image_url` via the admin app.
   Where: `frontend/src/components/ImageSlot.tsx:10`.
 
-- [ ] **25. Domain, DNS, TLS** — domain for storefront/admin/api; certs via ACM (AWS)
-  or Let's Encrypt; TLS-terminating proxy (Caddy/nginx/ALB) in front of the API.
-  **Partially addressed, staging only (2026-07-06, URLs rotated 2026-07-07 by the
-  `app`/`edge`→`main` stack consolidation):** all four surfaces are served over
-  TLS today, but on CloudFront's shared `*.cloudfront.net` certificate, not a real
-  domain — storefront `https://d3rb2k31ty2kox.cloudfront.net`, admin
-  `https://dr7ymafumqo0k.cloudfront.net`, socials `https://d3byxnyud664li.cloudfront.net`,
-  api `https://d2bc3rl4v1olva.cloudfront.net` (http→https redirect confirmed on all
-  four in `docs/verification/staging-security-audit.md` A-7). CloudFront → ALB origin
-  traffic runs over the VPC origin inside AWS's network. **Still open:** no purchased
-  domain, no ACM cert for a custom domain, no Route 53 — leaving unchecked.
+- [x] **25. Domain, DNS, TLS** — **DONE for prod (2026-07-21, PR #8 + prod deploy):**
+  tanviagnihotry.com delegated from GoDaddy to Route 53 (`fashion-prod-dns` stack),
+  ACM cert (us-east-1, DNS-validated, SANs www/admin/api) on all three CloudFront
+  distributions, A/AAAA alias records for apex/www/admin/api, HSTS + http→https 301
+  verified live. Storefront+socials `https://tanviagnihotry.com` (+www), admin
+  `https://admin.tanviagnihotry.com`, api `https://api.tanviagnihotry.com`.
+  Staging deliberately stays on `*.cloudfront.net` (no domain).
 
 - [ ] **26. Execute deployment** — storefront + admin + socials → Amplify Hosting (three
   apps from `amplify.yml`, each with env vars from #8/#23/#34 and the rewrite from #6);
@@ -264,6 +260,14 @@ CI — see the still-open items below, especially #1, #20, #22, #23, #25.
   security/deletion-protection audit (`docs/verification/staging-security-audit.md`).
   **Still open before this is "production":** a real domain (#25), a production
   Razorpay integration (#1), and a CI pipeline (#20) — leaving unchecked.
+  **Update 2026-07-21:** prod itself is now DEPLOYED on the same architecture
+  (5 stacks incl. `dns`; `infra/deploy.sh prod ...`) at tanviagnihotry.com with
+  #25 done — but payments are hard-gated (`PAYMENT_PROVIDER=disabled`, checkout/
+  confirm answer 503, storefront shows "payments coming soon") until #1 lands,
+  so the shop is live for browsing/orders-without-payment only. Verified live:
+  37/37 API contract checks (`PAYMENTS_MODE=disabled`), payment-gate 503s, admin
+  login, no demo customer, socials scan/click 204, HSTS/redirects. Leaving
+  unchecked until #1 + #20.
 
 - [ ] **34. Socials link-in-bio page: real content + prod config** *(the `socials/`
   package, merged 2026-07-06 via PR #2 `feat/socials-linktree` — was §8 of the old
