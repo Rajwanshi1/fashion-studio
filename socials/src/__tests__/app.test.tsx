@@ -26,7 +26,8 @@ describe('Socials link-in-bio page', () => {
 
     expect(screen.getByText('The Studio')).toBeInTheDocument();
     SOCIALS.studio.forEach((line) => {
-      expect(screen.getByText(line)).toBeInTheDocument();
+      // The studio phone line may also appear as a link sub — assert presence, not uniqueness.
+      expect(screen.getAllByText(line).length).toBeGreaterThan(0);
     });
     expect(screen.getByText(SOCIALS.hours)).toBeInTheDocument();
   });
