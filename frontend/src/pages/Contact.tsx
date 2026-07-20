@@ -69,7 +69,7 @@ export default function Contact() {
           </div>
           <div className="ct-block">
             <h4>Studio Hours</h4>
-            <p>Monday – Saturday · 11am – 7pm IST</p>
+            <p>Open all days · 11am – 7pm IST</p>
           </div>
           <div className="ct-block">
             <h4>Follow</h4>

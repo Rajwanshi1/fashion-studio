@@ -9,5 +9,5 @@ export const SOCIALS = {
     { id: 'call', label: 'Contact Us', sub: '+91 81188 92523', href: 'tel:+918118892523' },
   ],
   studio: ['B-74, Rajendra Marg', 'Bapu Nagar, Jaipur', '+91 81188 92523'],
-  hours: 'Monday – Saturday · 11am – 7pm IST',
+  hours: 'Open all days · 11am – 7pm IST',
 } as const;
