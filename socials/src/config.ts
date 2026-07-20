@@ -3,7 +3,7 @@ export const SOCIALS = {
   tagline: 'Contemporary occasion wear',
   links: [
     { id: 'website', label: 'Explore the Collection', sub: 'tanviagnihotry.com', href: 'https://tanviagnihotry.com' },
-    { id: 'instagram', label: 'Instagram', sub: '@tanviagnihotry', href: 'https://instagram.com/tanviagnihotry' },
+    { id: 'instagram', label: 'Instagram', sub: '@tanviagnihotrylabel', href: 'https://instagram.com/tanviagnihotrylabel' },
     { id: 'whatsapp', label: 'WhatsApp Us', sub: '+91 90000 00000', href: 'https://wa.me/919000000000' },
     { id: 'call', label: 'Call the Atelier', sub: '+91 90000 00000', href: 'tel:+919000000000' },
   ],

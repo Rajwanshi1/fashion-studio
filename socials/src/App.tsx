@@ -2,6 +2,25 @@ import { useEffect, useRef } from 'react';
 import { SOCIALS } from './config';
 import { trackClick } from './track';
 
+function InstagramIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="1em"
+      height="1em"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden="true"
+      style={{ verticalAlign: '-0.14em', marginRight: '0.45em' }}
+    >
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4.2" />
+      <circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 /** Rise-in reveal for this page's own sections. The page is short and fixed
  *  (no async content, unlike the storefront's Reveal), so a single mount-time
  *  pass over a handful of `.rv` nodes is enough — but it still has to honor
@@ -74,7 +93,10 @@ export default function App() {
           {SOCIALS.links.map((link) => (
             <a key={link.href} className="lk rv" href={link.href} onClick={() => trackClick(link.id)}>
               <span className="lk-text">
-                <span className="lk-label">{link.label}</span>
+                <span className="lk-label">
+                  {link.id === 'instagram' && <InstagramIcon />}
+                  {link.label}
+                </span>
                 <span className="lk-sub">{link.sub}</span>
               </span>
               <span className="lk-arrow" aria-hidden="true">

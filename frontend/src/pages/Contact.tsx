@@ -6,13 +6,31 @@ import Ambient from '../components/Ambient';
 import { track } from '../lib/analytics';
 import '../styles/contact.css';
 
+function InstagramIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="1em"
+      height="1em"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden="true"
+      style={{ verticalAlign: '-0.14em', marginRight: '0.35em' }}
+    >
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4.2" />
+      <circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export default function Contact() {
-  const [tab, setTab] = useState<'appointment' | 'enquiry'>('appointment');
   const [sent, setSent] = useState(false);
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    track('contact_submit', { props: { tab } });
+    track('contact_submit');
     setSent(true);
   };
 
@@ -29,24 +47,19 @@ export default function Contact() {
           <span className="eyebrow">Client Care</span>
           <h1>We would love to dress you.</h1>
           <p>
-            Book a complimentary consultation, ask about a commission, or simply say hello. Our
-            atelier responds within 48 hours.
+            Ask about a commission, or simply say hello. Our atelier responds within 48 hours.
           </p>
           <div className="ct-block">
             <h4>The Studio</h4>
             <p>
-              Apt 4, Verdant House
+              B-74, Rajendra Marg
               <br />
-              Altamount Road, Mumbai 400026
-              <br />
-              By appointment only
+              Bapu Nagar, Jaipur
             </p>
           </div>
           <div className="ct-block">
-            <h4>Write to Us</h4>
+            <h4>Call the Atelier</h4>
             <p>
-              <a href="#">care@tanviagnihotry.com</a>
-              <br />
               <a href="#">+91 90000 00000</a>
             </p>
           </div>
@@ -57,8 +70,10 @@ export default function Contact() {
           <div className="ct-block">
             <h4>Follow</h4>
             <p>
-              <a href="#">Instagram</a> &nbsp; <a href="#">Pinterest</a> &nbsp;{' '}
-              <a href="#">WhatsApp</a>
+              <a href="https://instagram.com/tanviagnihotrylabel">
+                <InstagramIcon /> Instagram
+              </a>{' '}
+              &nbsp; <a href="#">Pinterest</a> &nbsp; <a href="#">WhatsApp</a>
             </p>
           </div>
         </aside>
@@ -68,21 +83,6 @@ export default function Contact() {
             <h2>Get in touch</h2>
             <p>Tell us what you're looking for and we'll be in touch.</p>
           </div>
-          <div className="ct-tabs">
-            <button
-              className={`ct-tab${tab === 'appointment' ? ' on' : ''}`}
-              onClick={() => setTab('appointment')}
-            >
-              Book an Appointment
-            </button>
-            <button
-              className={`ct-tab${tab === 'enquiry' ? ' on' : ''}`}
-              onClick={() => setTab('enquiry')}
-            >
-              General Enquiry
-            </button>
-          </div>
-
           {!sent ? (
             <form onSubmit={onSubmit}>
               <div className="grid2">
@@ -119,26 +119,6 @@ export default function Contact() {
                   <input id="ct-phone" className="inp" type="tel" placeholder="+91 90000 00000" />
                 </div>
               </div>
-              {tab === 'appointment' && (
-                <div className="grid2" id="apptFields">
-                  <div className="field">
-                    <label className="lab" htmlFor="ct-date">
-                      Preferred Date
-                    </label>
-                    <input id="ct-date" className="inp" type="text" placeholder="DD / MM / YYYY" />
-                  </div>
-                  <div className="field">
-                    <label className="lab" htmlFor="ct-type">
-                      Consultation Type
-                    </label>
-                    <select id="ct-type" className="inp">
-                      <option>Virtual consultation</option>
-                      <option>In-studio (Mumbai)</option>
-                      <option>Bridal commission</option>
-                    </select>
-                  </div>
-                </div>
-              )}
               <div className="field">
                 <label className="lab" htmlFor="ct-more">
                   Tell us more
