@@ -7,6 +7,7 @@
 :root {
   --paper: #F7F8F4;
   --ink: #1E2620;
+  --forest-800: #3B4B3F;
   --celadon-50: #EEF3EA;
   --gold: #B0894A;
   --gold-soft: #C9AE7A;
@@ -32,8 +33,8 @@ html, body {
 html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 
 body {
-  background: var(--paper);
-  color: var(--ink);
+  background: var(--forest-800);
+  color: var(--celadon-50);
   font-family: var(--sans);
   font-weight: 300;
   line-height: 1.6;
@@ -94,8 +95,8 @@ html.revealed-all .rv:not(.rv-in) {
   font-style: italic;
   font-weight: 300;
   font-size: 1.05rem;
-  color: var(--ink);
-  opacity: 0.75;
+  color: inherit;
+  opacity: 0.82;
 }
 
 /* ---- Links ---- */
@@ -112,6 +113,7 @@ html.revealed-all .rv:not(.rv-in) {
   gap: 1rem;
   width: 100%;
   padding: 1.05rem 1.25rem;
+  color: var(--ink);
   background: #FFFFFF;
   border: 1px solid var(--hairline);
   border-radius: var(--edge);
@@ -170,6 +172,7 @@ html.revealed-all .rv:not(.rv-in) {
 .sc-studio {
   margin: clamp(2.5rem, 9vw, 3rem) 0 0;
   background: var(--celadon-50);
+  color: var(--ink);
   border-radius: var(--edge);
   padding: 1.5rem 1.5rem 1.65rem;
   text-align: center;
