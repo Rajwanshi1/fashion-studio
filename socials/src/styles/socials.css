@@ -95,7 +95,7 @@ html.revealed-all .rv:not(.rv-in) {
   font-family: var(--serif-soft);
   font-style: italic;
   font-weight: 300;
-  font-size: 1.18rem;
+  font-size: 1.35rem;
   color: inherit;
   opacity: 0.82;
 }
@@ -232,7 +232,7 @@ html.revealed-all .rv:not(.rv-in) {
 @media (max-height: 760px) {
   .sc-main { padding-top: 1.1rem; padding-bottom: 1.1rem; }
   .sc-head { margin-bottom: 1.4rem; }
-  .sc-tag { margin-top: 0.35rem; font-size: 1.08rem; }
+  .sc-tag { margin-top: 0.35rem; font-size: 1.22rem; }
   .sc-links { gap: 0.65rem; }
   .lk { padding: 0.85rem 1.1rem; }
   .sc-studio { margin-top: 1.4rem; padding: 1.1rem 1.25rem 1.2rem; }
