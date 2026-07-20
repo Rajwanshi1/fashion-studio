@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import BrandLogo from './BrandLogo';
 
 const LINKS = [
   { t: 'Women', h: '/collection/lehenga-sets' },
@@ -39,7 +40,10 @@ export default function MobileNav({ open, onClose }: { open: boolean; onClose: (
   return (
     <div className={`mnav-overlay${open ? ' open' : ''}`} aria-hidden={!open}>
       <div className="mnav-head">
-        <span className="b">Tanvi Agnihotry</span>
+        <span className="b">
+          <BrandLogo />
+          Tanvi Agnihotry
+        </span>
         <button className="c" aria-label="Close menu" onClick={onClose}>
           ✕
         </button>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import BrandLogo from '../components/BrandLogo';
 
 export default function Login() {
   const { token, login } = useAuth();
@@ -33,7 +34,10 @@ export default function Login() {
     <div className="login-wrap">
       <div className="login-card">
         <span className="eyebrow">Atelier Portal</span>
-        <div className="wordmark">Tanvi Agnihotry</div>
+        <div className="wordmark">
+          <BrandLogo />
+          Tanvi Agnihotry
+        </div>
         <p className="note">Staff sign in — inventory, orders &amp; payments.</p>
         <form onSubmit={onSubmit}>
           {error && (

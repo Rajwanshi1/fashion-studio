@@ -1,11 +1,15 @@
 import { Link } from 'react-router-dom';
+import BrandLogo from '../components/BrandLogo';
 import '../styles/notfound.css';
 
 export default function NotFound() {
   return (
     <div className="page-nf">
       <div className="nf-brand">
-        <Link to="/">Tanvi Agnihotry</Link>
+        <Link to="/">
+          <BrandLogo />
+          Tanvi Agnihotry
+        </Link>
       </div>
       <main className="nf">
         <div className="ghost">404</div>
