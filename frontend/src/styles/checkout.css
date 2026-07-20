@@ -1,7 +1,7 @@
 /* Checkout — ported from Checkout.html inline styles */
 .page-checkout .co-nav { display: flex; align-items: center; justify-content: space-between; padding: 1.3rem var(--gutter); border-bottom: 1px solid var(--hairline); }
 .page-checkout .co-nav .back { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }
-.page-checkout .co-nav .wordmark { font-family: var(--serif-display); font-size: 1.4rem; letter-spacing: 0.14em; text-transform: uppercase; }
+.page-checkout .co-nav .wordmark { font-family: var(--serif-brand); font-size: 1.4rem; letter-spacing: 0.14em; text-transform: uppercase; }
 .page-checkout .co-nav .secure { display: flex; align-items: center; gap: 0.5rem; font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }
 .page-checkout .co-nav .secure .lock { color: var(--gold); }
 

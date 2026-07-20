@@ -14,6 +14,7 @@
   --edge: 2px;
 
   --serif-display: 'Bodoni Moda', Georgia, serif;
+  --serif-brand:   'Cardo', Georgia, serif;
   --serif-soft: 'Cormorant Garamond', Georgia, serif;
   --sans: 'Jost', system-ui, sans-serif;
 
@@ -75,8 +76,8 @@ html.revealed-all .rv:not(.rv-in) {
 
 .sc-word {
   margin: 0;
-  font-family: var(--serif-display);
-  font-weight: 500;
+  font-family: var(--serif-brand);
+  font-weight: 400;
   font-size: clamp(1.9rem, 7vw, 2.4rem);
   letter-spacing: 0.08em;
   text-transform: uppercase;

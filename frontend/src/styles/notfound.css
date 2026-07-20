@@ -14,4 +14,4 @@
 .page-nf .nf .links { margin-top: 2.5rem; display: flex; gap: 1.4rem; justify-content: center; flex-wrap: wrap; font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; }
 .page-nf .nf .links a { color: var(--celadon-200); border-bottom: 1px solid rgba(228,212,180,0.3); padding-bottom: 2px; }
 .page-nf .nf .links a:hover { color: var(--gold-pale); }
-.page-nf .nf-brand { padding: 1.6rem var(--gutter); text-align: center; font-family: var(--serif-display); font-size: 1.3rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--celadon-50); }
+.page-nf .nf-brand { padding: 1.6rem var(--gutter); text-align: center; font-family: var(--serif-brand); font-size: 1.3rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--celadon-50); }
