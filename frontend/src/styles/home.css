@@ -10,7 +10,7 @@
   border-bottom: 1px solid transparent;
 }
 .page-home nav.nav-home.solid { background: rgba(30,38,32,0.96); backdrop-filter: blur(12px); border-color: rgba(230,215,184,0.14); padding-top: 1rem; padding-bottom: 1rem; }
-.page-home nav.nav-home .wordmark { font-family: var(--serif-display); font-size: 1.35rem; letter-spacing: 0.22em; text-transform: uppercase; text-align: center; white-space: nowrap; color: #fff; }
+.page-home nav.nav-home .wordmark { font-family: var(--serif-brand); font-size: 1.35rem; letter-spacing: 0.22em; text-transform: uppercase; text-align: center; white-space: nowrap; color: #fff; }
 .page-home nav.nav-home .nav-links { display: flex; gap: 2.1rem; }
 .page-home nav.nav-home .nav-links.right { justify-content: flex-end; }
 .page-home nav.nav-home .nav-links a { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: rgba(255,255,255,0.92); position: relative; white-space: nowrap; }
@@ -34,7 +34,7 @@
 .page-home .hero .veil { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, rgba(30,38,32,0.5), rgba(30,38,32,0.08) 38%, rgba(30,38,32,0.55) 88%); }
 .page-home .hero-inner { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; text-align: center; padding: 0 var(--gutter) clamp(4.5rem,9vh,7rem); color: #fff; }
 .page-home .hero-inner .eyebrow { color: var(--gold-pale); margin-bottom: 1.6rem; }
-.page-home .hero-inner h1 { font-family: var(--serif-display); font-weight: 500; font-size: var(--t-mega); line-height: 0.88; letter-spacing: 0.01em; text-transform: uppercase; }
+.page-home .hero-inner h1 { font-family: var(--serif-brand); font-weight: 400; font-size: var(--t-mega); line-height: 0.88; letter-spacing: 0.01em; text-transform: uppercase; }
 .page-home .hero-inner h1 .ital { display: block; font-family: var(--serif-soft); font-weight: 300; font-style: italic; text-transform: none; letter-spacing: 0; font-size: 0.42em; margin-top: 0.35em; color: var(--celadon-100); }
 .page-home .hero-inner .actions { display: flex; gap: 1rem; margin-top: 2.4rem; flex-wrap: wrap; justify-content: center; }
 .page-home .hero-inner .actions .btn-buy { width: auto; min-width: 230px; }

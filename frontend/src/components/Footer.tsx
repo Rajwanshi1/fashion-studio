@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import BrandLogo from './BrandLogo';
 
 interface FooterProps {
   /** Homepage variant: giant centered Bodoni wordmark above the columns. */
@@ -13,6 +14,7 @@ export default function Footer({ mark = false }: FooterProps) {
         <div className="foot-brand">
           {!mark && (
             <Link className="wordmark" to="/">
+              <BrandLogo />
               Tanvi Agnihotry
             </Link>
           )}

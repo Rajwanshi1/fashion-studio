@@ -4,7 +4,7 @@ import App from '../App';
 import { SOCIALS } from '../config';
 
 describe('Socials link-in-bio page', () => {
-  it('renders exactly the 6 links from config, each with its configured href', () => {
+  it('renders exactly the links from config, each with its configured href', () => {
     render(<App />);
 
     SOCIALS.links.forEach((link) => {
@@ -26,7 +26,8 @@ describe('Socials link-in-bio page', () => {
 
     expect(screen.getByText('The Studio')).toBeInTheDocument();
     SOCIALS.studio.forEach((line) => {
-      expect(screen.getByText(line)).toBeInTheDocument();
+      // The studio phone line may also appear as a link sub — assert presence, not uniqueness.
+      expect(screen.getAllByText(line).length).toBeGreaterThan(0);
     });
     expect(screen.getByText(SOCIALS.hours)).toBeInTheDocument();
   });

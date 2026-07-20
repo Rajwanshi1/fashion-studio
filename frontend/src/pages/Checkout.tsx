@@ -9,6 +9,7 @@ import { formatINR } from '../lib/format';
 import { useToast } from '../components/Toast';
 import ImageSlot from '../components/ImageSlot';
 import RazorpayMock from '../components/RazorpayMock';
+import BrandLogo from '../components/BrandLogo';
 import '../styles/checkout.css';
 
 const PRIORITY_FEE = 250000; // paise (₹2,500)
@@ -165,7 +166,10 @@ export default function Checkout() {
         <Link className="back" to="/cart">
           ← Back to Bag
         </Link>
-        <div className="wordmark">Tanvi Agnihotry</div>
+        <div className="wordmark">
+          <BrandLogo />
+          Tanvi Agnihotry
+        </div>
         <div className="secure">
           <span className="lock">🔒</span> Secure Checkout
         </div>

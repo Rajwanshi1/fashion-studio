@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useCart } from '../lib/cart';
 import { useCartDrawer } from './CartDrawer';
 import MobileNav from './MobileNav';
+import BrandLogo from './BrandLogo';
 
 interface NavProps {
   /** Homepage variant: fixed + transparent over hero, turns solid past 60px. */
@@ -58,7 +59,10 @@ export default function Nav({ home = false }: NavProps) {
           )}
         </div>
         <div className="wordmark">
-          <Link to="/">Tanvi Agnihotry</Link>
+          <Link to="/">
+            <BrandLogo />
+            Tanvi Agnihotry
+          </Link>
         </div>
         <div className="nav-links right">
           <Link to="/search">Search</Link>

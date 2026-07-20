@@ -21,7 +21,7 @@
 .mnav-overlay { position: fixed; inset: 0; z-index: 340; background: var(--forest-800); color: var(--celadon-100); transform: translateX(-100%); transition: transform .4s cubic-bezier(.22,1,.36,1); visibility: hidden; display: flex; flex-direction: column; }
 .mnav-overlay.open { transform: none; visibility: visible; }
 .mnav-head { display: flex; align-items: center; justify-content: space-between; padding: 1.1rem var(--gutter); border-bottom: 1px solid rgba(228,212,180,0.16); }
-.mnav-head .b { font-family: var(--serif-display); font-size: 1.25rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--celadon-50); }
+.mnav-head .b { font-family: var(--serif-brand); font-size: 1.25rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--celadon-50); }
 .mnav-head .c { background: none; border: 0; color: var(--celadon-100); font-size: 1.5rem; line-height: 1; cursor: pointer; }
 .mnav-head .c:hover { color: var(--gold-soft); }
 .mnav-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }

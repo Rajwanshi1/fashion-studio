@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import BrandLogo from './BrandLogo';
 
 const navClass = ({ isActive }: { isActive: boolean }) => (isActive ? 'on' : '');
 
@@ -17,6 +18,7 @@ export default function Layout() {
       <aside className="side">
         <div className="brand">
           <NavLink to="/" className="wordmark">
+            <BrandLogo />
             Tanvi Agnihotry
           </NavLink>
           <span className="atelier">· Atelier ·</span>

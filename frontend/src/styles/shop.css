@@ -21,7 +21,7 @@ body.shop { background: var(--paper); color: var(--ink); }
   border-bottom: 1px solid rgba(230,215,184,0.14);
   color: var(--celadon-100);
 }
-.nav .wordmark { font-family: var(--serif-display); font-size: 1.3rem; letter-spacing: 0.2em; text-transform: uppercase; text-align: center; white-space: nowrap; color: var(--celadon-50); }
+.nav .wordmark { font-family: var(--serif-brand); font-size: 1.3rem; letter-spacing: 0.2em; text-transform: uppercase; text-align: center; white-space: nowrap; color: var(--celadon-50); }
 .nav .wordmark a { color: inherit; }
 .nav-links { display: flex; gap: 2.1rem; align-items: center; }
 .nav-links.right { justify-content: flex-end; }
@@ -91,10 +91,10 @@ body.shop { background: var(--paper); color: var(--ink); }
 
 /* ---- Footer ---- */
 .foot { background: var(--ink); color: var(--celadon-100); padding: clamp(3rem,6vw,5rem) var(--gutter) 2.5rem; margin-top: clamp(4rem,8vw,7rem); }
-.foot-mark { font-family: var(--serif-display); text-transform: uppercase; letter-spacing: 0.12em; font-size: clamp(2.4rem, 7.5vw, 7rem); line-height: 1; color: var(--celadon-50); text-align: center; margin: 0 auto clamp(2.5rem,5vw,4rem); }
+.foot-mark { font-family: var(--serif-brand); text-transform: uppercase; letter-spacing: 0.12em; font-size: clamp(2.4rem, 7.5vw, 7rem); line-height: 1; color: var(--celadon-50); text-align: center; margin: 0 auto clamp(2.5rem,5vw,4rem); }
 .foot-top { display: grid; grid-template-columns: 1.4fr repeat(3,1fr); gap: 2.5rem; max-width: 1280px; margin: 0 auto 3rem; }
 @media (max-width: 760px){ .foot-top { grid-template-columns: 1fr 1fr; } }
-.foot-brand .wordmark { font-family: var(--serif-display); font-size: 1.5rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--celadon-50); margin-bottom: 1rem; display: block; }
+.foot-brand .wordmark { font-family: var(--serif-brand); font-size: 1.5rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--celadon-50); margin-bottom: 1rem; display: block; }
 .foot-brand p { font-size: var(--t-sm); color: var(--celadon-200); max-width: 30ch; }
 .foot-col h5 { font-size: var(--t-eyebrow); letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold-soft); margin: 0 0 1.2rem; }
 .foot-col a { display: block; font-size: var(--t-sm); color: var(--celadon-200); margin-bottom: 0.7rem; transition: color var(--dur) var(--ease); }

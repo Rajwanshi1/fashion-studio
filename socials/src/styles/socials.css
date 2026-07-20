@@ -7,6 +7,7 @@
 :root {
   --paper: #F7F8F4;
   --ink: #1E2620;
+  --forest-800: #3B4B3F;
   --celadon-50: #EEF3EA;
   --gold: #B0894A;
   --gold-soft: #C9AE7A;
@@ -14,10 +15,12 @@
   --edge: 2px;
 
   --serif-display: 'Bodoni Moda', Georgia, serif;
+  --serif-brand:   'Cardo', Georgia, serif;
   --serif-soft: 'Cormorant Garamond', Georgia, serif;
   --sans: 'Jost', system-ui, sans-serif;
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tile-radius: 12px;
 }
 
 * { box-sizing: border-box; }
@@ -31,8 +34,8 @@ html, body {
 html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 
 body {
-  background: var(--paper);
-  color: var(--ink);
+  background: var(--forest-800);
+  color: var(--celadon-50);
   font-family: var(--sans);
   font-weight: 300;
   line-height: 1.6;
@@ -64,7 +67,10 @@ html.revealed-all .rv:not(.rv-in) {
   width: 100%;
   max-width: 430px;
   margin: 0 auto;
-  padding: clamp(2.5rem, 10vw, 3.5rem) 1.25rem 3rem;
+  padding: clamp(1.5rem, 6vw, 3rem) 1.25rem clamp(1.5rem, 6vw, 3rem);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 /* ---- Header ---- */
@@ -75,11 +81,13 @@ html.revealed-all .rv:not(.rv-in) {
 
 .sc-word {
   margin: 0;
-  font-family: var(--serif-display);
-  font-weight: 500;
-  font-size: clamp(1.9rem, 7vw, 2.4rem);
+  font-family: var(--serif-brand);
+  font-weight: 400;
+  /* Sized so logo + wordmark always fit one line on narrow phones */
+  font-size: clamp(1.35rem, 6.2vw, 2rem);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .sc-tag {
@@ -87,9 +95,9 @@ html.revealed-all .rv:not(.rv-in) {
   font-family: var(--serif-soft);
   font-style: italic;
   font-weight: 300;
-  font-size: 1.05rem;
-  color: var(--ink);
-  opacity: 0.75;
+  font-size: 1.35rem;
+  color: inherit;
+  opacity: 0.82;
 }
 
 /* ---- Links ---- */
@@ -106,9 +114,10 @@ html.revealed-all .rv:not(.rv-in) {
   gap: 1rem;
   width: 100%;
   padding: 1.05rem 1.25rem;
-  background: #FFFFFF;
-  border: 1px solid var(--hairline);
-  border-radius: var(--edge);
+  color: var(--ink);
+  background: var(--celadon-50);
+  border: 1px solid rgba(230, 215, 184, 0.22);
+  border-radius: var(--tile-radius);
   transition: border-color 320ms var(--ease), transform 320ms var(--ease);
 }
 
@@ -143,9 +152,9 @@ html.revealed-all .rv:not(.rv-in) {
 .lk-sub {
   font-family: var(--serif-soft);
   font-style: italic;
-  font-size: 0.95rem;
+  font-size: 1.08rem;
   color: var(--ink);
-  opacity: 0.6;
+  opacity: 0.85;
 }
 
 .lk-arrow {
@@ -164,7 +173,9 @@ html.revealed-all .rv:not(.rv-in) {
 .sc-studio {
   margin: clamp(2.5rem, 9vw, 3rem) 0 0;
   background: var(--celadon-50);
-  border-radius: var(--edge);
+  color: var(--ink);
+  border: 1px solid rgba(230, 215, 184, 0.22);
+  border-radius: var(--tile-radius);
   padding: 1.5rem 1.5rem 1.65rem;
   text-align: center;
 }
@@ -190,7 +201,7 @@ html.revealed-all .rv:not(.rv-in) {
 .sc-studio address {
   font-style: italic;
   font-family: var(--serif-soft);
-  font-size: 1rem;
+  font-size: 1.08rem;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
@@ -199,10 +210,10 @@ html.revealed-all .rv:not(.rv-in) {
 .sc-hours {
   margin: 0.85rem 0 0;
   font-family: var(--sans);
-  font-size: 0.78rem;
+  font-size: 0.84rem;
   letter-spacing: 0.04em;
   color: var(--ink);
-  opacity: 0.7;
+  opacity: 0.85;
 }
 
 /* ---- Footer ---- */
@@ -210,11 +221,23 @@ html.revealed-all .rv:not(.rv-in) {
   background: var(--ink);
   color: var(--gold-soft);
   text-align: center;
-  padding: 1rem 1.25rem;
+  padding: 1rem 1.25rem calc(1rem + env(safe-area-inset-bottom));
   font-family: var(--sans);
   font-size: 0.65rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
+}
+
+/* ---- Compact phones: fit everything in one viewport ---- */
+@media (max-height: 760px) {
+  .sc-main { padding-top: 1.1rem; padding-bottom: 1.1rem; }
+  .sc-head { margin-bottom: 1.4rem; }
+  .sc-tag { margin-top: 0.35rem; font-size: 1.22rem; }
+  .sc-links { gap: 0.65rem; }
+  .lk { padding: 0.85rem 1.1rem; }
+  .sc-studio { margin-top: 1.4rem; padding: 1.1rem 1.25rem 1.2rem; }
+  .sc-studio .rule-gold { margin: 0.55rem auto 0.75rem; }
+  .sc-hours { margin-top: 0.6rem; }
 }
 
 /* ---- Reveal motion ---- */

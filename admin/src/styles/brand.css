@@ -4,7 +4,7 @@
    v2: sharper couture geometry, finer type scale, refined ink
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cardo:ital,wght@0,400;0,700;1,400&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500&display=swap');
 
 :root {
   /* ---- Celadon canvas scale (light → deep) ---- */
@@ -17,7 +17,7 @@
   --sage-500:     #9CB6AA;
   --sage-600:     #7C9A8C;
   --forest-700:   #46584E;
-  --forest-800:   #2F3D35;
+  --forest-800:   #3B4B3F;
   --ink:          #1E2620;
   --ink-soft:     #4A554D;
 
@@ -37,6 +37,7 @@
 
   /* ---- Type families ---- */
   --serif-display: 'Bodoni Moda', Georgia, serif;
+  --serif-brand:   'Cardo', Georgia, serif;
   --serif-soft:    'Cormorant Garamond', Georgia, serif;
   --sans:          'Jost', system-ui, sans-serif;
 
