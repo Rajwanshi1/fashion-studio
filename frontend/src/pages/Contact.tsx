@@ -62,7 +62,7 @@ export default function Contact() {
             </p>
           </div>
           <div className="ct-block">
-            <h4>Call the Atelier</h4>
+            <h4>Contact Us</h4>
             <p>
               <a href="tel:+918118892523">+91 81188 92523</a>
             </p>
