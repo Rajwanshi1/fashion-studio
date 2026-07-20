@@ -1,17 +1,19 @@
-/** Interim brand emblem — swap the SVG below for the official logo asset when provided. */
-export default function BrandLogo({ size = '1.25em' }: { size?: string }) {
+import logo from '../assets/brand-logo.png';
+
+/** Official brand mark — the provided logo PNG (background alpha-keyed out). */
+export default function BrandLogo({ size = '1.4em' }: { size?: string }) {
   return (
-    <svg
-      viewBox="0 0 48 48"
-      width={size}
-      height={size}
-      fill="none"
+    <img
+      src={logo}
+      alt=""
       aria-hidden="true"
-      style={{ verticalAlign: '-0.3em', marginRight: '0.45em' }}
-    >
-      <circle cx="24" cy="24" r="22.5" stroke="currentColor" strokeWidth="1.4" />
-      <rect x="16" y="16" width="16" height="16" transform="rotate(45 24 24)" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="24" cy="24" r="1.8" fill="currentColor" />
-    </svg>
+      style={{
+        height: size,
+        width: 'auto',
+        display: 'inline-block',
+        verticalAlign: '-0.34em',
+        marginRight: '0.45em',
+      }}
+    />
   );
 }
