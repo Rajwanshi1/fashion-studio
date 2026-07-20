@@ -4,7 +4,7 @@ import App from '../App';
 import { SOCIALS } from '../config';
 
 describe('Socials link-in-bio page', () => {
-  it('renders exactly the 6 links from config, each with its configured href', () => {
+  it('renders exactly the links from config, each with its configured href', () => {
     render(<App />);
 
     SOCIALS.links.forEach((link) => {
