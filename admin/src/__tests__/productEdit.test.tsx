@@ -62,7 +62,7 @@ describe('ProductEdit', () => {
     expect(await screen.findByRole('heading', { name: 'Products' })).toBeInTheDocument();
   });
 
-  it('PUTs the piece and PATCHes only changed variants when editing', async () => {
+  it('loads the piece with a single GET, PUTs it and batch-PATCHes only changed variants', async () => {
     seedAdminAuth();
     const product = {
       id: 'p1',
@@ -84,12 +84,15 @@ describe('ProductEdit', () => {
     };
     const { calls } = mockFetch((url, init) => {
       if (url.endsWith('/api/categories')) return { json: CATEGORIES };
+      if (url.endsWith('/api/admin/products/p1/variants') && init?.method === 'PATCH') {
+        return {
+          json: { ...product, variants: [product.variants[0], { ...product.variants[1], stock: 9 }] },
+        };
+      }
       if (url.endsWith('/api/admin/products/p1') && init?.method === 'PUT') {
         return { json: product };
       }
-      if (url.endsWith('/api/admin/variants/v2') && init?.method === 'PATCH') {
-        return { json: { ...product.variants[1], stock: 9 } };
-      }
+      if (url.endsWith('/api/admin/products/p1')) return { json: product };
       if (url.endsWith('/api/admin/products')) return { json: [product] };
       return undefined;
     });
@@ -101,6 +104,10 @@ describe('ProductEdit', () => {
     await userEvent.type(mInput, '9');
     await userEvent.click(screen.getByRole('button', { name: 'Save Piece' }));
 
+    // the piece was loaded via the single-product endpoint, not the full list
+    const gets = calls.filter((c) => c.method === 'GET' && c.url.includes('/api/admin/products'));
+    expect(gets.some((c) => /\/api\/admin\/products\/p1$/.test(c.url))).toBe(true);
+
     const put = calls.find((c) => c.method === 'PUT');
     expect(put).toBeDefined();
     expect(put?.url).toMatch(/\/api\/admin\/products\/p1$/);
@@ -108,8 +115,8 @@ describe('ProductEdit', () => {
 
     const patches = calls.filter((c) => c.method === 'PATCH');
     expect(patches).toHaveLength(1);
-    expect(patches[0].url).toMatch(/\/api\/admin\/variants\/v2$/);
-    expect(patches[0].body).toEqual({ stock: 9 });
+    expect(patches[0].url).toMatch(/\/api\/admin\/products\/p1\/variants$/);
+    expect(patches[0].body).toEqual({ updates: [{ variantId: 'v2', stock: 9 }] });
 
     expect(await screen.findByRole('heading', { name: 'Products' })).toBeInTheDocument();
   });

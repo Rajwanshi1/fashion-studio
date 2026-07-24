@@ -5,6 +5,7 @@ import { formatINR } from '../lib/format';
 import type { AdminProduct } from '../lib/types';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
+import ProductQuickPanel from '../components/ProductQuickPanel';
 
 const totalStock = (p: AdminProduct) => p.variants.reduce((sum, v) => sum + v.stock, 0);
 
@@ -40,6 +41,9 @@ export default function Products() {
   const [products, setProducts] = useState<AdminProduct[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const onSaved = (updated: AdminProduct) =>
+    setProducts((list) => (list ? list.map((p) => (p.id === updated.id ? updated : p)) : list));
+
   useEffect(() => {
     let live = true;
     api<AdminProduct[]>('/api/admin/products')
@@ -70,7 +74,7 @@ export default function Products() {
           rows={products}
           rowKey={(p) => p.id}
           empty="No pieces in the collection yet."
-          onRowClick={(p) => navigate(`/products/${p.id}`)}
+          renderExpanded={(p) => <ProductQuickPanel product={p} onSaved={onSaved} />}
         />
       )}
     </>

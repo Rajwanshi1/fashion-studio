@@ -67,6 +67,7 @@ export interface ProductsRepo {
   listCategories(): Promise<Category[]>;
   listProducts(filter: ProductFilter): Promise<{ items: ProductSummary[]; total: number }>;
   getBySlug(slug: string): Promise<AdminProduct | null>;
+  getById(id: string): Promise<AdminProduct | null>;
   getRelated(productId: string, categoryId: string, limit: number): Promise<ProductSummary[]>;
   getVariantsForUpdate(tx: Tx, variantIds: string[]): Promise<VariantForOrder[]>;
   decrementStock(tx: Tx, variantId: string, qty: number): Promise<void>;
@@ -75,6 +76,7 @@ export interface ProductsRepo {
   createProduct(input: CreateProductInput): Promise<AdminProduct>;
   updateProduct(id: string, input: UpdateProductInput): Promise<AdminProduct | null>;
   setVariantStock(variantId: string, stock: number): Promise<Variant | null>;
+  setVariantStocks(productId: string, updates: { variantId: string; stock: number }[]): Promise<AdminProduct | null>;
   listAllProducts(): Promise<AdminProduct[]>;
 }
 
@@ -208,6 +210,10 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
       if (!rows[0]) return null;
       const variants = await loadVariants(pool, [rows[0].id]);
       return mapDetail(rows[0], variants.get(rows[0].id) ?? []);
+    },
+
+    async getById(id) {
+      return getById(pool, id);
     },
 
     async getRelated(productId, categoryId, limit) {
@@ -345,6 +351,24 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         [variantId, stock],
       );
       return rows[0] ? mapVariant(rows[0]) : null;
+    },
+
+    async setVariantStocks(productId, updates) {
+      if (!UUID_RE.test(productId)) return null;
+      const ids = updates.map((u) => u.variantId);
+      if (!ids.every((id) => UUID_RE.test(id))) return null;
+      return withTransaction(pool, async (client) => {
+        const { rows } = await client.query(
+          'SELECT id FROM product_variants WHERE product_id = $1 AND id = ANY($2::uuid[])',
+          [productId, ids],
+        );
+        const owned = new Set(rows.map((row) => row.id));
+        if (!ids.every((id) => owned.has(id))) return null;
+        for (const u of updates) {
+          await client.query('UPDATE product_variants SET stock = $2 WHERE id = $1', [u.variantId, u.stock]);
+        }
+        return getById(client, productId);
+      });
     },
 
     async listAllProducts() {
