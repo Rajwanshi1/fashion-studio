@@ -11,6 +11,79 @@ afterEach(() => {
   document.querySelectorAll(`script[src="${GSI_SRC}"]`).forEach((s) => s.remove());
 });
 
+describe('Login — phone OTP', () => {
+  it('sends a code to the normalized number, verifies it and signs in', async () => {
+    const fetchMock = mockFetch((url, init) => {
+      if (url.endsWith('/api/auth/otp/request') && init?.method === 'POST') {
+        return { phone: '+919876543210' };
+      }
+      if (url.endsWith('/api/auth/otp/verify') && init?.method === 'POST') {
+        return {
+          token: 'jwt-otp-1',
+          user: {
+            id: 'u9',
+            email: null,
+            phone: '+919876543210',
+            firstName: '',
+            lastName: '',
+            role: 'customer',
+          },
+        };
+      }
+      if (url.endsWith('/api/me/orders')) return [];
+      return undefined;
+    });
+
+    renderApp('/login');
+    await userEvent.click(screen.getByRole('button', { name: 'Phone' }));
+    await userEvent.type(screen.getByLabelText('Mobile Number'), '98765 43210');
+    await userEvent.click(screen.getByRole('button', { name: 'Send Code' }));
+
+    expect(await screen.findByText(/code sent to \+919876543210/)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('One-Time Code'), '123456');
+    await userEvent.click(screen.getByRole('button', { name: 'Verify & Sign In' }));
+
+    // phone-only account: greeting has no name, session persists with the phone
+    expect(await screen.findByText('Welcome back')).toBeInTheDocument();
+    const verifyCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith('/api/auth/otp/verify'),
+    );
+    expect(JSON.parse(String(verifyCall![1]?.body))).toEqual({
+      phone: '+919876543210',
+      code: '123456',
+    });
+    const stored = JSON.parse(localStorage.getItem('ta.auth') ?? 'null') as {
+      token?: string;
+      user?: { phone?: string | null };
+    } | null;
+    expect(stored?.token).toBe('jwt-otp-1');
+    expect(stored?.user?.phone).toBe('+919876543210');
+  });
+
+  it('surfaces verify errors in the existing error style and allows changing number', async () => {
+    const { container } = (() => {
+      mockFetch((url, init) => {
+        if (url.endsWith('/api/auth/otp/request') && init?.method === 'POST') {
+          return { phone: '+919876543210' };
+        }
+        return undefined; // verify 404s → { error: 'Not found' }
+      });
+      return renderApp('/login');
+    })();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Phone' }));
+    await userEvent.type(screen.getByLabelText('Mobile Number'), '9876543210');
+    await userEvent.click(screen.getByRole('button', { name: 'Send Code' }));
+    await userEvent.type(await screen.findByLabelText('One-Time Code'), '000000');
+    await userEvent.click(screen.getByRole('button', { name: 'Verify & Sign In' }));
+
+    expect(container.querySelector('.auth-err')).toHaveTextContent('Not found');
+
+    await userEvent.click(screen.getByText('Use a different number'));
+    expect(screen.getByLabelText('Mobile Number')).toBeInTheDocument();
+  });
+});
+
 describe('Login — Google sign-in', () => {
   it('unconfigured: clicking Google shows the setup-pending notice and injects no GIS script', async () => {
     mockFetch(() => undefined);

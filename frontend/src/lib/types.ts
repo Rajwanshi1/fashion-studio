@@ -5,7 +5,8 @@ export type Role = 'customer' | 'admin';
 
 export interface PublicUser {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   firstName: string;
   lastName: string;
   role: Role;

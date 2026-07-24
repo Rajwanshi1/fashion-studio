@@ -66,7 +66,7 @@ export default function Account() {
     <Shop page="page-account">
       <div className="page-hero">
         <span className="eyebrow">My Account</span>
-        <h1>Welcome back, {user.firstName}</h1>
+        <h1>Welcome back{user.firstName ? `, ${user.firstName}` : ''}</h1>
       </div>
 
       <main className="acct">
@@ -74,7 +74,7 @@ export default function Account() {
           <div className="who">
             <div className="hi">Signed in as</div>
             <div className="nm">
-              {user.firstName} {user.lastName}
+              {`${user.firstName} ${user.lastName}`.trim() || user.phone || user.email}
             </div>
           </div>
           <nav className="acct-nav">

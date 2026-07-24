@@ -6,6 +6,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { ClicksRepo } from './data/clicks.repo';
 import type { EventsRepo } from './data/events.repo';
+import type { OtpsRepo } from './data/otps.repo';
 import type { OrdersRepo } from './data/orders.repo';
 import type { PaymentsRepo } from './data/payments.repo';
 import type { ProductsRepo, WishlistRepo } from './data/products.repo';
@@ -25,6 +26,7 @@ import { createAuthService, VerifyGoogleToken } from './services/auth.service';
 import { createCatalogService } from './services/catalog.service';
 import { createOrdersService } from './services/orders.service';
 import { createPaymentsService, PaymentProvider } from './services/payments.service';
+import type { SmsProvider } from './services/sms.provider';
 import { createSocialsService } from './services/socials.service';
 import { DomainError, TxRunner } from './types';
 
@@ -38,11 +40,16 @@ export interface AppDeps {
     scans: ScansRepo;
     clicks: ClicksRepo;
     events: EventsRepo;
+    otps: OtpsRepo;
   };
   /** Masked payments seam — null while payments are disabled (endpoints answer 503). */
   paymentProvider: PaymentProvider | null;
   /** Masked Google sign-in seam — null/undefined until GOOGLE_CLIENT_ID exists. */
   verifyGoogleToken?: VerifyGoogleToken | null;
+  /** Masked SMS seam — null/undefined while phone-OTP login is disabled (endpoints answer 503). */
+  smsProvider?: SmsProvider | null;
+  /** Fixed OTP for dev/e2e; only meaningful alongside the console provider. */
+  otpDevCode?: string | null;
   jwtSecret: string;
   corsOrigins: string[];
   runInTransaction: TxRunner;
@@ -50,8 +57,11 @@ export interface AppDeps {
   pingDb?: () => Promise<void>;
 }
 
-const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 503> = {
+const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 429 | 503> = {
   EMAIL_TAKEN: 409,
+  PHONE_TAKEN: 409,
+  INVALID_PHONE: 400,
+  TOO_MANY_REQUESTS: 429,
   INSUFFICIENT_STOCK: 409,
   PAYMENT_ALREADY_FINAL: 409,
   INVALID_CREDENTIALS: 401,
@@ -66,7 +76,14 @@ const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 503> = 
 export function createApp(deps: AppDeps) {
   const { repos, paymentProvider, verifyGoogleToken, jwtSecret, corsOrigins, runInTransaction } = deps;
 
-  const auth = createAuthService({ users: repos.users, jwtSecret, verifyGoogleToken });
+  const auth = createAuthService({
+    users: repos.users,
+    jwtSecret,
+    verifyGoogleToken,
+    otps: repos.otps,
+    smsProvider: deps.smsProvider,
+    otpDevCode: deps.otpDevCode,
+  });
   const catalog = createCatalogService({ products: repos.products });
   const orders = createOrdersService({ products: repos.products, orders: repos.orders, runInTransaction });
   const payments = createPaymentsService({ payments: repos.payments, orders: repos.orders, provider: paymentProvider });
@@ -112,6 +129,8 @@ export function createApp(deps: AppDeps) {
     }
   });
 
+  // OTP sends cost money and hit a third party — tighter window than the rest of auth.
+  app.use('/api/auth/otp/*', rateLimit({ windowMs: 60_000, max: 10 }));
   app.use('/api/auth/*', rateLimit({ windowMs: 60_000, max: 30 }));
   app.use('/api/*', rateLimit({ windowMs: 60_000, max: 300 }));
   app.route('/api/auth', authRoutes(auth, jwtSecret));

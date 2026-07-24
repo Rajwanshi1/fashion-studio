@@ -22,10 +22,12 @@ import type {
   TopProduct,
   TrendDay,
 } from '../src/data/events.repo';
+import type { OtpRecord, OtpsRepo } from '../src/data/otps.repo';
 import type { ScansRepo, SourceStats } from '../src/data/scans.repo';
 import type { AdminUser, CreateUserInput, UsersRepo } from '../src/data/users.repo';
 import type { GoogleTokenClaims, VerifyGoogleToken } from '../src/services/auth.service';
 import type { PaymentProvider } from '../src/services/payments.service';
+import type { SmsProvider } from '../src/services/sms.provider';
 import {
   Category,
   DomainError,
@@ -55,8 +57,11 @@ export class FakeUsersRepo implements UsersRepo {
   constructor(private ordersRepo?: FakeOrdersRepo) {}
 
   async create(input: CreateUserInput): Promise<User> {
-    if (this.users.some((u) => u.email.toLowerCase() === input.email.toLowerCase())) {
+    if (input.email && this.users.some((u) => u.email?.toLowerCase() === input.email!.toLowerCase())) {
       throw new DomainError('EMAIL_TAKEN', 'An account with this email already exists');
+    }
+    if (input.phone && this.users.some((u) => u.phone === input.phone)) {
+      throw new DomainError('PHONE_TAKEN', 'An account with this phone number already exists');
     }
     const user: User = {
       id: nextId('user'),
@@ -66,6 +71,8 @@ export class FakeUsersRepo implements UsersRepo {
       lastName: input.lastName,
       role: input.role ?? 'customer',
       authProvider: input.authProvider ?? 'password',
+      phone: input.phone ?? null,
+      phoneVerified: input.phoneVerified ?? false,
       createdAt: new Date(Date.UTC(2026, 0, 1) + ++this.clock * 60_000).toISOString(),
     };
     this.users.push(user);
@@ -73,17 +80,29 @@ export class FakeUsersRepo implements UsersRepo {
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.users.find((u) => u.email.toLowerCase() === email.toLowerCase()) ?? null;
+    return this.users.find((u) => u.email?.toLowerCase() === email.toLowerCase()) ?? null;
+  }
+
+  async findByPhone(phone: string): Promise<User | null> {
+    return this.users.find((u) => u.phone === phone) ?? null;
   }
 
   async findById(id: string): Promise<User | null> {
     return this.users.find((u) => u.id === id) ?? null;
   }
 
+  async setPhoneVerified(id: string): Promise<User | null> {
+    const u = this.users.find((x) => x.id === id);
+    if (!u) return null;
+    u.phoneVerified = true;
+    return u;
+  }
+
   private toAdmin(u: User): AdminUser {
     return {
       id: u.id,
       email: u.email,
+      phone: u.phone,
       firstName: u.firstName,
       lastName: u.lastName,
       role: u.role,
@@ -104,6 +123,56 @@ export class FakeUsersRepo implements UsersRepo {
     if (!u) return null;
     u.role = role;
     return this.toAdmin(u);
+  }
+}
+
+export class FakeOtpsRepo implements OtpsRepo {
+  records: (OtpRecord & { createdAt: Date; consumedAt: Date | null })[] = [];
+
+  async create(input: { phone: string; codeHash: string; expiresAt: Date }): Promise<OtpRecord> {
+    const record = {
+      id: nextId('otp'),
+      phone: input.phone,
+      codeHash: input.codeHash,
+      expiresAt: input.expiresAt,
+      attempts: 0,
+      createdAt: new Date(input.expiresAt.getTime() - 5 * 60_000),
+      consumedAt: null,
+    };
+    this.records.push(record);
+    return { ...record };
+  }
+
+  async latestActiveForPhone(phone: string, now: Date): Promise<OtpRecord | null> {
+    const active = this.records
+      .filter((r) => r.phone === phone && !r.consumedAt && r.expiresAt > now)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return active[0] ? { ...active[0] } : null;
+  }
+
+  async incrementAttempts(id: string): Promise<number> {
+    const r = this.records.find((x) => x.id === id);
+    if (!r) return Number.MAX_SAFE_INTEGER;
+    return ++r.attempts;
+  }
+
+  async consume(id: string): Promise<void> {
+    const r = this.records.find((x) => x.id === id);
+    if (r) r.consumedAt = new Date();
+  }
+
+  async countRecentForPhone(phone: string, since: Date): Promise<number> {
+    return this.records.filter((r) => r.phone === phone && r.createdAt > since).length;
+  }
+}
+
+export class FakeSmsProvider implements SmsProvider {
+  sent: { phone: string; code: string }[] = [];
+  failWith: Error | null = null;
+
+  async sendOtp(phone: string, code: string): Promise<void> {
+    if (this.failWith) throw this.failWith;
+    this.sent.push({ phone, code });
   }
 }
 
@@ -746,6 +815,7 @@ export interface Fakes {
   scans: FakeScansRepo;
   clicks: FakeClicksRepo;
   events: FakeEventsRepo;
+  otps: FakeOtpsRepo;
 }
 
 export function makeFakes(): Fakes {
@@ -757,7 +827,8 @@ export function makeFakes(): Fakes {
   const scans = new FakeScansRepo();
   const clicks = new FakeClicksRepo();
   const events = new FakeEventsRepo();
-  return { users, products, wishlist, orders, payments, scans, clicks, events };
+  const otps = new FakeOtpsRepo();
+  return { users, products, wishlist, orders, payments, scans, clicks, events, otps };
 }
 
 /** Small catalog covering both categories, all flags, an inactive product and low stock. */

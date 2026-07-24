@@ -2,18 +2,22 @@ import { Pool } from 'pg';
 import { AuthProvider, DomainError, Role, User } from '../types';
 
 export interface CreateUserInput {
-  email: string;
+  email: string | null;
   passwordHash: string | null;
   firstName: string;
   lastName: string;
   role?: Role;
   authProvider?: AuthProvider;
+  /** E.164; must be pre-normalized by the caller. */
+  phone?: string | null;
+  phoneVerified?: boolean;
 }
 
 /** Row shape for the admin user-management screens. */
 export interface AdminUser {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   firstName: string;
   lastName: string;
   role: Role;
@@ -25,7 +29,9 @@ export interface AdminUser {
 export interface UsersRepo {
   create(input: CreateUserInput): Promise<User>;
   findByEmail(email: string): Promise<User | null>;
+  findByPhone(phone: string): Promise<User | null>;
   findById(id: string): Promise<User | null>;
+  setPhoneVerified(id: string): Promise<User | null>;
   listAdmin(): Promise<AdminUser[]>;
   updateRole(id: string, role: Role): Promise<AdminUser | null>;
 }
@@ -35,12 +41,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function mapUser(row: any): User {
   return {
     id: row.id,
-    email: row.email,
+    email: row.email ?? null,
     passwordHash: row.password_hash ?? null,
     firstName: row.first_name,
     lastName: row.last_name,
     role: row.role,
     authProvider: row.auth_provider,
+    phone: row.phone ?? null,
+    phoneVerified: row.phone_verified ?? false,
     createdAt: row.created_at.toISOString(),
   };
 }
@@ -48,7 +56,8 @@ function mapUser(row: any): User {
 function mapAdminUser(row: any): AdminUser {
   return {
     id: row.id,
-    email: row.email,
+    email: row.email ?? null,
+    phone: row.phone ?? null,
     firstName: row.first_name,
     lastName: row.last_name,
     role: row.role,
@@ -63,8 +72,8 @@ export function createUsersRepo(pool: Pool): UsersRepo {
     async create(input) {
       try {
         const { rows } = await pool.query(
-          `INSERT INTO users (email, password_hash, first_name, last_name, role, auth_provider)
-           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+          `INSERT INTO users (email, password_hash, first_name, last_name, role, auth_provider, phone, phone_verified)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
           [
             input.email,
             input.passwordHash,
@@ -72,11 +81,16 @@ export function createUsersRepo(pool: Pool): UsersRepo {
             input.lastName,
             input.role ?? 'customer',
             input.authProvider ?? 'password',
+            input.phone ?? null,
+            input.phoneVerified ?? false,
           ],
         );
         return mapUser(rows[0]);
       } catch (err: any) {
         if (err?.code === '23505') {
+          if (err?.constraint === 'users_phone_unique') {
+            throw new DomainError('PHONE_TAKEN', 'An account with this phone number already exists');
+          }
           throw new DomainError('EMAIL_TAKEN', 'An account with this email already exists');
         }
         throw err;
@@ -84,7 +98,21 @@ export function createUsersRepo(pool: Pool): UsersRepo {
     },
 
     async findByEmail(email) {
-      const { rows } = await pool.query('SELECT * FROM users WHERE lower(email) = lower($1)', [email]);
+      const { rows } = await pool.query(
+        'SELECT * FROM users WHERE email IS NOT NULL AND lower(email) = lower($1)',
+        [email],
+      );
+      return rows[0] ? mapUser(rows[0]) : null;
+    },
+
+    async findByPhone(phone) {
+      const { rows } = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
+      return rows[0] ? mapUser(rows[0]) : null;
+    },
+
+    async setPhoneVerified(id) {
+      if (!UUID_RE.test(id)) return null;
+      const { rows } = await pool.query('UPDATE users SET phone_verified = true WHERE id = $1 RETURNING *', [id]);
       return rows[0] ? mapUser(rows[0]) : null;
     },
 
@@ -96,7 +124,7 @@ export function createUsersRepo(pool: Pool): UsersRepo {
 
     async listAdmin() {
       const { rows } = await pool.query(
-        `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.auth_provider, u.created_at,
+        `SELECT u.id, u.email, u.phone, u.first_name, u.last_name, u.role, u.auth_provider, u.created_at,
                 count(o.id)::int AS orders_count
          FROM users u
          LEFT JOIN orders o ON o.user_id = u.id

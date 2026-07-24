@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CreateOrderInput, OrdersService, createOrdersService } from '../src/services/orders.service';
+import {
+  CreateOrderInput,
+  OrdersService,
+  createOrdersService,
+  requesterOwnsOrder,
+} from '../src/services/orders.service';
+import type { Order } from '../src/types';
 import { FakeOrdersRepo, FakeProductsRepo, fakeTx, seedCatalog } from './fakes';
 
 const customer = {
@@ -231,6 +237,24 @@ describe('OrdersService', () => {
 
     it('throws NOT_FOUND for an unknown order', async () => {
       await expect(service.updateStatus('ghost', 'paid')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+  });
+
+  describe('requesterOwnsOrder', () => {
+    const orderWith = (over: Partial<Order>): Order =>
+      ({ userId: null, email: 'owner@example.com', ...over }) as Order;
+
+    it('matches by user id or by email (case-insensitive)', () => {
+      expect(requesterOwnsOrder(orderWith({ userId: 'u1' }), { userId: 'u1' })).toBe(true);
+      expect(requesterOwnsOrder(orderWith({}), { email: ' Owner@Example.COM ' })).toBe(true);
+      expect(requesterOwnsOrder(orderWith({}), { email: 'other@example.com' })).toBe(false);
+      expect(requesterOwnsOrder(orderWith({ userId: 'u1' }), { userId: 'u2' })).toBe(false);
+    });
+
+    it('never matches an empty-email order by email (offline orders carry no email)', () => {
+      expect(requesterOwnsOrder(orderWith({ email: '' }), { email: '' })).toBe(false);
+      expect(requesterOwnsOrder(orderWith({ email: '' }), { email: '  ' })).toBe(false);
+      expect(requesterOwnsOrder(orderWith({ email: '', userId: 'u1' }), { userId: 'u1' })).toBe(true);
     });
   });
 });

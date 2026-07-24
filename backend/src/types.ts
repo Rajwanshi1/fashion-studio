@@ -2,23 +2,28 @@
 
 export type Role = 'customer' | 'admin';
 
-export type AuthProvider = 'password' | 'google';
+export type AuthProvider = 'password' | 'google' | 'otp';
 
 export interface User {
   id: string;
-  email: string;
-  /** Null for accounts created through Google sign-in. */
+  /** Null for phone-only accounts (created via OTP login or offline bills). */
+  email: string | null;
+  /** Null for accounts created through Google sign-in or phone OTP. */
   passwordHash: string | null;
   firstName: string;
   lastName: string;
   role: Role;
   authProvider: AuthProvider;
+  /** E.164 (+91…); null until a phone is attached. */
+  phone: string | null;
+  phoneVerified: boolean;
   createdAt: string;
 }
 
 export interface PublicUser {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   firstName: string;
   lastName: string;
   role: Role;
@@ -145,6 +150,9 @@ export class DomainError extends Error {
   constructor(
     public code:
       | 'EMAIL_TAKEN'
+      | 'PHONE_TAKEN'
+      | 'INVALID_PHONE'
+      | 'TOO_MANY_REQUESTS'
       | 'INVALID_CREDENTIALS'
       | 'NOT_FOUND'
       | 'INSUFFICIENT_STOCK'

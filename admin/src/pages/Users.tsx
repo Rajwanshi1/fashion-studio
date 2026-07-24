@@ -34,7 +34,7 @@ export default function Users() {
         body: { role },
       });
       setUsers((cur) => (cur ? cur.map((u) => (u.id === user.id ? updated : u)) : cur));
-      toast(`${user.email} is now ${role === 'admin' ? 'an admin' : 'a customer'}`);
+      toast(`${user.email ?? user.phone ?? fullName(user)} is now ${role === 'admin' ? 'an admin' : 'a customer'}`);
     } catch (err) {
       setUsers(previous ?? null);
       toast(err instanceof Error ? err.message : 'Unable to update role');
@@ -48,7 +48,16 @@ export default function Users() {
       render: (u) =>
         fullName(u) ? <span className="nm">{fullName(u)}</span> : <span className="dim">—</span>,
     },
-    { key: 'email', label: 'Email', render: (u) => u.email },
+    {
+      key: 'email',
+      label: 'Email',
+      render: (u) => u.email ?? <span className="dim">—</span>,
+    },
+    {
+      key: 'phone',
+      label: 'Phone',
+      render: (u) => u.phone ?? <span className="dim">—</span>,
+    },
     {
       key: 'provider',
       label: 'Provider',

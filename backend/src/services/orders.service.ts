@@ -29,7 +29,9 @@ export interface OrderRequester {
 /** Guest-tracking ownership rule: the requester's user id or email must match the order. */
 export function requesterOwnsOrder(order: Order, requester: OrderRequester): boolean {
   const matchesUser = !!requester.userId && order.userId === requester.userId;
-  const matchesEmail = !!requester.email && order.email.toLowerCase() === requester.email.trim().toLowerCase();
+  // Offline orders may carry an empty email — an empty match must never grant access.
+  const matchesEmail =
+    !!requester.email && !!order.email && order.email.toLowerCase() === requester.email.trim().toLowerCase();
   return matchesUser || matchesEmail;
 }
 

@@ -4,6 +4,7 @@ import { createApp } from './app';
 import { loadConfig } from './config';
 import { createClicksRepo } from './data/clicks.repo';
 import { createEventsRepo } from './data/events.repo';
+import { createOtpsRepo } from './data/otps.repo';
 import { createOrdersRepo } from './data/orders.repo';
 import { createPaymentsRepo } from './data/payments.repo';
 import { createProductsRepo, createWishlistRepo } from './data/products.repo';
@@ -14,6 +15,7 @@ import { migrate } from './migrate';
 import { seed } from './seed';
 import { createGoogleVerifier } from './services/google.verifier';
 import { MockRazorpayProvider } from './services/payments.service';
+import { ConsoleSmsProvider, Msg91SmsProvider } from './services/sms.provider';
 
 async function main() {
   const config = loadConfig();
@@ -42,9 +44,17 @@ async function main() {
       scans: createScansRepo(pool),
       clicks: createClicksRepo(pool),
       events: createEventsRepo(pool),
+      otps: createOtpsRepo(pool),
     },
     paymentProvider: config.paymentProvider === 'mock' ? new MockRazorpayProvider() : null,
     verifyGoogleToken: config.googleClientId ? createGoogleVerifier(config.googleClientId) : null,
+    smsProvider:
+      config.smsProvider === 'msg91'
+        ? new Msg91SmsProvider(config.msg91AuthKey!, config.msg91TemplateId!)
+        : config.smsProvider === 'console'
+          ? new ConsoleSmsProvider()
+          : null,
+    otpDevCode: config.otpDevCode,
     jwtSecret: config.jwtSecret,
     corsOrigins: config.corsOrigins,
     runInTransaction: makeTxRunner(pool),
@@ -60,6 +70,9 @@ async function main() {
   }
   if (config.googleClientId) console.log('auth: Google sign-in enabled');
   else console.warn('auth: Google sign-in masked — set GOOGLE_CLIENT_ID to enable');
+  if (config.smsProvider === 'msg91') console.log('auth: phone OTP via MSG91');
+  else if (config.smsProvider === 'console') console.warn('auth: phone OTP codes printed to console — dev only');
+  else console.log('auth: phone OTP masked — set SMS_PROVIDER to enable');
 
   const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
     console.log(`Tanvi Agnihotry API listening on :${info.port}`);
