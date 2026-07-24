@@ -141,6 +141,13 @@ export class FakeUsersRepo implements UsersRepo {
       .map((u) => this.toAdmin(u));
   }
 
+  async listWithPhone(): Promise<{ firstName: string; lastName: string; phone: string }[]> {
+    return this.users
+      .filter((u) => u.phone)
+      .map((u) => ({ firstName: u.firstName, lastName: u.lastName, phone: u.phone! }))
+      .sort((a, b) => a.firstName.localeCompare(b.firstName) || a.lastName.localeCompare(b.lastName));
+  }
+
   async searchAdmin(phone?: string | null, q?: string | null): Promise<AdminUser[]> {
     if (!phone && !q) return [];
     const needle = q?.toLowerCase();
@@ -555,6 +562,16 @@ export class FakeOrdersRepo implements OrdersRepo {
     return this.orders
       .filter((o) => o.userId === userId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((o) => structuredClone(o));
+  }
+
+  async listDeliveries(): Promise<Order[]> {
+    return this.orders
+      .filter((o) => o.deliveryDueDate && o.status !== 'delivered' && o.status !== 'cancelled')
+      .sort(
+        (a, b) =>
+          a.deliveryDueDate!.localeCompare(b.deliveryDueDate!) || a.createdAt.localeCompare(b.createdAt),
+      )
       .map((o) => structuredClone(o));
   }
 

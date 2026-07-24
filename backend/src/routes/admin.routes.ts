@@ -7,7 +7,9 @@ import type { OrdersRepo } from '../data/orders.repo';
 import type { PaymentsRepo } from '../data/payments.repo';
 import type { ProductsRepo } from '../data/products.repo';
 import type { UsersRepo } from '../data/users.repo';
+import { deliveryTotals } from '../lib/deliveries';
 import { normalizePhone } from '../lib/phone';
+import { customersToVcf } from '../lib/vcard';
 import { AuthEnv, requireAdmin, requireAuth } from '../middleware/auth';
 import type { DocumentsService } from '../services/documents.service';
 import type { OrdersService } from '../services/orders.service';
@@ -197,6 +199,20 @@ export function adminRoutes(deps: AdminDeps) {
       lowStock,
       recentOrders,
     });
+  });
+
+  // The delivery board: open orders with a promised date, soonest first.
+  r.get('/deliveries', async (c) => {
+    const orders = await deps.orders.listDeliveries();
+    return c.json({ orders, totals: deliveryTotals(orders) });
+  });
+
+  // iPhone contacts export — Safari hands the download to the Contacts app.
+  r.get('/customers.vcf', async (c) => {
+    const body = customersToVcf(await deps.users.listWithPhone());
+    c.header('Content-Type', 'text/vcard; charset=utf-8');
+    c.header('Content-Disposition', 'attachment; filename="ta-customers.vcf"');
+    return c.body(body);
   });
 
   r.get('/products', async (c) => c.json(await deps.products.listAllProducts()));

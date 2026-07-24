@@ -33,6 +33,8 @@ export interface UsersRepo {
   findById(id: string): Promise<User | null>;
   setPhoneVerified(id: string): Promise<User | null>;
   listAdmin(): Promise<AdminUser[]>;
+  /** Everyone with a phone — the iPhone contacts (.vcf) export. */
+  listWithPhone(): Promise<{ firstName: string; lastName: string; phone: string }[]>;
   /**
    * Candidate lookup for linking offline bills: exact normalized-phone matches
    * rank first, then email/name ILIKE matches. Limit 8.
@@ -125,6 +127,14 @@ export function createUsersRepo(pool: Pool): UsersRepo {
       if (!UUID_RE.test(id)) return null;
       const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
       return rows[0] ? mapUser(rows[0]) : null;
+    },
+
+    async listWithPhone() {
+      const { rows } = await pool.query(
+        `SELECT first_name, last_name, phone FROM users
+         WHERE phone IS NOT NULL ORDER BY first_name, last_name`,
+      );
+      return rows.map((r: any) => ({ firstName: r.first_name, lastName: r.last_name, phone: r.phone }));
     },
 
     async listAdmin() {

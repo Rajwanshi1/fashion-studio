@@ -72,6 +72,8 @@ export interface OrdersRepo {
   getByNumber(orderNumber: string): Promise<Order | null>;
   getById(id: string, tx?: Tx): Promise<Order | null>;
   listByUser(userId: string): Promise<Order[]>;
+  /** Open orders with a promised date, soonest first — the delivery board. */
+  listDeliveries(): Promise<Order[]>;
   listAdmin(filter?: AdminOrdersFilter): Promise<Order[]>;
   updateStatus(id: string, status: OrderStatus, tx?: Tx): Promise<Order | null>;
   updateDetails(id: string, patch: OrderDetailsPatch): Promise<Order | null>;
@@ -295,6 +297,15 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
     async getById(id, tx) {
       if (!UUID_RE.test(id)) return null;
       return loadOne((tx as PoolClient) ?? pool, id);
+    },
+
+    async listDeliveries() {
+      return loadOrders(
+        pool,
+        `WHERE status NOT IN ('delivered','cancelled') AND delivery_due_date IS NOT NULL
+         ORDER BY delivery_due_date ASC, created_at ASC`,
+        [],
+      );
     },
 
     async listByUser(userId) {

@@ -57,6 +57,7 @@ describe('Users', () => {
     // one for the guest's missing name, one each for ME/GUEST's missing phone
     expect(screen.getAllByText('—', { selector: 'td .dim' })).toHaveLength(3);
     expect(screen.getByText('+919876543210')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export contacts (.vcf)' })).toBeInTheDocument();
 
     // emails, provider badges, role pills
     expect(screen.getByText('meera@example.in')).toBeInTheDocument();
