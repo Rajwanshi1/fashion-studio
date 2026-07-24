@@ -164,7 +164,7 @@ export default function BillIntake() {
           <input
             ref={billInput}
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif"
             capture="environment"
             hidden
             aria-label="Bill photo file"
@@ -173,7 +173,7 @@ export default function BillIntake() {
           <input
             ref={pageInput}
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif"
             capture="environment"
             hidden
             aria-label="Measurement page file"

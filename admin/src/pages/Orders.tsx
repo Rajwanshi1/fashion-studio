@@ -235,7 +235,7 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
         <input
           ref={receiptInput}
           type="file"
-          accept="image/*"
+          accept="image/*,.heic,.heif"
           capture="environment"
           hidden
           aria-label={`Shipping receipt photo for ${order.orderNumber}`}
