@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from 'pg';
-import { Tx } from '../types';
+import { DomainError, Tx } from '../types';
 
 export type DocumentKind = 'bill' | 'measurement' | 'shipping_receipt';
 
@@ -53,12 +53,22 @@ function mapRow(row: any): DocumentRow {
 export function createDocumentsRepo(pool: Pool): DocumentsRepo {
   return {
     async create(input) {
-      const { rows } = await pool.query(
-        `INSERT INTO documents (storage_key, kind, content_type, uploaded_by)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [input.storageKey, input.kind, input.contentType, input.uploadedBy],
-      );
-      return mapRow(rows[0]);
+      try {
+        const { rows } = await pool.query(
+          `INSERT INTO documents (storage_key, kind, content_type, uploaded_by)
+           VALUES ($1, $2, $3, $4) RETURNING *`,
+          [input.storageKey, input.kind, input.contentType, input.uploadedBy],
+        );
+        return mapRow(rows[0]);
+      } catch (err: any) {
+        // 23503: uploaded_by references a user that no longer exists — a JWT
+        // issued before the user row was removed (or a dev DB reset). Stateless
+        // auth can't catch this earlier; answer 401 so the client re-logs-in.
+        if (err?.code === '23503') {
+          throw new DomainError('INVALID_CREDENTIALS', 'Your session is out of date — sign out and sign in again');
+        }
+        throw err;
+      }
     },
 
     async getById(id) {
