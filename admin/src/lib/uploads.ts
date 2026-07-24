@@ -71,14 +71,29 @@ export interface UploadedDocument {
   previewUrl: string;
 }
 
-/** prepareImage → presign → raw PUT. Throws with a friendly message on any step. */
+/**
+ * prepareImage → presign → raw PUT. Throws with a friendly message on any
+ * step. The PUT goes plain first (S3 presigned URLs reject an Authorization
+ * header); the dev-only local transport answers 401/403 instead, so retry
+ * with the admin JWT — mirroring fetchDocumentImage.
+ */
 export async function uploadDocument(kind: DocumentKind, file: File): Promise<UploadedDocument> {
   const { blob, contentType } = await prepareImage(file);
   const presign = await api<PresignResult>('/api/admin/uploads/presign', {
     method: 'POST',
     body: { kind, contentType },
   });
-  const res = await fetch(presign.uploadUrl, { method: 'PUT', headers: presign.headers, body: blob });
+  let res = await fetch(presign.uploadUrl, { method: 'PUT', headers: presign.headers, body: blob });
+  if (res.status === 401 || res.status === 403) {
+    const token = storedToken();
+    if (token) {
+      res = await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        headers: { ...presign.headers, Authorization: `Bearer ${token}` },
+        body: blob,
+      });
+    }
+  }
   if (!res.ok) throw new Error(`Photo upload failed (${res.status})`);
   return { documentId: presign.documentId, kind, previewUrl: URL.createObjectURL(blob) };
 }
