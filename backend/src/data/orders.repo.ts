@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
-import { DeliveryMethod, Order, OrderItem, OrderStatus, Tx } from '../types';
+import { mapReceipt } from './receipts.repo';
+import { BillType, DeliveryMethod, Order, OrderChannel, OrderItem, OrderStatus, Receipt, Tx } from '../types';
 
 export interface NewOrder {
   orderNumber: string;
@@ -32,13 +33,46 @@ export interface NewOrderItem {
   imageUrl: string | null;
 }
 
+/** Offline order: bill metadata on top of NewOrder. */
+export interface NewOfflineOrder extends NewOrder {
+  channel: Exclude<OrderChannel, 'online'>;
+  billType: BillType;
+  billNumber: string | null;
+  gstAmount: number | null;
+  deliveryDueDate: string | null;
+  notes: string;
+}
+
+/** Freeform handwritten-bill line — no catalog linkage. */
+export interface NewOfflineItem {
+  productName: string;
+  unitPrice: number;
+  quantity: number;
+}
+
+export interface OrderDetailsPatch {
+  deliveryDueDate?: string | null;
+  billNumber?: string | null;
+  billType?: BillType | null;
+  gstAmount?: number | null;
+  notes?: string;
+}
+
+export interface AdminOrdersFilter {
+  status?: OrderStatus;
+  channel?: OrderChannel;
+  billType?: BillType;
+}
+
 export interface OrdersRepo {
   createWithItems(tx: Tx, order: NewOrder, items: NewOrderItem[]): Promise<Order>;
+  createOffline(tx: Tx, order: NewOfflineOrder, items: NewOfflineItem[]): Promise<Order>;
   getByNumber(orderNumber: string): Promise<Order | null>;
   getById(id: string, tx?: Tx): Promise<Order | null>;
   listByUser(userId: string): Promise<Order[]>;
-  listAdmin(status?: OrderStatus): Promise<Order[]>;
+  listAdmin(filter?: AdminOrdersFilter): Promise<Order[]>;
   updateStatus(id: string, status: OrderStatus, tx?: Tx): Promise<Order | null>;
+  updateDetails(id: string, patch: OrderDetailsPatch): Promise<Order | null>;
   nextOrderNumber(tx: Tx): Promise<string>;
 }
 
@@ -47,8 +81,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function mapItem(row: any): OrderItem {
   return {
     id: row.id,
-    productId: row.product_id,
-    variantId: row.variant_id,
+    productId: row.product_id ?? null,
+    variantId: row.variant_id ?? null,
     productName: row.product_name,
     size: row.size,
     color: row.color,
@@ -58,7 +92,18 @@ function mapItem(row: any): OrderItem {
   };
 }
 
-function mapOrder(row: any, items: OrderItem[]): Order {
+/** pg parses `date` columns to a local-midnight Date; keep the calendar day. */
+function toDateStr(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+  }
+  return String(value).slice(0, 10);
+}
+
+function mapOrder(row: any, items: OrderItem[], receipts: Receipt[]): Order {
+  const advancePaid = receipts.reduce((sum, r) => sum + r.amount, 0);
   return {
     id: row.id,
     orderNumber: row.order_number,
@@ -78,6 +123,15 @@ function mapOrder(row: any, items: OrderItem[]): Order {
     subtotal: row.subtotal,
     total: row.total,
     status: row.status,
+    channel: row.channel,
+    billType: row.bill_type ?? null,
+    billNumber: row.bill_number ?? null,
+    gstAmount: row.gst_amount ?? null,
+    deliveryDueDate: toDateStr(row.delivery_due_date),
+    notes: row.notes,
+    advancePaid,
+    balance: row.total - advancePaid,
+    receipts,
     createdAt: row.created_at.toISOString(),
     items,
   };
@@ -99,10 +153,32 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
     return byOrder;
   }
 
+  async function loadReceipts(client: Pool | PoolClient, orderIds: string[]): Promise<Map<string, Receipt[]>> {
+    const byOrder = new Map<string, Receipt[]>();
+    if (orderIds.length === 0) return byOrder;
+    const { rows } = await client.query(
+      `SELECT id, order_id, amount, mode, received_at::text AS received_at, note, created_at
+       FROM order_receipts WHERE order_id = ANY($1::uuid[]) ORDER BY received_at, created_at`,
+      [orderIds],
+    );
+    for (const row of rows) {
+      const list = byOrder.get(row.order_id) ?? [];
+      list.push(mapReceipt(row));
+      byOrder.set(row.order_id, list);
+    }
+    return byOrder;
+  }
+
   async function loadOrders(client: Pool | PoolClient, whereSql: string, params: unknown[]): Promise<Order[]> {
     const { rows } = await client.query(`SELECT * FROM orders ${whereSql}`, params);
-    const items = await loadItems(client, rows.map((r) => r.id));
-    return rows.map((row) => mapOrder(row, items.get(row.id) ?? []));
+    const ids = rows.map((r) => r.id);
+    const [items, receipts] = await Promise.all([loadItems(client, ids), loadReceipts(client, ids)]);
+    return rows.map((row) => mapOrder(row, items.get(row.id) ?? [], receipts.get(row.id) ?? []));
+  }
+
+  async function loadOne(client: Pool | PoolClient, id: string): Promise<Order | null> {
+    const orders = await loadOrders(client, 'WHERE id = $1', [id]);
+    return orders[0] ?? null;
   }
 
   return {
@@ -155,7 +231,56 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
         );
         created.push(mapItem(itemRows[0]));
       }
-      return mapOrder(orderRow, created);
+      return mapOrder(orderRow, created, []);
+    },
+
+    async createOffline(tx, order, items) {
+      const client = tx as PoolClient;
+      const { rows } = await client.query(
+        `INSERT INTO orders (order_number, user_id, email, phone, first_name, last_name,
+                             address_line1, address_line2, city, state, pincode, country,
+                             delivery_method, delivery_fee, subtotal, total, status,
+                             channel, bill_type, bill_number, gst_amount, delivery_due_date, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+         RETURNING *`,
+        [
+          order.orderNumber,
+          order.userId,
+          order.email,
+          order.phone,
+          order.firstName,
+          order.lastName,
+          order.addressLine1,
+          order.addressLine2,
+          order.city,
+          order.state,
+          order.pincode,
+          order.country,
+          order.deliveryMethod,
+          order.deliveryFee,
+          order.subtotal,
+          order.total,
+          order.status,
+          order.channel,
+          order.billType,
+          order.billNumber,
+          order.gstAmount,
+          order.deliveryDueDate,
+          order.notes,
+        ],
+      );
+      const orderRow = rows[0];
+      const created: OrderItem[] = [];
+      for (const item of items) {
+        const { rows: itemRows } = await client.query(
+          `INSERT INTO order_items (order_id, product_id, variant_id, product_name, size, color,
+                                    unit_price, quantity, image_url)
+           VALUES ($1, NULL, NULL, $2, '', '', $3, $4, NULL) RETURNING *`,
+          [orderRow.id, item.productName, item.unitPrice, item.quantity],
+        );
+        created.push(mapItem(itemRows[0]));
+      }
+      return mapOrder(orderRow, created, []);
     },
 
     async getByNumber(orderNumber) {
@@ -165,8 +290,7 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
 
     async getById(id, tx) {
       if (!UUID_RE.test(id)) return null;
-      const orders = await loadOrders((tx as PoolClient) ?? pool, 'WHERE id = $1', [id]);
-      return orders[0] ?? null;
+      return loadOne((tx as PoolClient) ?? pool, id);
     },
 
     async listByUser(userId) {
@@ -174,21 +298,56 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
       return loadOrders(pool, 'WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
     },
 
-    async listAdmin(status) {
-      if (status) return loadOrders(pool, 'WHERE status = $1 ORDER BY created_at DESC', [status]);
-      return loadOrders(pool, 'ORDER BY created_at DESC', []);
+    async listAdmin(filter = {}) {
+      const where: string[] = [];
+      const params: unknown[] = [];
+      if (filter.status) {
+        params.push(filter.status);
+        where.push(`status = $${params.length}`);
+      }
+      if (filter.channel) {
+        params.push(filter.channel);
+        where.push(`channel = $${params.length}`);
+      }
+      if (filter.billType) {
+        params.push(filter.billType);
+        where.push(`bill_type = $${params.length}`);
+      }
+      const whereSql = where.length ? `WHERE ${where.join(' AND ')} ` : '';
+      return loadOrders(pool, `${whereSql}ORDER BY created_at DESC`, params);
     },
 
     async updateStatus(id, status, tx) {
       if (!UUID_RE.test(id)) return null;
       const client = (tx as PoolClient) ?? pool;
       const { rows } = await client.query(
-        'UPDATE orders SET status = $2, updated_at = now() WHERE id = $1 RETURNING *',
+        'UPDATE orders SET status = $2, updated_at = now() WHERE id = $1 RETURNING id',
         [id, status],
       );
       if (!rows[0]) return null;
-      const items = await loadItems(client, [id]);
-      return mapOrder(rows[0], items.get(id) ?? []);
+      return loadOne(client, id);
+    },
+
+    async updateDetails(id, patch) {
+      if (!UUID_RE.test(id)) return null;
+      const sets: string[] = [];
+      const params: unknown[] = [id];
+      const push = (column: string, value: unknown) => {
+        params.push(value);
+        sets.push(`${column} = $${params.length}`);
+      };
+      if (patch.deliveryDueDate !== undefined) push('delivery_due_date', patch.deliveryDueDate);
+      if (patch.billNumber !== undefined) push('bill_number', patch.billNumber);
+      if (patch.billType !== undefined) push('bill_type', patch.billType);
+      if (patch.gstAmount !== undefined) push('gst_amount', patch.gstAmount);
+      if (patch.notes !== undefined) push('notes', patch.notes);
+      if (sets.length === 0) return loadOne(pool, id);
+      const { rows } = await pool.query(
+        `UPDATE orders SET ${sets.join(', ')}, updated_at = now() WHERE id = $1 RETURNING id`,
+        params,
+      );
+      if (!rows[0]) return null;
+      return loadOne(pool, id);
     },
 
     async nextOrderNumber(tx) {

@@ -88,6 +88,15 @@ export function makeOrder(overrides: Partial<Order> = {}): Order {
     subtotal: 18400000,
     total: 18400000,
     status: 'paid',
+    channel: 'online',
+    billType: null,
+    billNumber: null,
+    gstAmount: null,
+    deliveryDueDate: null,
+    notes: '',
+    advancePaid: 0,
+    balance: 18400000,
+    receipts: [],
     createdAt: '2026-07-01T10:00:00.000Z',
     items: [
       {

@@ -10,6 +10,7 @@ import type { OtpsRepo } from './data/otps.repo';
 import type { OrdersRepo } from './data/orders.repo';
 import type { PaymentsRepo } from './data/payments.repo';
 import type { ProductsRepo, WishlistRepo } from './data/products.repo';
+import type { ReceiptsRepo } from './data/receipts.repo';
 import type { ScansRepo } from './data/scans.repo';
 import type { UsersRepo } from './data/users.repo';
 import { rateLimit } from './middleware/rate-limit';
@@ -41,6 +42,7 @@ export interface AppDeps {
     clicks: ClicksRepo;
     events: EventsRepo;
     otps: OtpsRepo;
+    receipts: ReceiptsRepo;
   };
   /** Masked payments seam — null while payments are disabled (endpoints answer 503). */
   paymentProvider: PaymentProvider | null;
@@ -63,6 +65,7 @@ const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 429 | 5
   INVALID_PHONE: 400,
   TOO_MANY_REQUESTS: 429,
   INSUFFICIENT_STOCK: 409,
+  OVER_COLLECTION: 409,
   PAYMENT_ALREADY_FINAL: 409,
   INVALID_CREDENTIALS: 401,
   NOT_FOUND: 404,
@@ -85,7 +88,13 @@ export function createApp(deps: AppDeps) {
     otpDevCode: deps.otpDevCode,
   });
   const catalog = createCatalogService({ products: repos.products });
-  const orders = createOrdersService({ products: repos.products, orders: repos.orders, runInTransaction });
+  const orders = createOrdersService({
+    products: repos.products,
+    orders: repos.orders,
+    users: repos.users,
+    receipts: repos.receipts,
+    runInTransaction,
+  });
   const payments = createPaymentsService({ payments: repos.payments, orders: repos.orders, provider: paymentProvider });
   const socials = createSocialsService({ scans: repos.scans, clicks: repos.clicks });
   const analytics = createAnalyticsService({ events: repos.events });

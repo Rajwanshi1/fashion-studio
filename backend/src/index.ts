@@ -8,6 +8,7 @@ import { createOtpsRepo } from './data/otps.repo';
 import { createOrdersRepo } from './data/orders.repo';
 import { createPaymentsRepo } from './data/payments.repo';
 import { createProductsRepo, createWishlistRepo } from './data/products.repo';
+import { createReceiptsRepo } from './data/receipts.repo';
 import { createScansRepo } from './data/scans.repo';
 import { createUsersRepo } from './data/users.repo';
 import { createPool, makeTxRunner } from './db';
@@ -45,6 +46,7 @@ async function main() {
       clicks: createClicksRepo(pool),
       events: createEventsRepo(pool),
       otps: createOtpsRepo(pool),
+      receipts: createReceiptsRepo(pool),
     },
     paymentProvider: config.paymentProvider === 'mock' ? new MockRazorpayProvider() : null,
     verifyGoogleToken: config.googleClientId ? createGoogleVerifier(config.googleClientId) : null,

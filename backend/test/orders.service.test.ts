@@ -6,7 +6,7 @@ import {
   requesterOwnsOrder,
 } from '../src/services/orders.service';
 import type { Order } from '../src/types';
-import { FakeOrdersRepo, FakeProductsRepo, fakeTx, seedCatalog } from './fakes';
+import { FakeOrdersRepo, FakeProductsRepo, FakeReceiptsRepo, FakeUsersRepo, fakeTx, seedCatalog } from './fakes';
 
 const customer = {
   email: 'Guest@Example.com',
@@ -42,7 +42,13 @@ describe('OrdersService', () => {
     products = new FakeProductsRepo();
     seeded = await seedCatalog(products);
     ordersRepo = new FakeOrdersRepo();
-    service = createOrdersService({ products, orders: ordersRepo, runInTransaction: fakeTx });
+    service = createOrdersService({
+      products,
+      orders: ordersRepo,
+      users: new FakeUsersRepo(ordersRepo),
+      receipts: new FakeReceiptsRepo(ordersRepo),
+      runInTransaction: fakeTx,
+    });
   });
 
   describe('createOrder', () => {

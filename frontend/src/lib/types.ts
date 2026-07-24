@@ -70,16 +70,34 @@ export type OrderStatus =
 
 export type DeliveryMethod = 'standard' | 'priority';
 
+export type OrderChannel = 'online' | 'in_store' | 'instagram' | 'exhibition';
+
+export type BillType = 'gst_invoice' | 'cash_memo';
+
+export type ReceiptMode = 'cash' | 'online';
+
 export interface OrderItem {
   id: string;
-  productId: string;
-  variantId: string;
+  /** Null for offline freeform lines (handwritten-bill descriptions). */
+  productId: string | null;
+  variantId: string | null;
   productName: string;
   size: string;
   color: string;
   unitPrice: number;
   quantity: number;
   imageUrl: string | null;
+}
+
+export interface Receipt {
+  id: string;
+  orderId: string;
+  amount: number;
+  mode: ReceiptMode;
+  /** YYYY-MM-DD. */
+  receivedAt: string;
+  note: string;
+  createdAt: string;
 }
 
 export interface Order {
@@ -101,6 +119,18 @@ export interface Order {
   subtotal: number;
   total: number;
   status: OrderStatus;
+  channel: OrderChannel;
+  billType: BillType | null;
+  billNumber: string | null;
+  gstAmount: number | null;
+  /** YYYY-MM-DD; null when no delivery date was promised. */
+  deliveryDueDate: string | null;
+  notes: string;
+  /** SUM of receipts, paise — meaningful for offline orders only. */
+  advancePaid: number;
+  /** total − advancePaid, paise — meaningful for offline orders only. */
+  balance: number;
+  receipts: Receipt[];
   createdAt: string;
   items: OrderItem[];
 }

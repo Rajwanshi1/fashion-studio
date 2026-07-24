@@ -33,6 +33,11 @@ export interface UsersRepo {
   findById(id: string): Promise<User | null>;
   setPhoneVerified(id: string): Promise<User | null>;
   listAdmin(): Promise<AdminUser[]>;
+  /**
+   * Candidate lookup for linking offline bills: exact normalized-phone matches
+   * rank first, then email/name ILIKE matches. Limit 8.
+   */
+  searchAdmin(phone?: string | null, q?: string | null): Promise<AdminUser[]>;
   updateRole(id: string, role: Role): Promise<AdminUser | null>;
 }
 
@@ -130,6 +135,34 @@ export function createUsersRepo(pool: Pool): UsersRepo {
          LEFT JOIN orders o ON o.user_id = u.id
          GROUP BY u.id
          ORDER BY u.created_at DESC`,
+      );
+      return rows.map(mapAdminUser);
+    },
+
+    async searchAdmin(phone, q) {
+      const conditions: string[] = [];
+      const params: unknown[] = [];
+      if (phone) {
+        params.push(phone);
+        conditions.push(`u.phone = $${params.length}`);
+      }
+      if (q) {
+        params.push(`%${q}%`);
+        const p = `$${params.length}`;
+        conditions.push(`(u.email ILIKE ${p} OR u.first_name ILIKE ${p} OR u.last_name ILIKE ${p})`);
+      }
+      if (conditions.length === 0) return [];
+      const phoneRank = phone ? `(u.phone = $1) DESC, ` : '';
+      const { rows } = await pool.query(
+        `SELECT u.id, u.email, u.phone, u.first_name, u.last_name, u.role, u.auth_provider, u.created_at,
+                count(o.id)::int AS orders_count
+         FROM users u
+         LEFT JOIN orders o ON o.user_id = u.id
+         WHERE ${conditions.join(' OR ')}
+         GROUP BY u.id
+         ORDER BY ${phoneRank}u.created_at DESC
+         LIMIT 8`,
+        params,
       );
       return rows.map(mapAdminUser);
     },
