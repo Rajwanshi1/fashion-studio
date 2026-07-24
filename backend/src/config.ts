@@ -15,6 +15,15 @@ export interface Config {
   msg91TemplateId: string | null;
   /** Fixed OTP for dev/e2e. Only honored alongside the console provider. */
   otpDevCode: string | null;
+  /** Null keeps document parsing masked (parse endpoint answers 503). */
+  anthropicApiKey: string | null;
+  anthropicModel: string;
+  /** Null means no S3 — the dev LocalObjectStore serves uploads instead. */
+  s3UploadsBucket: string | null;
+  /** LocalObjectStore directory (dev only; ignored when S3 is configured). */
+  uploadsDir: string;
+  /** Public base URL of this API — the LocalObjectStore presigns against it. */
+  publicApiUrl: string;
 }
 
 const DEV_JWT_SECRET = 'dev-secret-change-in-prod';
@@ -71,9 +80,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
   }
 
+  const port = parseInt(env.PORT ?? '3001', 10);
+
   return {
     nodeEnv,
-    port: parseInt(env.PORT ?? '3001', 10),
+    port,
     databaseUrl: env.DATABASE_URL ?? 'postgres://boutique:boutique@localhost:5433/boutique',
     jwtSecret,
     corsOrigins: (env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174')
@@ -87,5 +98,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     msg91AuthKey: env.MSG91_AUTH_KEY?.trim() || null,
     msg91TemplateId: env.MSG91_TEMPLATE_ID?.trim() || null,
     otpDevCode: env.OTP_DEV_CODE?.trim() || null,
+    // No fail-closed guard needed: a missing key just masks the parser (503),
+    // uploads themselves keep working.
+    anthropicApiKey: env.ANTHROPIC_API_KEY?.trim() || null,
+    anthropicModel: env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-5',
+    s3UploadsBucket: env.S3_UPLOADS_BUCKET?.trim() || null,
+    uploadsDir: env.UPLOADS_DIR?.trim() || `${process.cwd()}/.data/uploads`,
+    publicApiUrl: env.PUBLIC_API_URL?.trim() || `http://localhost:${port}`,
   };
 }

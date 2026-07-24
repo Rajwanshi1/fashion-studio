@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
+import { Tx } from '../types';
 
 export interface MeasurementRow {
   id: string;
@@ -22,7 +23,7 @@ export interface CreateMeasurementInput {
 }
 
 export interface MeasurementsRepo {
-  create(input: CreateMeasurementInput): Promise<MeasurementRow>;
+  create(input: CreateMeasurementInput, tx?: Tx): Promise<MeasurementRow>;
   listByUser(userId: string): Promise<MeasurementRow[]>;
   listByOrder(orderId: string): Promise<MeasurementRow[]>;
 }
@@ -44,8 +45,9 @@ function mapRow(row: any): MeasurementRow {
 
 export function createMeasurementsRepo(pool: Pool): MeasurementsRepo {
   return {
-    async create(input) {
-      const { rows } = await pool.query(
+    async create(input, tx) {
+      const client = (tx as PoolClient) ?? pool;
+      const { rows } = await client.query(
         `INSERT INTO measurements (user_id, order_id, document_id, label, data, notes)
          VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
         [

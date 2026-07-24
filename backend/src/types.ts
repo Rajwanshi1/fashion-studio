@@ -143,6 +143,10 @@ export interface Order {
   gstAmount: number | null;
   /** YYYY-MM-DD; null when no delivery date was promised. */
   deliveryDueDate: string | null;
+  /** Courier name from the shipping receipt; null until dispatched. */
+  carrier: string | null;
+  /** AWB / consignment number; null until dispatched. */
+  awb: string | null;
   notes: string;
   /** SUM of receipts, paise. */
   advancePaid: number;

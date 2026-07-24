@@ -55,6 +55,8 @@ export interface OrderDetailsPatch {
   billNumber?: string | null;
   billType?: BillType | null;
   gstAmount?: number | null;
+  carrier?: string | null;
+  awb?: string | null;
   notes?: string;
 }
 
@@ -128,6 +130,8 @@ function mapOrder(row: any, items: OrderItem[], receipts: Receipt[]): Order {
     billNumber: row.bill_number ?? null,
     gstAmount: row.gst_amount ?? null,
     deliveryDueDate: toDateStr(row.delivery_due_date),
+    carrier: row.carrier ?? null,
+    awb: row.awb ?? null,
     notes: row.notes,
     advancePaid,
     balance: row.total - advancePaid,
@@ -340,6 +344,8 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
       if (patch.billNumber !== undefined) push('bill_number', patch.billNumber);
       if (patch.billType !== undefined) push('bill_type', patch.billType);
       if (patch.gstAmount !== undefined) push('gst_amount', patch.gstAmount);
+      if (patch.carrier !== undefined) push('carrier', patch.carrier);
+      if (patch.awb !== undefined) push('awb', patch.awb);
       if (patch.notes !== undefined) push('notes', patch.notes);
       if (sets.length === 0) return loadOne(pool, id);
       const { rows } = await pool.query(

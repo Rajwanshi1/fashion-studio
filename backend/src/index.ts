@@ -3,7 +3,9 @@ import path from 'path';
 import { createApp } from './app';
 import { loadConfig } from './config';
 import { createClicksRepo } from './data/clicks.repo';
+import { createDocumentsRepo } from './data/documents.repo';
 import { createEventsRepo } from './data/events.repo';
+import { createMeasurementsRepo } from './data/measurements.repo';
 import { createOtpsRepo } from './data/otps.repo';
 import { createOrdersRepo } from './data/orders.repo';
 import { createPaymentsRepo } from './data/payments.repo';
@@ -14,7 +16,9 @@ import { createUsersRepo } from './data/users.repo';
 import { createPool, makeTxRunner } from './db';
 import { migrate } from './migrate';
 import { seed } from './seed';
+import { AnthropicBillParser } from './services/ai/parser';
 import { createGoogleVerifier } from './services/google.verifier';
+import { LocalObjectStore, S3ObjectStore } from './services/objectstore';
 import { MockRazorpayProvider } from './services/payments.service';
 import { ConsoleSmsProvider, Msg91SmsProvider } from './services/sms.provider';
 
@@ -35,6 +39,14 @@ async function main() {
     console.log(seeded ? 'Seeded catalog + users' : 'Seed skipped (products already exist)');
   }
 
+  // S3 in any deployed environment; the LocalObjectStore (plus its dev-only
+  // /api/uploads transport) only when no bucket is configured.
+  const localUploads = config.s3UploadsBucket ? null : new LocalObjectStore(config.uploadsDir, config.publicApiUrl);
+  const objectStore = config.s3UploadsBucket ? new S3ObjectStore(config.s3UploadsBucket) : localUploads!;
+  const billParser = config.anthropicApiKey
+    ? new AnthropicBillParser(config.anthropicApiKey, config.anthropicModel)
+    : null;
+
   const app = createApp({
     repos: {
       users: createUsersRepo(pool),
@@ -47,8 +59,13 @@ async function main() {
       events: createEventsRepo(pool),
       otps: createOtpsRepo(pool),
       receipts: createReceiptsRepo(pool),
+      documents: createDocumentsRepo(pool),
+      measurements: createMeasurementsRepo(pool),
     },
     paymentProvider: config.paymentProvider === 'mock' ? new MockRazorpayProvider() : null,
+    objectStore,
+    billParser,
+    localUploads,
     verifyGoogleToken: config.googleClientId ? createGoogleVerifier(config.googleClientId) : null,
     smsProvider:
       config.smsProvider === 'msg91'
@@ -75,6 +92,10 @@ async function main() {
   if (config.smsProvider === 'msg91') console.log('auth: phone OTP via MSG91');
   else if (config.smsProvider === 'console') console.warn('auth: phone OTP codes printed to console — dev only');
   else console.log('auth: phone OTP masked — set SMS_PROVIDER to enable');
+  if (config.s3UploadsBucket) console.log(`documents: S3 bucket ${config.s3UploadsBucket}`);
+  else console.warn(`documents: local dev store at ${config.uploadsDir} — set S3_UPLOADS_BUCKET in production`);
+  if (config.anthropicApiKey) console.log(`ai: bill parsing via ${config.anthropicModel}`);
+  else console.log('ai: parsing masked — set ANTHROPIC_API_KEY to enable');
 
   const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
     console.log(`Tanvi Agnihotry API listening on :${info.port}`);

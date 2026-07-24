@@ -123,6 +123,10 @@ export interface Order {
   gstAmount: number | null;
   /** YYYY-MM-DD; null when no delivery date was promised. */
   deliveryDueDate: string | null;
+  /** Courier name from the shipping receipt; null until dispatched. */
+  carrier: string | null;
+  /** AWB / consignment number; null until dispatched. */
+  awb: string | null;
   notes: string;
   /** SUM of receipts, paise. */
   advancePaid: number;
@@ -146,6 +150,36 @@ export interface Payment {
   currency: string;
   status: PaymentStatus;
   method: string;
+  createdAt: string;
+}
+
+export type DocumentKind = 'bill' | 'measurement' | 'shipping_receipt';
+
+export type DocumentStatus = 'uploaded' | 'parsed' | 'confirmed' | 'discarded';
+
+/** Mirrors GET /api/admin/orders/:id/documents rows. */
+export interface DocumentSummary {
+  id: string;
+  kind: DocumentKind;
+  status: DocumentStatus;
+  createdAt: string;
+}
+
+export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
+  bill: 'Bill',
+  measurement: 'Measurements',
+  shipping_receipt: 'Shipping receipt',
+};
+
+/** Mirrors GET /api/admin/measurements rows. */
+export interface MeasurementSet {
+  id: string;
+  userId: string;
+  orderId: string | null;
+  documentId: string | null;
+  label: string;
+  data: Record<string, string>;
+  notes: string;
   createdAt: string;
 }
 

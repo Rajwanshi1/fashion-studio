@@ -5,7 +5,9 @@ import { HTTPException } from 'hono/http-exception';
 import { secureHeaders } from 'hono/secure-headers';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { ClicksRepo } from './data/clicks.repo';
+import type { DocumentsRepo } from './data/documents.repo';
 import type { EventsRepo } from './data/events.repo';
+import type { MeasurementsRepo } from './data/measurements.repo';
 import type { OtpsRepo } from './data/otps.repo';
 import type { OrdersRepo } from './data/orders.repo';
 import type { PaymentsRepo } from './data/payments.repo';
@@ -22,9 +24,13 @@ import { catalogRoutes } from './routes/catalog.routes';
 import { orderRoutes } from './routes/orders.routes';
 import { paymentRoutes } from './routes/payments.routes';
 import { socialsRoutes } from './routes/socials.routes';
+import { uploadsRoutes } from './routes/uploads.routes';
+import type { BillParser } from './services/ai/parser';
 import { createAnalyticsService } from './services/analytics.service';
 import { createAuthService, VerifyGoogleToken } from './services/auth.service';
 import { createCatalogService } from './services/catalog.service';
+import { createDocumentsService } from './services/documents.service';
+import type { LocalObjectStore, ObjectStore } from './services/objectstore';
 import { createOrdersService } from './services/orders.service';
 import { createPaymentsService, PaymentProvider } from './services/payments.service';
 import type { SmsProvider } from './services/sms.provider';
@@ -43,9 +49,17 @@ export interface AppDeps {
     events: EventsRepo;
     otps: OtpsRepo;
     receipts: ReceiptsRepo;
+    documents: DocumentsRepo;
+    measurements: MeasurementsRepo;
   };
   /** Masked payments seam — null while payments are disabled (endpoints answer 503). */
   paymentProvider: PaymentProvider | null;
+  /** Document photo storage — S3 in production, LocalObjectStore in dev/tests. */
+  objectStore: ObjectStore;
+  /** Masked parsing seam — null/undefined until ANTHROPIC_API_KEY exists (parse answers 503). */
+  billParser?: BillParser | null;
+  /** Set only when the LocalObjectStore is active — mounts the dev-only /api/uploads transport. */
+  localUploads?: LocalObjectStore | null;
   /** Masked Google sign-in seam — null/undefined until GOOGLE_CLIENT_ID exists. */
   verifyGoogleToken?: VerifyGoogleToken | null;
   /** Masked SMS seam — null/undefined while phone-OTP login is disabled (endpoints answer 503). */
@@ -93,22 +107,32 @@ export function createApp(deps: AppDeps) {
     orders: repos.orders,
     users: repos.users,
     receipts: repos.receipts,
+    documents: repos.documents,
+    measurements: repos.measurements,
     runInTransaction,
   });
   const payments = createPaymentsService({ payments: repos.payments, orders: repos.orders, provider: paymentProvider });
   const socials = createSocialsService({ scans: repos.scans, clicks: repos.clicks });
   const analytics = createAnalyticsService({ events: repos.events });
+  const documents = createDocumentsService({
+    documents: repos.documents,
+    store: deps.objectStore,
+    parser: deps.billParser ?? null,
+  });
 
   const app = new Hono<AuthEnv>();
 
   app.use(secureHeaders());
-  app.use(
-    '/api/*',
-    bodyLimit({
-      maxSize: 100 * 1024,
-      onError: (c) => c.json({ error: 'Payload too large' }, 413),
-    }),
-  );
+  // Global 100KB JSON cap — skipped for the dev-only local photo transport,
+  // which enforces its own 10MB cap (uploads.routes.ts).
+  const jsonBodyLimit = bodyLimit({
+    maxSize: 100 * 1024,
+    onError: (c) => c.json({ error: 'Payload too large' }, 413),
+  });
+  app.use('/api/*', (c, next) => {
+    if (c.req.path.startsWith('/api/uploads/local/')) return next();
+    return jsonBodyLimit(c, next);
+  });
 
   app.onError((err, c) => {
     if (err instanceof DomainError) return c.json({ error: err.message }, DOMAIN_STATUS[err.code]);
@@ -148,6 +172,8 @@ export function createApp(deps: AppDeps) {
   app.route('/api/payments', paymentRoutes(payments, jwtSecret));
   app.route('/api/socials', socialsRoutes(socials, jwtSecret));
   app.route('/api', analyticsRoutes(analytics, jwtSecret));
+  // Dev-only local upload transport — never mounted when S3 is the store.
+  if (deps.localUploads) app.route('/api/uploads', uploadsRoutes(deps.localUploads, jwtSecret));
   app.route(
     '/api/admin',
     adminRoutes({
@@ -155,7 +181,10 @@ export function createApp(deps: AppDeps) {
       orders: repos.orders,
       payments: repos.payments,
       users: repos.users,
+      documents: repos.documents,
+      measurements: repos.measurements,
       ordersService: orders,
+      documentsService: documents,
       jwtSecret,
     }),
   );

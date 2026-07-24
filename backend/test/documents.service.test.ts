@@ -2,93 +2,24 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type {
-  CreateDocumentInput,
-  DocumentRow,
-  DocumentStatus,
-  DocumentsRepo,
-} from '../src/data/documents.repo';
-import type { BillParser, ParseKind } from '../src/services/ai/parser';
+import type { ParseKind } from '../src/services/ai/parser';
 import { createDocumentsService, DocumentsService } from '../src/services/documents.service';
 import { LocalObjectStore } from '../src/services/objectstore';
 import { DomainError } from '../src/types';
-
-let idCounter = 0;
-
-class FakeDocumentsRepo implements DocumentsRepo {
-  docs: DocumentRow[] = [];
-  private clock = 0;
-
-  async create(input: CreateDocumentInput): Promise<DocumentRow> {
-    const doc: DocumentRow = {
-      id: `00000000-0000-4000-8000-${String(++idCounter).padStart(12, '0')}`,
-      storageKey: input.storageKey,
-      kind: input.kind,
-      contentType: input.contentType,
-      orderId: null,
-      uploadedBy: input.uploadedBy,
-      parse: null,
-      status: 'uploaded',
-      createdAt: new Date(Date.UTC(2026, 6, 1) + ++this.clock * 60_000).toISOString(),
-    };
-    this.docs.push(doc);
-    return structuredClone(doc);
-  }
-
-  async getById(id: string): Promise<DocumentRow | null> {
-    const doc = this.docs.find((d) => d.id === id);
-    return doc ? structuredClone(doc) : null;
-  }
-
-  async setParse(id: string, parse: unknown, status: DocumentStatus): Promise<DocumentRow | null> {
-    const doc = this.docs.find((d) => d.id === id);
-    if (!doc) return null;
-    doc.parse = parse;
-    doc.status = status;
-    return structuredClone(doc);
-  }
-
-  async setStatusAndOrder(ids: string[], status: DocumentStatus, orderId: string): Promise<void> {
-    for (const doc of this.docs) {
-      if (ids.includes(doc.id)) {
-        doc.status = status;
-        doc.orderId = orderId;
-      }
-    }
-  }
-
-  async listByOrder(orderId: string): Promise<DocumentRow[]> {
-    return this.docs
-      .filter((d) => d.orderId === orderId)
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-      .map((d) => structuredClone(d));
-  }
-}
-
-class FakeParser implements BillParser {
-  calls: { kind: ParseKind; mediaType: string; byteLength: number }[] = [];
-  draft: unknown = { hello: 'draft' };
-  failWith: Error | null = null;
-
-  async parse(kind: ParseKind, image: { bytes: Uint8Array; mediaType: string }): Promise<unknown> {
-    this.calls.push({ kind, mediaType: image.mediaType, byteLength: image.bytes.byteLength });
-    if (this.failWith) throw this.failWith;
-    return this.draft;
-  }
-}
+import { FakeBillParser, FakeDocumentsRepo } from './fakes';
 
 describe('DocumentsService', () => {
   let dir: string;
   let repo: FakeDocumentsRepo;
   let store: LocalObjectStore;
-  let parser: FakeParser;
+  let parser: FakeBillParser;
   let service: DocumentsService;
 
   beforeEach(async () => {
     dir = await mkdtemp(path.join(os.tmpdir(), 'documents-service-test-'));
     repo = new FakeDocumentsRepo();
     store = new LocalObjectStore(dir, 'http://localhost:4000');
-    parser = new FakeParser();
+    parser = new FakeBillParser();
     service = createDocumentsService({ documents: repo, store, parser });
   });
 

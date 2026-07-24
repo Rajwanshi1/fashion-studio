@@ -44,11 +44,15 @@ export function mockFetch(handler: (url: string, init?: RequestInit) => RouteRes
   const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? 'GET';
-    calls.push({
-      url,
-      method,
-      body: init?.body ? JSON.parse(String(init.body)) : undefined,
-    });
+    let body: unknown;
+    if (init?.body) {
+      try {
+        body = JSON.parse(String(init.body));
+      } catch {
+        body = init.body; // raw uploads (Blob PUTs) are not JSON
+      }
+    }
+    calls.push({ url, method, body });
     const result = handler(url, init);
     if (!result) {
       return {
@@ -93,6 +97,8 @@ export function makeOrder(overrides: Partial<Order> = {}): Order {
     billNumber: null,
     gstAmount: null,
     deliveryDueDate: null,
+    carrier: null,
+    awb: null,
     notes: '',
     advancePaid: 0,
     balance: 18400000,

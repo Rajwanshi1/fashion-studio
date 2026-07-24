@@ -387,6 +387,119 @@ select.inp {
 .trend-line.sessions { stroke: var(--forest-700); }
 .trend-line.orders { stroke: var(--gold); stroke-dasharray: 4 3; }
 
+/* ---- Bill-intake wizard ---- */
+.wizard-steps {
+  display: flex;
+  gap: 1.4rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.6rem;
+  counter-reset: wstep;
+}
+.wizard-steps li {
+  counter-increment: wstep;
+  font-size: 0.62rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.wizard-steps li::before { content: counter(wstep) ' — '; color: var(--gold); }
+.wizard-steps li.on { color: var(--ink); border-bottom: 1px solid var(--gold); padding-bottom: 2px; }
+
+.capture { display: flex; flex-direction: column; gap: 1rem; }
+.capture .ulink { align-self: center; margin-top: 0.4rem; }
+
+.thumbs { display: flex; flex-wrap: wrap; gap: 0.8rem; }
+.thumb { margin: 0; }
+.thumb img {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  background: #fff;
+}
+.thumb figcaption {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  margin-top: 0.3rem;
+  font-size: 0.62rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* Amber banner for Claude's confidence notes — check against the photo. */
+.parse-note {
+  border: 1px solid #d9b64a;
+  background: #faf3dd;
+  color: #6b5416;
+  border-radius: var(--edge);
+  padding: 0.85rem 1.1rem;
+  font-size: 0.8rem;
+  margin-bottom: 1rem;
+  max-width: 860px;
+}
+
+/* Sticky photo peek under the review form. */
+.peek {
+  position: sticky;
+  bottom: 0;
+  margin-top: 1rem;
+  max-width: 860px;
+  background: var(--paper);
+  border-top: 1px solid var(--hairline);
+  padding: 0.7rem 0;
+}
+.peek .btn-outline { width: 100%; }
+.peek-body { display: flex; gap: 0.8rem; overflow-x: auto; padding-top: 0.8rem; }
+.peek-body img {
+  max-height: 320px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  background: #fff;
+}
+
+.done-card h2 { font-family: var(--serif-display); font-size: var(--t-h2); margin: 0.4rem 0; }
+
+/* ---- Measurement sets (KeyValueEditor) ---- */
+.mset {
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+}
+.mset-head { display: flex; gap: 0.8rem; align-items: flex-end; }
+.mset-head .field { flex: 1; }
+.kv-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+/* ---- Order documents (thumbnails + shipping receipt) ---- */
+.doc-thumbs { display: flex; flex-wrap: wrap; gap: 0.8rem; margin: 0.8rem 0; }
+.doc-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.62rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.doc-thumb img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  background: #fff;
+}
+.receipt-edit { margin-top: 0.8rem; }
+
 /* ---- Loading / error states ---- */
 .state-note { color: var(--fg-muted); font-size: var(--t-sm); padding: 2rem 0; }
 
