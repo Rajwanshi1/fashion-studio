@@ -334,6 +334,13 @@ select.inp {
   max-width: 860px;
 }
 
+/* ---- Products: inline quick-edit panel ---- */
+.quick-panel { display: grid; gap: 1.1rem; }
+.quick-panel .field { margin-bottom: 0; }
+.quick-actions { display: flex; align-items: center; gap: 1.4rem; flex-wrap: wrap; }
+.quick-link { font-size: var(--t-sm); color: var(--forest-700); white-space: nowrap; }
+.quick-link:hover { color: var(--gold); }
+
 /* ---- Socials: QR generator panel ---- */
 .qr-panel { display: flex; gap: 2rem; align-items: flex-start; flex-wrap: wrap; }
 .qr-panel .qr-fields { flex: 1 1 320px; min-width: 260px; }

@@ -198,6 +198,11 @@ export class FakeProductsRepo implements ProductsRepo {
     return p ? structuredClone(p) : null;
   }
 
+  async getById(id: string): Promise<AdminProduct | null> {
+    const p = this.products.find((x) => x.id === id);
+    return p ? structuredClone(p) : null;
+  }
+
   async getRelated(productId: string, categoryId: string, limit: number): Promise<ProductSummary[]> {
     return this.products
       .filter((p) => p.active && p.categoryId === categoryId && p.id !== productId)
@@ -304,6 +309,19 @@ export class FakeProductsRepo implements ProductsRepo {
     if (!v) return null;
     v.stock = stock;
     return { ...v };
+  }
+
+  async setVariantStocks(
+    productId: string,
+    updates: { variantId: string; stock: number }[],
+  ): Promise<AdminProduct | null> {
+    const p = this.products.find((x) => x.id === productId);
+    if (!p) return null;
+    const targets = updates.map((u) => ({ u, variant: p.variants.find((v) => v.id === u.variantId) }));
+    // all-or-nothing, like the real transactional repo
+    if (targets.some((t) => !t.variant)) return null;
+    for (const t of targets) t.variant!.stock = t.u.stock;
+    return structuredClone(p);
   }
 
   async listAllProducts(): Promise<AdminProduct[]> {

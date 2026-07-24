@@ -77,15 +77,9 @@ export default function ProductEdit() {
     }
     let live = true;
     setLoading(true);
-    api<AdminProduct[]>('/api/admin/products')
-      .then((products) => {
+    api<AdminProduct>(`/api/admin/products/${id}`)
+      .then((product) => {
         if (!live) return;
-        const product = products.find((p) => p.id === id);
-        if (!product) {
-          setError('Piece not found');
-          setLoading(false);
-          return;
-        }
         setForm({
           name: product.name,
           slug: product.slug,
@@ -176,14 +170,14 @@ export default function ProductEdit() {
         });
       } else {
         await api(`/api/admin/products/${id}`, { method: 'PUT', body });
-        const changed = variants.filter(
-          (v) => Math.round(Number(stocks[v.id]) || 0) !== v.stock,
-        );
-        for (const v of changed) {
-          await api(`/api/admin/variants/${v.id}`, {
-            method: 'PATCH',
-            body: { stock: Math.max(0, Math.round(Number(stocks[v.id]) || 0)) },
-          });
+        const updates = variants
+          .filter((v) => Math.max(0, Math.round(Number(stocks[v.id]) || 0)) !== v.stock)
+          .map((v) => ({
+            variantId: v.id,
+            stock: Math.max(0, Math.round(Number(stocks[v.id]) || 0)),
+          }));
+        if (updates.length > 0) {
+          await api(`/api/admin/products/${id}/variants`, { method: 'PATCH', body: { updates } });
         }
       }
       toast(isNew ? 'Piece added to the collection' : 'Piece saved');

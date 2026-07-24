@@ -44,6 +44,13 @@ const createProductSchema = productBaseSchema.refine((v) => v.categoryId || v.ca
 
 const updateProductSchema = productBaseSchema.omit({ variants: true }).partial();
 
+const variantStocksSchema = z.object({
+  updates: z
+    .array(z.object({ variantId: z.string().min(1), stock: z.number().int().min(0) }))
+    .min(1)
+    .max(12),
+});
+
 export interface AdminDeps {
   products: ProductsRepo;
   orders: OrdersRepo;
@@ -99,6 +106,12 @@ export function adminRoutes(deps: AdminDeps) {
 
   r.get('/products', async (c) => c.json(await deps.products.listAllProducts()));
 
+  r.get('/products/:id', async (c) => {
+    const product = await deps.products.getById(c.req.param('id'));
+    if (!product) return c.json({ error: 'Product not found' }, 404);
+    return c.json(product);
+  });
+
   r.post('/products', zValidator('json', createProductSchema, zodHook), async (c) => {
     const { categorySlug, ...body } = c.req.valid('json');
     const categoryId = await resolveCategoryId({ categoryId: body.categoryId, categorySlug });
@@ -115,6 +128,12 @@ export function adminRoutes(deps: AdminDeps) {
     }
     const product = await deps.products.updateProduct(c.req.param('id'), body);
     if (!product) return c.json({ error: 'Product not found' }, 404);
+    return c.json(product);
+  });
+
+  r.patch('/products/:id/variants', zValidator('json', variantStocksSchema, zodHook), async (c) => {
+    const product = await deps.products.setVariantStocks(c.req.param('id'), c.req.valid('json').updates);
+    if (!product) return c.json({ error: 'Product or variant not found' }, 404);
     return c.json(product);
   });
 

@@ -503,6 +503,54 @@ describe('API', () => {
       expect((await app.request('/api/admin/products', withMethod('POST', { categoryId: 'ghost', slug: 'x', name: 'X', price: 1 }, adminToken))).status).toBe(404);
     });
 
+    it('reads a single product by id', async () => {
+      const res = await app.request(`/api/admin/products/${seeded.sage.id}`, bearer(adminToken));
+      expect(res.status).toBe(200);
+      const product = await res.json();
+      expect(product).toMatchObject({ id: seeded.sage.id, slug: 'sage-sequin-jacket-lehenga', categorySlug: 'lehenga-sets' });
+      expect(product.variants.map((v: any) => v.size)).toEqual(['M', 'Custom']);
+
+      const missing = await app.request('/api/admin/products/ghost', bearer(adminToken));
+      expect(missing.status).toBe(404);
+      expect(await missing.json()).toEqual({ error: 'Product not found' });
+    });
+
+    it('batch-updates variant stocks in one call', async () => {
+      const [m, custom] = seeded.sage.variants;
+      const res = await app.request(
+        `/api/admin/products/${seeded.sage.id}/variants`,
+        withMethod('PATCH', { updates: [{ variantId: m.id, stock: 7 }, { variantId: custom.id, stock: 40 }] }, adminToken),
+      );
+      expect(res.status).toBe(200);
+      const refreshed = await res.json();
+      expect(refreshed.id).toBe(seeded.sage.id);
+      expect(refreshed.variants.find((v: any) => v.id === m.id).stock).toBe(7);
+      expect(refreshed.variants.find((v: any) => v.id === custom.id).stock).toBe(40);
+
+      // a variant of a different product 404s and applies nothing
+      const foreign = await app.request(
+        `/api/admin/products/${seeded.sage.id}/variants`,
+        withMethod('PATCH', { updates: [{ variantId: m.id, stock: 1 }, { variantId: mossS().id, stock: 5 }] }, adminToken),
+      );
+      expect(foreign.status).toBe(404);
+      expect(await foreign.json()).toEqual({ error: 'Product or variant not found' });
+      const after = await (await app.request(`/api/admin/products/${seeded.sage.id}`, bearer(adminToken))).json();
+      expect(after.variants.find((v: any) => v.id === m.id).stock).toBe(7);
+      const moss = await (await app.request(`/api/admin/products/${seeded.moss.id}`, bearer(adminToken))).json();
+      expect(moss.variants.find((v: any) => v.id === mossS().id).stock).toBe(1);
+
+      const negative = await app.request(
+        `/api/admin/products/${seeded.sage.id}/variants`,
+        withMethod('PATCH', { updates: [{ variantId: m.id, stock: -1 }] }, adminToken),
+      );
+      expect(negative.status).toBe(400);
+      const empty = await app.request(
+        `/api/admin/products/${seeded.sage.id}/variants`,
+        withMethod('PATCH', { updates: [] }, adminToken),
+      );
+      expect(empty.status).toBe(400);
+    });
+
     it('creates products by categorySlug as well as categoryId', async () => {
       const created = await app.request(
         '/api/admin/products',
