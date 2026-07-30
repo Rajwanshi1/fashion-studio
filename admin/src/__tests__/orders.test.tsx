@@ -123,6 +123,8 @@ describe('Orders', () => {
           color: '',
           unitPrice: 18400000,
           quantity: 1,
+          dupattaPrice: null,
+          jacketPrice: null,
           imageUrl: null,
         },
       ],

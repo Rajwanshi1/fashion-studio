@@ -11,6 +11,7 @@ import type { CreateReceiptInput, ReceiptsRepo } from '../src/data/receipts.repo
 import type { AdminPayment, CreatePaymentInput, PaymentsRepo } from '../src/data/payments.repo';
 import type {
   AdminProduct,
+  BulkDeleteResult,
   CreateCategoryInput,
   CreateProductInput,
   ProductsRepo,
@@ -231,12 +232,23 @@ function toSummary(p: AdminProduct): ProductSummary {
     imageUrl: p.imageUrl,
     categorySlug: p.categorySlug,
     categoryName: p.categoryName,
+    collection: p.collection,
+    occasion: p.occasion,
+    dupattaPrice: p.dupattaPrice,
+    jacketPrice: p.jacketPrice,
   };
 }
 
+/** Full-set price (base + default-included add-ons), mirroring the SQL price sort. */
+const setPrice = (p: AdminProduct) => p.price + (p.dupattaPrice ?? 0) + (p.jacketPrice ?? 0);
+
+type FakeProduct = AdminProduct & { deletedAt: string | null };
+
 export class FakeProductsRepo implements ProductsRepo {
   categories: Category[] = [];
-  products: AdminProduct[] = [];
+  products: FakeProduct[] = [];
+  /** Product ids referenced by an order — mirrors the order_items FK guard. */
+  orderedProductIds = new Set<string>();
   private clock = 0;
 
   addCategory(input: Partial<CreateCategoryInput> & { slug: string; name: string }): Category {
@@ -261,8 +273,9 @@ export class FakeProductsRepo implements ProductsRepo {
   }
 
   async listProducts(filter: ProductFilter): Promise<{ items: ProductSummary[]; total: number }> {
-    let rows = this.products.filter((p) => p.active);
+    let rows = this.products.filter((p) => p.active && !p.deletedAt);
     if (filter.categorySlug) rows = rows.filter((p) => p.categorySlug === filter.categorySlug);
+    if (filter.collection) rows = rows.filter((p) => p.collection === filter.collection);
     if (filter.search) {
       const q = filter.search.toLowerCase();
       rows = rows.filter(
@@ -279,10 +292,10 @@ export class FakeProductsRepo implements ProductsRepo {
         sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
         break;
       case 'price_asc':
-        sorted.sort((a, b) => a.price - b.price);
+        sorted.sort((a, b) => setPrice(a) - setPrice(b));
         break;
       case 'price_desc':
-        sorted.sort((a, b) => b.price - a.price);
+        sorted.sort((a, b) => setPrice(b) - setPrice(a));
         break;
       default:
         sorted.sort((a, b) => flagRank(a) - flagRank(b) || a.createdAt.localeCompare(b.createdAt));
@@ -292,13 +305,13 @@ export class FakeProductsRepo implements ProductsRepo {
   }
 
   async getBySlug(slug: string): Promise<AdminProduct | null> {
-    const p = this.products.find((x) => x.slug === slug);
+    const p = this.products.find((x) => x.slug === slug && !x.deletedAt);
     return p ? structuredClone(p) : null;
   }
 
   async getRelated(productId: string, categoryId: string, limit: number): Promise<ProductSummary[]> {
     return this.products
-      .filter((p) => p.active && p.categoryId === categoryId && p.id !== productId)
+      .filter((p) => p.active && !p.deletedAt && p.categoryId === categoryId && p.id !== productId)
       .sort((a, b) => Number(b.flag !== null) - Number(a.flag !== null) || a.createdAt.localeCompare(b.createdAt))
       .slice(0, limit)
       .map(toSummary);
@@ -318,6 +331,8 @@ export class FakeProductsRepo implements ProductsRepo {
             color: p.color,
             unitPrice: p.price,
             imageUrl: p.imageUrl,
+            dupattaPrice: p.dupattaPrice,
+            jacketPrice: p.jacketPrice,
           });
         }
       }
@@ -358,9 +373,12 @@ export class FakeProductsRepo implements ProductsRepo {
   async createProduct(input: CreateProductInput): Promise<AdminProduct> {
     const category = this.categories.find((c) => c.id === input.categoryId);
     if (!category) throw new DomainError('NOT_FOUND', 'Category not found');
+    if (this.products.some((p) => p.slug === input.slug)) {
+      throw new DomainError('SLUG_TAKEN', 'A piece with this slug already exists — choose a different slug');
+    }
     const id = nextId('p');
     const sizes = input.variants ?? ['XS', 'S', 'M', 'L', 'XL', 'Custom'].map((size) => ({ size, stock: 0 }));
-    const product: AdminProduct = {
+    const product: FakeProduct = {
       id,
       slug: input.slug,
       name: input.name,
@@ -372,10 +390,17 @@ export class FakeProductsRepo implements ProductsRepo {
       categoryName: category.name,
       description: input.description ?? '',
       details: input.details ?? '',
+      collection: input.collection ?? '',
+      craft: input.craft ?? '',
+      fabric: input.fabric ?? '',
+      occasion: input.occasion ?? '',
+      dupattaPrice: input.dupattaPrice ?? null,
+      jacketPrice: input.jacketPrice ?? null,
       active: input.active ?? true,
       variants: sizes.map((v) => ({ id: nextId('v'), productId: id, size: v.size, stock: v.stock })),
       categoryId: category.id,
       createdAt: new Date(Date.UTC(2026, 0, 1) + ++this.clock * 60_000).toISOString(),
+      deletedAt: null,
     };
     this.products.push(product);
     return structuredClone(product);
@@ -391,7 +416,14 @@ export class FakeProductsRepo implements ProductsRepo {
       p.categorySlug = category.slug;
       p.categoryName = category.name;
     }
-    for (const key of ['slug', 'name', 'description', 'details', 'price', 'color', 'flag', 'imageUrl', 'active'] as const) {
+    if (input.slug !== undefined && this.products.some((x) => x.id !== id && x.slug === input.slug)) {
+      throw new DomainError('SLUG_TAKEN', 'A piece with this slug already exists — choose a different slug');
+    }
+    const keys = [
+      'slug', 'name', 'description', 'details', 'price', 'color', 'flag', 'imageUrl', 'active',
+      'collection', 'craft', 'fabric', 'occasion', 'dupattaPrice', 'jacketPrice',
+    ] as const;
+    for (const key of keys) {
       if (input[key] !== undefined) (p as any)[key] = input[key];
     }
     return structuredClone(p);
@@ -405,9 +437,38 @@ export class FakeProductsRepo implements ProductsRepo {
   }
 
   async listAllProducts(): Promise<AdminProduct[]> {
-    return [...this.products]
+    return this.products
+      .filter((p) => !p.deletedAt)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .map((p) => structuredClone(p));
+  }
+
+  async listCollections(): Promise<string[]> {
+    const names = new Set(
+      this.products
+        .filter((p) => p.active && !p.deletedAt && p.collection !== '')
+        .map((p) => p.collection),
+    );
+    return [...names].sort();
+  }
+
+  async bulkDelete(ids: string[]): Promise<BulkDeleteResult> {
+    const deleted: string[] = [];
+    const archived: string[] = [];
+    for (const id of ids) {
+      const p = this.products.find((x) => x.id === id && !x.deletedAt);
+      if (!p) continue;
+      if (this.orderedProductIds.has(id)) {
+        p.deletedAt = new Date().toISOString();
+        p.active = false;
+        p.slug = `${p.slug}-archived-20260101000000`;
+        archived.push(id);
+      } else {
+        this.products = this.products.filter((x) => x.id !== id);
+        deleted.push(id);
+      }
+    }
+    return { deleted, archived };
   }
 }
 
@@ -422,7 +483,7 @@ export class FakeWishlistRepo implements WishlistRepo {
       .filter((e) => e.userId === userId)
       .sort((a, b) => b.at - a.at)
       .map((e) => this.productsRepo.products.find((p) => p.id === e.productId))
-      .filter((p): p is AdminProduct => !!p && p.active)
+      .filter((p): p is AdminProduct & { deletedAt: string | null } => !!p && p.active && !p.deletedAt)
       .map(toSummary);
   }
 
@@ -444,6 +505,8 @@ export class FakeOrdersRepo implements OrdersRepo {
   orders: Order[] = [];
   private seq = 4818;
   private clock = 0;
+
+  constructor(private productsRepo?: FakeProductsRepo) {}
 
   private baseOrder(order: NewOrder, items: OrderItem[]): Order {
     return {
@@ -480,6 +543,8 @@ export class FakeOrdersRepo implements OrdersRepo {
   }
 
   async createWithItems(_tx: Tx, order: NewOrder, items: NewOrderItem[]): Promise<Order> {
+    // Mirror the order_items FK: once ordered, a product can only be archived.
+    for (const it of items) this.productsRepo?.orderedProductIds.add(it.productId);
     const created = this.baseOrder(
       order,
       items.map((it): OrderItem => ({ ...it, id: nextId('oi') })),
@@ -950,7 +1015,7 @@ export interface Fakes {
 export function makeFakes(): Fakes {
   const products = new FakeProductsRepo();
   const wishlist = new FakeWishlistRepo(products);
-  const orders = new FakeOrdersRepo();
+  const orders = new FakeOrdersRepo(products);
   const users = new FakeUsersRepo(orders);
   const payments = new FakePaymentsRepo(orders);
   const scans = new FakeScansRepo();
@@ -1016,4 +1081,29 @@ export async function seedCatalog(products: FakeProductsRepo) {
   });
 
   return { lehengas, gowns, sage, moss, plain, inactive };
+}
+
+/**
+ * A full set added on demand: dupatta and jacket priced separately, included
+ * by default. Kept out of seedCatalog so existing count/related assertions
+ * stay untouched.
+ */
+export async function seedSetProduct(products: FakeProductsRepo, categoryId: string) {
+  return products.createProduct({
+    categoryId,
+    slug: 'fern-zardozi-set-fern',
+    name: 'Fern Zardozi Set',
+    description: 'Zardozi lehenga with dupatta and jacket.',
+    details: 'Dry clean only',
+    price: 15000000,
+    color: 'Fern',
+    flag: null,
+    collection: 'The Verdant Edit',
+    craft: 'Zardozi',
+    fabric: 'Tissue',
+    occasion: 'Wedding',
+    dupattaPrice: 1200000,
+    jacketPrice: 2400000,
+    variants: [{ size: 'M', stock: 10 }],
+  });
 }

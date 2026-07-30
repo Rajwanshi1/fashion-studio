@@ -7,6 +7,7 @@ import type { ProductsRepo } from '../data/products.repo';
 import type { UsersRepo } from '../data/users.repo';
 import { normalizePhone } from '../lib/phone';
 import { AuthEnv, requireAdmin, requireAuth } from '../middleware/auth';
+import { newStorageKey, type ObjectStore } from '../services/objectstore';
 import type { OrdersService } from '../services/orders.service';
 import { OrderStatus } from '../types';
 import { zodHook } from './hooks';
@@ -98,7 +99,19 @@ const productBaseSchema = z.object({
   flag: flagSchema.optional(),
   imageUrl: z.string().nullable().optional(),
   active: z.boolean().optional(),
+  collection: z.string().optional(),
+  craft: z.string().optional(),
+  fabric: z.string().optional(),
+  occasion: z.string().optional(),
+  // null = no such piece in the set; 0 = included at no extra cost.
+  dupattaPrice: z.number().int().min(0).nullable().optional(),
+  jacketPrice: z.number().int().min(0).nullable().optional(),
   variants: z.array(z.object({ size: z.string().min(1), stock: z.number().int().min(0) })).optional(),
+});
+
+// Unknown/malformed ids surface as per-id `not_found` outcomes, not a 400.
+const bulkDeleteSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(200),
 });
 
 const createProductSchema = productBaseSchema.refine((v) => v.categoryId || v.categorySlug, {
@@ -113,6 +126,8 @@ export interface AdminDeps {
   payments: PaymentsRepo;
   users: UsersRepo;
   ordersService: OrdersService;
+  /** Null → product-image presign answers 503. */
+  objectStore: ObjectStore | null;
   jwtSecret: string;
 }
 
@@ -180,6 +195,33 @@ export function adminRoutes(deps: AdminDeps) {
     const categoryId = await resolveCategoryId({ categoryId: body.categoryId, categorySlug });
     if (!categoryId) return c.json({ error: 'Category not found' }, 404);
     return c.json(await deps.products.createProduct({ ...body, categoryId }), 201);
+  });
+
+  // Presign a direct-to-storage PUT for a product photo and hand back the
+  // permanent public URL to store in imageUrl. The admin client always
+  // re-encodes to JPEG (see admin/src/lib/image.ts).
+  r.post(
+    '/uploads/product-image',
+    zValidator('json', z.object({ contentType: z.literal('image/jpeg') }), zodHook),
+    async (c) => {
+      if (!deps.objectStore) return c.json({ error: 'Uploads are not configured' }, 503);
+      const { contentType } = c.req.valid('json');
+      const key = newStorageKey('products');
+      const { url, headers } = await deps.objectStore.presignPut(key, contentType);
+      return c.json({ key, uploadUrl: url, headers, publicUrl: deps.objectStore.publicUrl(key) }, 201);
+    },
+  );
+
+  r.post('/products/bulk-delete', zValidator('json', bulkDeleteSchema, zodHook), async (c) => {
+    const { ids } = c.req.valid('json');
+    const { deleted, archived } = await deps.products.bulkDelete(ids);
+    const resolved = new Set([...deleted, ...archived]);
+    const results = [
+      ...deleted.map((id) => ({ id, outcome: 'deleted' as const })),
+      ...archived.map((id) => ({ id, outcome: 'archived' as const })),
+      ...ids.filter((id) => !resolved.has(id)).map((id) => ({ id, outcome: 'not_found' as const })),
+    ];
+    return c.json({ results });
   });
 
   r.put('/products/:id', zValidator('json', updateProductSchema, zodHook), async (c) => {

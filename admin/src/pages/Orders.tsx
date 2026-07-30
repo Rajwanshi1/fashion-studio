@@ -120,6 +120,10 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
               <div className="nm">{it.productName}</div>
               <div className="x">
                 {[it.size, it.color].filter(Boolean).join(' · ') || 'Freeform'} · ×{it.quantity}
+                {(it.dupattaPrice != null || it.jacketPrice != null) &&
+                  ` · with ${[it.dupattaPrice != null && 'dupatta', it.jacketPrice != null && 'jacket']
+                    .filter(Boolean)
+                    .join(' & ')}`}
               </div>
             </div>
             <div>{formatINR(it.unitPrice * it.quantity)}</div>

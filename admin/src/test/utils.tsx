@@ -109,6 +109,8 @@ export function makeOrder(overrides: Partial<Order> = {}): Order {
         unitPrice: 18400000,
         quantity: 1,
         imageUrl: null,
+        dupattaPrice: null,
+        jacketPrice: null,
       },
     ],
     ...overrides,

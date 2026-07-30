@@ -24,7 +24,7 @@ export default function NotFound() {
             <Link className="btn-buy gold" to="/">
               Return Home
             </Link>
-            <Link className="btn-outline" to="/collection/lehenga-sets">
+            <Link className="btn-outline" to="/collection/lehenga">
               Explore the Collection
             </Link>
           </div>
