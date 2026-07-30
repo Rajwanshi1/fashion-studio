@@ -8,7 +8,7 @@ import '../styles/collections.css';
 const COLLECTIONS = [
   {
     tall: true,
-    to: '/collection/lehenga-sets',
+    to: '/collection/lehenga',
     label: 'The Verdant Edit',
     num: 'Spring 2026 · 24 Pieces',
     title: 'The Verdant Edit',
@@ -17,7 +17,7 @@ const COLLECTIONS = [
   },
   {
     tall: true,
-    to: '/collection/lehenga-sets',
+    to: '/collection/lehenga',
     label: 'Bridal',
     num: 'Bridal · 18 Pieces',
     title: 'The Bridal Atelier',
@@ -36,16 +36,16 @@ const COLLECTIONS = [
   },
   {
     tall: false,
-    to: '/collection/gowns',
+    to: '/collection/kaftan',
     label: 'Occasion',
     num: 'Occasion · 16 Pieces',
     title: 'Cocktail & Reception',
-    blurb: 'Fluid gowns and jacket sets for the modern evening.',
+    blurb: 'Fluid kaftans and anti-fit drapes for the modern evening.',
     go: 'Explore →',
   },
   {
     tall: false,
-    to: '/collection/jacket-sets',
+    to: '/collection/suits',
     label: 'Heritage',
     num: 'Heritage · 12 Pieces',
     title: 'The Heritage Revival',

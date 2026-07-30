@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { track } from '../lib/analytics';
+import { displayPrice } from '../lib/format';
 import type { Category, ProductSort, ProductsResponse, ProductSummary } from '../lib/types';
 import Shop from '../components/Shop';
 import ProductCard from '../components/ProductCard';
@@ -41,8 +42,10 @@ export default function Collection() {
 
   const sort = params.get('sort') ?? 'featured';
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1);
+  const collection = params.get('collection') ?? '';
 
   const [cats, setCats] = useState<Category[]>([]);
+  const [collectionNames, setCollectionNames] = useState<string[]>([]);
   const [data, setData] = useState<ProductsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +61,10 @@ export default function Collection() {
       .get<Category[] | { items: Category[] }>('/api/categories')
       .then((d) => setCats(Array.isArray(d) ? d : d.items))
       .catch(() => setCats([]));
+    api
+      .get<string[]>('/api/collections')
+      .then((d) => setCollectionNames(Array.isArray(d) ? d : []))
+      .catch(() => setCollectionNames([]));
   }, []);
 
   useEffect(() => {
@@ -65,9 +72,10 @@ export default function Collection() {
     setLoading(true);
     setError(null);
     const apiSort: ProductSort = sort === 'bestselling' ? 'featured' : (sort as ProductSort);
+    const collectionParam = collection ? `&collection=${encodeURIComponent(collection)}` : '';
     api
       .get<ProductsResponse>(
-        `/api/products?category=${encodeURIComponent(categorySlug)}&sort=${apiSort}&page=${page}&limit=12`,
+        `/api/products?category=${encodeURIComponent(categorySlug)}&sort=${apiSort}&page=${page}&limit=12${collectionParam}`,
       )
       .then((d) => {
         if (!cancelled) setData(d);
@@ -81,7 +89,7 @@ export default function Collection() {
     return () => {
       cancelled = true;
     };
-  }, [categorySlug, sort, page]);
+  }, [categorySlug, sort, page, collection]);
 
   const category = cats.find((c) => c.slug === categorySlug);
   const categoryName =
@@ -94,9 +102,10 @@ export default function Collection() {
   const items = useMemo(() => {
     let list = data?.items ?? [];
     if (colors.length) list = list.filter((p) => colors.includes(p.color));
-    if (priceMax < PRICE_MAX) list = list.filter((p) => p.price <= priceMax * 100);
+    if (occasions.length) list = list.filter((p) => occasions.includes(p.occasion));
+    if (priceMax < PRICE_MAX) list = list.filter((p) => displayPrice(p) <= priceMax * 100);
     return list;
-  }, [data, colors, priceMax]);
+  }, [data, colors, occasions, priceMax]);
 
   // Value-based guard (not a one-shot boolean): a plain "have we run before"
   // flag is inverted by StrictMode's mount double-invoke (invocation 1 flips
@@ -106,30 +115,50 @@ export default function Collection() {
   // slug ref is: both StrictMode invocations see the snapshot still matches
   // the initial values and bail, and the snapshot only advances once an
   // event actually fires.
-  const lastFilterRef = useRef<{ colors: string[]; priceMax: number }>({ colors, priceMax });
+  const lastFilterRef = useRef<{ colors: string[]; occasions: string[]; priceMax: number; collection: string }>({
+    colors,
+    occasions,
+    priceMax,
+    collection,
+  });
   useEffect(() => {
     const last = lastFilterRef.current;
-    const sameColors =
-      last.colors.length === colors.length && last.colors.every((c, i) => c === colors[i]);
-    if (sameColors && last.priceMax === priceMax) return;
+    const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+    if (
+      sameList(last.colors, colors) &&
+      sameList(last.occasions, occasions) &&
+      last.priceMax === priceMax &&
+      last.collection === collection
+    ) {
+      return;
+    }
     const t = setTimeout(() => {
-      lastFilterRef.current = { colors, priceMax };
-      track('filter_apply', { props: { category: categorySlug, colors, priceMax } });
+      lastFilterRef.current = { colors, occasions, priceMax, collection };
+      track('filter_apply', { props: { category: categorySlug, colors, occasions, priceMax, collection } });
     }, 500);
     return () => clearTimeout(t);
-    // categorySlug intentionally excluded: only colors/priceMax changes should
-    // re-arm the debounce, not a category navigation on its own.
+    // categorySlug intentionally excluded: only filter changes should re-arm
+    // the debounce, not a category navigation on its own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colors, priceMax]);
+  }, [colors, occasions, priceMax, collection]);
 
   const toggleIn = (list: string[], v: string) =>
     list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
+
+  const setCollection = (name: string) => {
+    const next = new URLSearchParams(params);
+    if (name) next.set('collection', name);
+    else next.delete('collection');
+    next.delete('page');
+    setParams(next);
+  };
 
   const clearAll = () => {
     setColors([]);
     setSizes([]);
     setOccasions([]);
     setPriceMax(PRICE_MAX);
+    if (collection) setCollection('');
   };
 
   const setSort = (v: string) => {
@@ -229,6 +258,21 @@ export default function Collection() {
               ))}
             </div>
           </div>
+          {collectionNames.length > 0 && (
+            <div className="fgroup">
+              <h4>Collection</h4>
+              {collectionNames.map((name) => (
+                <label className="fopt" key={name}>
+                  <input
+                    type="checkbox"
+                    checked={collection === name}
+                    onChange={() => setCollection(collection === name ? '' : name)}
+                  />{' '}
+                  {name}
+                </label>
+              ))}
+            </div>
+          )}
           <div className="fgroup">
             <h4>Occasion</h4>
             {OCCASIONS.map((o) => (
@@ -309,6 +353,14 @@ export default function Collection() {
                 </button>
               </span>
             ))}
+            {collection && (
+              <span className="ac">
+                {collection}{' '}
+                <button aria-label={`Remove collection ${collection}`} onClick={() => setCollection('')}>
+                  ✕
+                </button>
+              </span>
+            )}
             {priceMax < PRICE_MAX && (
               <span className="ac">
                 Under ₹{priceMax.toLocaleString('en-IN')}{' '}
@@ -317,7 +369,7 @@ export default function Collection() {
                 </button>
               </span>
             )}
-            {hasClientFilters && (
+            {(hasClientFilters || collection !== '') && (
               <button className="clear" onClick={clearAll}>
                 Clear all
               </button>

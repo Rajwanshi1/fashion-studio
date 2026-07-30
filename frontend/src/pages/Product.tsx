@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
+import { displayPrice } from '../lib/format';
 import type { ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useWishlist } from '../lib/wishlist';
@@ -198,7 +199,7 @@ export default function Product() {
         </div>
 
         <div className="info">
-          <div className="brandline">The Verdant Edit</div>
+          <div className="brandline">{product.collection || 'The Verdant Edit'}</div>
           <h1>{product.name}</h1>
           <div className="price">
             <Price paise={product.price} /> <span className="tax">incl. of all taxes</span>
@@ -283,6 +284,25 @@ export default function Product() {
               Details &amp; Composition <span className="ic">+</span>
             </summary>
             <div className="acc-body">
+              {(product.craft || product.fabric || product.occasion) && (
+                <ul className="specs">
+                  {product.craft && (
+                    <li>
+                      <strong>Craft</strong> — {product.craft}
+                    </li>
+                  )}
+                  {product.fabric && (
+                    <li>
+                      <strong>Fabric</strong> — {product.fabric}
+                    </li>
+                  )}
+                  {product.occasion && (
+                    <li>
+                      <strong>Occasion</strong> — {product.occasion}
+                    </li>
+                  )}
+                </ul>
+              )}
               {detailLines.length > 0 ? (
                 <ul>
                   {detailLines.map((line) => (
@@ -351,7 +371,7 @@ export default function Product() {
                 <div className="m">
                   <div className="nm">{r.name}</div>
                   <div className="pr">
-                    <Price paise={r.price} />
+                    <Price paise={displayPrice(r)} />
                   </div>
                 </div>
               </Link>

@@ -190,7 +190,7 @@ export default function Checkout() {
 
           {items.length === 0 ? (
             <p className="api-note">
-              Your bag is empty. <Link to="/collection/lehenga-sets">Explore the collection →</Link>
+              Your bag is empty. <Link to="/collection/lehenga">Explore the collection →</Link>
             </p>
           ) : (
             <form onSubmit={placeOrder}>

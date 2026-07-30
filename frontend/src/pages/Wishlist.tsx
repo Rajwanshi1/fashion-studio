@@ -133,7 +133,7 @@ export default function Wishlist() {
             <div className="heart">♡</div>
             <h2>Your wishlist is empty</h2>
             <p>Save the pieces you love and they'll wait for you here.</p>
-            <Link className="btn btn-line" to="/collection/lehenga-sets">
+            <Link className="btn btn-line" to="/collection/lehenga">
               Explore the Collection →
             </Link>
           </div>
