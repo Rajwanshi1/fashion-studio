@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CatalogService, createCatalogService } from '../src/services/catalog.service';
-import { FakeProductsRepo, seedCatalog } from './fakes';
+import { FakeProductsRepo, seedCatalog, seedSetProduct } from './fakes';
 
 describe('CatalogService', () => {
   let products: FakeProductsRepo;
@@ -35,6 +35,15 @@ describe('CatalogService', () => {
       'moss-tissue-draped-gown',
       'celadon-tissue-draped-lehenga',
     ]);
+  });
+
+  it('filters by collection and lists distinct collection names', async () => {
+    await seedSetProduct(products, seeded.lehengas.id);
+    expect(await catalog.listCollections()).toEqual(['The Verdant Edit']);
+    const res = await catalog.listProducts({ collection: 'The Verdant Edit' });
+    expect(res.items.map((p) => p.slug)).toEqual(['fern-zardozi-set-fern']);
+    const blank = await catalog.listProducts({ collection: '   ' }); // whitespace ignored
+    expect(blank.total).toBe(4);
   });
 
   it('filters by category slug', async () => {

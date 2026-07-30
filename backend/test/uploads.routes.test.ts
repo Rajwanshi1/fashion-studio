@@ -51,6 +51,23 @@ describe('uploadsRoutes (dev-only local transport)', () => {
     expect(res.status).toBe(403);
   });
 
+  // The read guard is prefix-scoped: product photos stand in for the public-read
+  // S3 prefix, everything else is a customer document and stays admin-only.
+  it('rejects a non-admin GET of a document key (403)', async () => {
+    const res = await app.request(url, {
+      headers: { Authorization: `Bearer ${await token('customer')}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('serves a product photo to an anonymous GET — the storefront <img> carries no token', async () => {
+    const productKey = 'products/2026/07/photo.jpg';
+    await store.put(productKey, new Uint8Array([0xff, 0xd8, 0xff]), 'image/jpeg');
+    const res = await app.request(`/api/uploads/local/${encodeURIComponent(productKey)}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('image/jpeg');
+  });
+
   it('PUT stores the object (204) and GET streams it back with its content type', async () => {
     const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 9, 8, 7]);
     const auth = { Authorization: `Bearer ${await token('admin')}` };

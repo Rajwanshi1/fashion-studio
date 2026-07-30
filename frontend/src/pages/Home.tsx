@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { displayPrice } from '../lib/format';
 import type { Category, ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useCartDrawer } from '../components/CartDrawer';
@@ -15,10 +16,10 @@ import Ambient from '../components/Ambient';
 import '../styles/home.css';
 
 const FALLBACK_CATS: Array<Pick<Category, 'slug' | 'name'>> = [
-  { slug: 'lehenga-sets', name: 'Lehenga Sets' },
-  { slug: 'jacket-sets', name: 'Jacket Sets' },
-  { slug: 'gowns', name: 'Gowns' },
+  { slug: 'lehenga', name: 'Lehenga' },
   { slug: 'anarkali', name: 'Anarkali' },
+  { slug: 'suits', name: 'Suits' },
+  { slug: 'kaftan', name: 'Kaftan' },
 ];
 
 export default function Home() {
@@ -62,6 +63,7 @@ export default function Home() {
         navigate(`/product/${p.slug}`);
         return;
       }
+      // Quick adds default to the full set — every piece included.
       cart.add({
         variantId: variant.id,
         productId: detail.id,
@@ -69,8 +71,12 @@ export default function Home() {
         name: detail.name,
         size: variant.size,
         color: detail.color,
-        unitPrice: detail.price,
+        unitPrice: displayPrice(detail),
         imageUrl: detail.imageUrl,
+        includeDupatta: detail.dupattaPrice != null,
+        includeJacket: detail.jacketPrice != null,
+        dupattaPrice: detail.dupattaPrice,
+        jacketPrice: detail.jacketPrice,
       });
       showToast('Added to your bag');
       openDrawer();
@@ -94,7 +100,7 @@ export default function Home() {
             Tanvi Agnihotry<span className="ital">heritage, made to move.</span>
           </h1>
           <div className="actions">
-            <Link className="btn-buy" to="/collection/lehenga-sets">
+            <Link className="btn-buy" to="/collection/lehenga">
               Discover the Collection
             </Link>
             <Link className="btn-outline" to="/contact">
@@ -155,7 +161,7 @@ export default function Home() {
               way the modern Indian woman actually moves. Each piece made to order, each made to
               last.
             </p>
-            <Link className="btn btn-line" to="/collection/lehenga-sets">
+            <Link className="btn btn-line" to="/collection/lehenga">
               Explore the Edit <span>→</span>
             </Link>
           </div>

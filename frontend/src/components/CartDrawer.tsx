@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useCart } from '../lib/cart';
+import { cartLineKey, useCart } from '../lib/cart';
 import { formatINR } from '../lib/format';
 import ImageSlot from './ImageSlot';
 
@@ -52,14 +52,18 @@ function DrawerUI({ open, onClose }: { open: boolean; onClose: () => void }) {
         <div className="cd-items">
           {items.length === 0 && <p className="cd-empty">Your bag is empty.</p>}
           {items.map((i) => (
-            <div className="cd-item" key={i.variantId}>
+            <div className="cd-item" key={cartLineKey(i)}>
               <ImageSlot src={i.imageUrl} label={i.name} alt={i.name} />
               <div>
                 <div className="nm">{i.name}</div>
                 <div className="at">
                   {i.color} · Size {i.size} · Qty {i.qty}
+                  {(i.includeDupatta || i.includeJacket) &&
+                    ` · With ${[i.includeDupatta && 'dupatta', i.includeJacket && 'jacket']
+                      .filter(Boolean)
+                      .join(' & ')}`}
                 </div>
-                <button className="rm" onClick={() => remove(i.variantId)}>
+                <button className="rm" onClick={() => remove(cartLineKey(i))}>
                   Remove
                 </button>
               </div>

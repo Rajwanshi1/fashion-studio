@@ -27,12 +27,18 @@ export interface ProductSummary {
   id: string;
   slug: string;
   name: string;
+  /** Base garment price; see displayPrice() for the full-set price. */
   price: number;
   color: string;
   flag: ProductFlag;
   imageUrl: string | null;
   categorySlug: string;
   categoryName: string;
+  collection: string;
+  occasion: string;
+  /** Paise; null = no such piece in the set, 0 = included at no extra cost. */
+  dupattaPrice: number | null;
+  jacketPrice: number | null;
 }
 
 export interface Variant {
@@ -45,6 +51,8 @@ export interface Variant {
 export interface ProductDetail extends ProductSummary {
   description: string;
   details: string;
+  craft: string;
+  fabric: string;
   active: boolean;
   variants: Variant[];
   related?: ProductSummary[];
@@ -84,9 +92,13 @@ export interface OrderItem {
   productName: string;
   size: string;
   color: string;
+  /** Final per-unit price: base garment + chosen add-ons. */
   unitPrice: number;
   quantity: number;
   imageUrl: string | null;
+  /** Chosen add-on price snapshot; null = excluded or not part of the set. */
+  dupattaPrice: number | null;
+  jacketPrice: number | null;
 }
 
 export interface Receipt {

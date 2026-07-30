@@ -1,5 +1,14 @@
-// Object storage abstraction for document photo uploads (bills, measurement
-// pages, shipping receipts). Two implementations:
+// Object storage abstraction for admin photo uploads. Two kinds of object live
+// here and they differ in who may read them:
+//
+//   - Product images, under the public-read `products/` prefix. Their permanent
+//     URL (publicUrl) is stored in products.image_url and served straight into
+//     storefront <img> tags.
+//   - Customer documents (bills, measurement pages, shipping receipts), which
+//     carry names, phone numbers and addresses. These stay private and are read
+//     back through short-lived presignGet URLs instead.
+//
+// Two implementations:
 //
 //   - S3ObjectStore: production — presigned S3 URLs so the admin SPA uploads
 //     directly to S3 without the bytes ever passing through the API.
@@ -15,8 +24,10 @@ import path from 'node:path';
 
 export interface ObjectStore {
   presignPut(key: string, contentType: string): Promise<{ url: string; headers: Record<string, string> }>;
-  /** Short-lived (~5 min) view URL. */
+  /** Short-lived (~5 min) view URL — how the private document prefixes are read. */
   presignGet(key: string): Promise<string>;
+  /** Permanent, publicly fetchable URL — only meaningful for public-read prefixes. */
+  publicUrl(key: string): string;
   getObject(key: string): Promise<{ bytes: Uint8Array; contentType: string }>;
 }
 
@@ -39,12 +50,16 @@ export interface S3ObjectStoreOptions {
 
 export class S3ObjectStore implements ObjectStore {
   private client: S3Client;
+  private region: string;
 
   constructor(
     private bucket: string,
     opts: S3ObjectStoreOptions = {},
   ) {
-    this.client = opts.client ?? new S3Client(opts.region ? { region: opts.region } : {});
+    // Held explicitly because publicUrl has to build a virtual-hosted URL, which
+    // the SDK's own region resolution cannot be asked for after the fact.
+    this.region = opts.region ?? 'ap-south-1';
+    this.client = opts.client ?? new S3Client({ region: this.region });
   }
 
   async presignPut(key: string, contentType: string) {
@@ -58,6 +73,11 @@ export class S3ObjectStore implements ObjectStore {
   presignGet(key: string): Promise<string> {
     const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
     return getSignedUrl(this.client, command, { expiresIn: GET_EXPIRY_SECONDS });
+  }
+
+  /** Virtual-hosted-style URL; requires public read on the key's prefix. */
+  publicUrl(key: string): string {
+    return `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
   }
 
   async getObject(key: string) {
@@ -100,6 +120,11 @@ export class LocalObjectStore implements ObjectStore {
   }
 
   async presignGet(key: string): Promise<string> {
+    this.resolvePath(key);
+    return this.localUrl(key);
+  }
+
+  publicUrl(key: string): string {
     this.resolvePath(key);
     return this.localUrl(key);
   }

@@ -115,9 +115,14 @@ Resources:
     Properties:
       LogGroupName: !Sub '/fashion/${EnvName}/api'
       RetentionInDays: 30
-  # Document photos (bills, measurement pages, shipping receipts). The admin
-  # SPA uploads/views via presigned URLs, so the bucket stays fully private but
-  # needs browser CORS for the direct PUT/GET.
+  # Admin photo uploads, two populations in one bucket:
+  #   - Product images under products/, made public-read by the bucket policy
+  #     below so their permanent URLs can sit in products.image_url and serve
+  #     storefront <img> tags directly.
+  #   - Customer documents (bills, measurement pages, shipping receipts), which
+  #     carry names, phones and addresses. NO policy grants these, so they stay
+  #     private and are read only through short-lived presigned GETs.
+  # Either way the admin SPA uploads by presigned PUT, so browser CORS is needed.
   UploadsBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -127,15 +132,27 @@ Resources:
           - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
-        BlockPublicPolicy: true
+        BlockPublicPolicy: false
         IgnorePublicAcls: true
-        RestrictPublicBuckets: true
+        RestrictPublicBuckets: false
       CorsConfiguration:
         CorsRules:
           - AllowedMethods: [PUT, GET]
             AllowedOrigins: !Ref UploadsCorsOrigins
             AllowedHeaders: ['*']
             MaxAge: 3600
+  UploadsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UploadsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadProductImages
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub '${UploadsBucket.Arn}/products/*'
   AppRole:
     Type: AWS::IAM::Role
     Properties:
@@ -170,6 +187,9 @@ Resources:
                   - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fashion/${EnvName}/msg91-auth-key*'
                   # Created manually when bill parsing goes live — absent secret keeps parsing masked.
                   - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fashion/${EnvName}/anthropic-api-key*'
+              - Effect: Allow
+                Action: ['s3:PutObject', 's3:GetObject']
+                Resource: !Sub '${UploadsBucket.Arn}/*'
               - Effect: Allow
                 Action: ['s3:PutObject', 's3:GetObject']
                 Resource: !Sub '${UploadsBucket.Arn}/*'
