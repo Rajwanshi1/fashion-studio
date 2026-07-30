@@ -53,9 +53,12 @@ Parameters:
   UploadsCorsOrigins:
     Type: CommaDelimitedList
     Default: '*'
-  AnthropicModel:
+  # Region whose Bedrock endpoint serves document parsing. Not this stack's
+  # region: ap-south-1's endpoint returns not_found for every Anthropic model id
+  # (probed 2026-07-30), and Mumbai is global-routing-only for them anyway.
+  BedrockRegion:
     Type: String
-    Default: claude-sonnet-5
+    Default: us-east-1
   # All three empty for domainless envs (staging).
   DomainName:
     Type: String
@@ -162,11 +165,21 @@ Resources:
                     'Fn::Sub': 'fashion-${EnvName}-db-secret-arn'
                   # Created manually (aws secretsmanager create-secret) when MSG91 goes live.
                   - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fashion/${EnvName}/msg91-auth-key*'
-                  # Created manually when bill parsing goes live — absent secret keeps parsing masked.
-                  - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fashion/${EnvName}/anthropic-api-key*'
               - Effect: Allow
                 Action: ['s3:PutObject', 's3:GetObject']
                 Resource: !Sub '${UploadsBucket.Arn}/*'
+              # Bill/measurement parsing calls Claude on Bedrock's Messages-API
+              # endpoint, signed with this role — there is no API key anywhere.
+              # Region is wildcarded because the call region is not this stack's
+              # (see DEFAULT_BEDROCK_REGION in backend/src/config.ts) and global
+              # routing may resolve elsewhere. Scoped to Anthropic models only.
+              # If a call returns AccessDenied, check CloudTrail for the exact
+              # resource ARN Bedrock evaluated and narrow or widen to match.
+              - Effect: Allow
+                Action: bedrock-mantle:CreateInference
+                Resource:
+                  - 'arn:aws:bedrock:*::foundation-model/anthropic.claude-*'
+                  - !Sub 'arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*anthropic.claude-*'
               - Effect: Allow
                 Action: ssm:GetParameter
                 Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fashion/${EnvName}/*'
@@ -222,8 +235,6 @@ Resources:
             # Both absent until MSG91 is provisioned; the API boots with OTP masked.
             MSG91_KEY=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/msg91-auth-key --region $REGION --query SecretString --output text 2>/dev/null || echo "")
             MSG91_TEMPLATE=$(aws ssm get-parameter --name /fashion/${EnvName}/msg91-template-id --region $REGION --query Parameter.Value --output text 2>/dev/null || echo "")
-            # Absent until bill parsing is provisioned; the API boots with parsing masked.
-            ANTHROPIC=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/anthropic-api-key --region $REGION --query SecretString --output text 2>/dev/null || echo "")
             until DATA_IP=$(aws ssm get-parameter --name /fashion/${EnvName}/db-host --region $REGION --query Parameter.Value --output text) && [ -n "$DATA_IP" ]; do echo "db-host param not ready"; sleep 15; done
             TOK=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
             IID=$(curl -s -H "X-aws-ec2-metadata-token: $TOK" http://169.254.169.254/latest/meta-data/instance-id)
@@ -239,7 +250,7 @@ Resources:
               -e SMS_PROVIDER=${SmsProvider} -e ALLOW_CONSOLE_OTP=${AllowConsoleOtp} \
               -e MSG91_AUTH_KEY="$MSG91_KEY" -e MSG91_TEMPLATE_ID="$MSG91_TEMPLATE" \
               -e AWS_REGION=$REGION -e S3_UPLOADS_BUCKET=${UploadsBucket} \
-              -e ANTHROPIC_API_KEY="$ANTHROPIC" -e ANTHROPIC_MODEL=${AnthropicModel} \
+              -e BEDROCK_REGION=${BedrockRegion} \
               $REPO:$TAG
   Alb:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer

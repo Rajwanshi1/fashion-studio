@@ -4,7 +4,7 @@
 // until a human confirms it.
 import type { DocumentsRepo, DocumentRow } from '../data/documents.repo';
 import { DomainError, Tx } from '../types';
-import type { BillParser, ParseKind } from './ai/parser';
+import { ParserUnavailableError, type BillParser, type ParseKind } from './ai/parser';
 import { newStorageKey, ObjectStore } from './objectstore';
 
 export interface StartUploadResult {
@@ -25,7 +25,7 @@ export interface DocumentsService {
 export function createDocumentsService(deps: {
   documents: DocumentsRepo;
   store: ObjectStore;
-  /** Null when no Anthropic API key is configured — uploads still work, parsing 503s. */
+  /** Null disables parsing — uploads still work and parsing answers 503. */
   parser: BillParser | null;
 }): DocumentsService {
   return {
@@ -40,10 +40,19 @@ export function createDocumentsService(deps: {
       const doc = await deps.documents.getById(id);
       if (!doc) throw new DomainError('NOT_FOUND', 'Document not found');
       if (!deps.parser) {
-        throw new DomainError('NOT_CONFIGURED', 'Document parsing is not configured (missing Anthropic API key)');
+        throw new DomainError('NOT_CONFIGURED', 'Document parsing is not configured');
       }
       const { bytes, contentType } = await deps.store.getObject(doc.storageKey);
-      const draft = await deps.parser.parse(doc.kind, { bytes, mediaType: contentType });
+      let draft: unknown;
+      try {
+        draft = await deps.parser.parse(doc.kind, { bytes, mediaType: contentType });
+      } catch (err) {
+        // A provisioning gap (model access not granted) answers 503 like a
+        // missing parser does, so the wizard falls back to manual entry rather
+        // than showing the admin a hard error mid-scan.
+        if (err instanceof ParserUnavailableError) throw new DomainError('NOT_CONFIGURED', err.message);
+        throw err;
+      }
       await deps.documents.setParse(id, draft, 'parsed');
       return draft;
     },

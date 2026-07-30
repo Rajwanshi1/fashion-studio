@@ -8,10 +8,12 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "parse:photo": "tsx scripts/parse-photo.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "^0.32.0",
     "@anthropic-ai/sdk": "^0.114.0",
     "@aws-sdk/client-s3": "^3.1094.0",
     "@aws-sdk/s3-request-presigner": "^3.1094.0",

@@ -15,9 +15,8 @@ export interface Config {
   msg91TemplateId: string | null;
   /** Fixed OTP for dev/e2e. Only honored alongside the console provider. */
   otpDevCode: string | null;
-  /** Null keeps document parsing masked (parse endpoint answers 503). */
-  anthropicApiKey: string | null;
-  anthropicModel: string;
+  /** AWS region whose Bedrock endpoint serves the parse calls. */
+  bedrockRegion: string;
   /** Null means no S3 — the dev LocalObjectStore serves uploads instead. */
   s3UploadsBucket: string | null;
   /** LocalObjectStore directory (dev only; ignored when S3 is configured). */
@@ -27,6 +26,19 @@ export interface Config {
 }
 
 const DEV_JWT_SECRET = 'dev-secret-change-in-prod';
+
+/**
+ * Region whose Bedrock endpoint serves document parsing — not ap-south-1, where
+ * the rest of this stack runs. Probed 2026-07-30 from account 741868637305:
+ * every Anthropic model id returns `not_found_error` on ap-south-1's endpoint
+ * while us-east-1 returns `permission_error` for the same ids, i.e. they resolve
+ * there and only account-level model access is missing. Mumbai is documented as
+ * global-routing-only for these models, so requests leave India either way and
+ * pinning the call region gives up no data residency we had.
+ *
+ * Set BEDROCK_REGION to retest ap-south-1 once model access is granted.
+ */
+const DEFAULT_BEDROCK_REGION = 'us-east-1';
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const nodeEnv = env.NODE_ENV ?? 'development';
@@ -98,10 +110,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     msg91AuthKey: env.MSG91_AUTH_KEY?.trim() || null,
     msg91TemplateId: env.MSG91_TEMPLATE_ID?.trim() || null,
     otpDevCode: env.OTP_DEV_CODE?.trim() || null,
-    // No fail-closed guard needed: a missing key just masks the parser (503),
-    // uploads themselves keep working.
-    anthropicApiKey: env.ANTHROPIC_API_KEY?.trim() || null,
-    anthropicModel: env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-5',
+    // Parsing needs no credential of its own — Bedrock is reached with the
+    // instance role. When IAM or model access is missing the parse endpoint
+    // answers 503 and the wizard falls back to manual entry; uploads keep working.
+    bedrockRegion: env.BEDROCK_REGION?.trim() || DEFAULT_BEDROCK_REGION,
+    // ANTHROPIC_MODEL is deliberately NOT read. The deployed launch template still
+    // exports ANTHROPIC_MODEL=claude-sonnet-5 from when parsing used an API key,
+    // and honouring it as a global override would silently read handwritten bills
+    // with Sonnet instead of the Opus that PARSE_SPECS picks for them. Models live
+    // in src/services/ai/prompts.ts, which is edited during prompt tuning anyway.
     s3UploadsBucket: env.S3_UPLOADS_BUCKET?.trim() || null,
     uploadsDir: env.UPLOADS_DIR?.trim() || `${process.cwd()}/.data/uploads`,
     publicApiUrl: env.PUBLIC_API_URL?.trim() || `http://localhost:${port}`,

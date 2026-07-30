@@ -1,6 +1,6 @@
 /**
  * Prepare a captured photo for upload: decode it, downscale to a 2000px longest
- * side, re-encode as JPEG 0.8. That keeps handwritten bills legible for Claude
+ * side, re-encode as JPEG. That keeps handwritten bills legible for Claude
  * while staying well under the 10 MB transport cap.
  *
  * The decode order is deliberate:
@@ -15,6 +15,16 @@
  */
 
 const MAX_SIDE = 2000;
+
+/**
+ * Claude 5 reads images up to 2576 px on the long edge without downscaling them,
+ * so a 2000 px photo reaches the model at full size and JPEG compression is the
+ * only thing left between the handwriting and the OCR. Anthropic's own guidance
+ * warns that heavy compression makes text hard to read, hence 0.92 rather than a
+ * web-typical 0.8. A 2000 px bill lands around 1 MB, comfortably under the 5 MB
+ * per-image limit on the transport.
+ */
+const JPEG_QUALITY = 0.92;
 
 export const DECODE_MESSAGE = 'Could not read that image. Use the camera option or a JPEG photo.';
 
@@ -146,7 +156,7 @@ export async function prepareImage(file: File): Promise<{ blob: Blob; contentTyp
   ctx.drawImage(decoded.source, 0, 0, width, height);
   decoded.release();
 
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
   if (!blob) throw new Error('Could not re-encode that photo in this browser.');
   return { blob, contentType: 'image/jpeg' };
 }
