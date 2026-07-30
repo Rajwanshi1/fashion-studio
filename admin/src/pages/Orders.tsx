@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { api } from '../lib/api';
 import { formatDate, formatINR } from '../lib/format';
-import type { BillType, Order, OrderChannel, OrderStatus, ReceiptMode } from '../lib/types';
+import type { BillType, DocumentSummary, Order, OrderChannel, OrderStatus, ReceiptMode } from '../lib/types';
 import {
   BILL_TYPE_LABELS,
   CHANNELS,
   CHANNEL_LABELS,
+  DOCUMENT_KIND_LABELS,
   ORDER_STATUSES,
   ORDER_STATUS_LABELS,
   transitionsFor,
 } from '../lib/types';
+import type { ShippingReceiptDraft } from '../lib/uploads';
+import { fetchDocumentImage, parseDocument, uploadDocument } from '../lib/uploads';
 import { STATUS_MESSAGES, waLink } from '../lib/whatsapp';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
@@ -61,8 +64,77 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
   const [amount, setAmount] = useState('');
   const [mode, setMode] = useState<ReceiptMode>('cash');
   const [busy, setBusy] = useState(false);
+  const [docs, setDocs] = useState<DocumentSummary[]>([]);
+  const [docImages, setDocImages] = useState<Record<string, string>>({});
+  const [receipt, setReceipt] = useState<{ documentId: string; carrier: string; awb: string } | null>(null);
+  const [receiptBusy, setReceiptBusy] = useState(false);
+  const receiptInput = useRef<HTMLInputElement>(null);
   const nexts = transitionsFor(order);
   const message = STATUS_MESSAGES[order.status]?.(order);
+
+  useEffect(() => {
+    let live = true;
+    api<DocumentSummary[]>(`/api/admin/orders/${order.id}/documents`)
+      .then((rows) => {
+        if (!live) return;
+        setDocs(rows);
+        for (const doc of rows) {
+          fetchDocumentImage(doc.id)
+            .then((url) => live && setDocImages((m) => ({ ...m, [doc.id]: url })))
+            .catch(() => {}); // thumbnail is a nicety — the row stays a labeled link
+        }
+      })
+      .catch(() => {}); // documents are decorative here; never break the row
+    return () => {
+      live = false;
+    };
+  }, [order.id]);
+
+  const onReceiptFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setReceiptBusy(true);
+    try {
+      const shot = await uploadDocument('shipping_receipt', file);
+      let carrier = order.carrier ?? '';
+      let awb = order.awb ?? '';
+      try {
+        const draft = await parseDocument<ShippingReceiptDraft>(shot.documentId);
+        carrier = draft.carrier ?? carrier;
+        awb = draft.awb_number ?? awb;
+      } catch {
+        // parsing masked (503) or failed — the admin types carrier/AWB by hand
+      }
+      setReceipt({ documentId: shot.documentId, carrier, awb });
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Photo upload failed');
+    } finally {
+      setReceiptBusy(false);
+    }
+  };
+
+  const saveReceipt = async () => {
+    if (!receipt) return;
+    setReceiptBusy(true);
+    try {
+      const updated = await api<Order>(`/api/admin/orders/${order.id}`, {
+        method: 'PATCH',
+        body: { carrier: receipt.carrier.trim() || null, awb: receipt.awb.trim() || null },
+      });
+      const attached = await api<DocumentSummary>(`/api/admin/orders/${order.id}/documents`, {
+        method: 'POST',
+        body: { documentId: receipt.documentId },
+      });
+      setDocs((all) => [...all, attached]);
+      setReceipt(null);
+      onUpdated(updated, 'Shipping receipt attached');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Unable to save the shipping receipt');
+    } finally {
+      setReceiptBusy(false);
+    }
+  };
 
   const moveOrder = async (status: OrderStatus) => {
     try {
@@ -143,6 +215,79 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
           </p>
         )}
         {order.notes && <p className="x">Notes: {order.notes}</p>}
+        {(order.carrier || order.awb) && (
+          <p className="x">
+            Ships via {order.carrier || '—'} · AWB {order.awb || '—'}
+          </p>
+        )}
+        {docs.length > 0 && (
+          <div className="doc-thumbs">
+            {docs.map((doc) => (
+              <a
+                key={doc.id}
+                className="doc-thumb"
+                href={docImages[doc.id]}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {docImages[doc.id] && <img src={docImages[doc.id]} alt={DOCUMENT_KIND_LABELS[doc.kind]} />}
+                <span>{DOCUMENT_KIND_LABELS[doc.kind]}</span>
+              </a>
+            ))}
+          </div>
+        )}
+        <input
+          ref={receiptInput}
+          type="file"
+          accept="image/*,.heic,.heif"
+          capture="environment"
+          hidden
+          aria-label={`Shipping receipt photo for ${order.orderNumber}`}
+          onChange={(e) => void onReceiptFile(e)}
+        />
+        {receipt ? (
+          <div className="receipt-edit">
+            <div className="field">
+              <label className="lab" htmlFor={`carrier-${order.id}`}>
+                Carrier
+              </label>
+              <input
+                id={`carrier-${order.id}`}
+                className="inp"
+                value={receipt.carrier}
+                onChange={(e) => setReceipt((r) => r && { ...r, carrier: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label className="lab" htmlFor={`awb-${order.id}`}>
+                AWB
+              </label>
+              <input
+                id={`awb-${order.id}`}
+                className="inp"
+                value={receipt.awb}
+                onChange={(e) => setReceipt((r) => r && { ...r, awb: e.target.value })}
+              />
+            </div>
+            <button
+              type="button"
+              className="btn-outline fit"
+              disabled={receiptBusy}
+              onClick={() => void saveReceipt()}
+            >
+              {receiptBusy ? 'Saving…' : 'Save receipt'}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="btn-outline fit"
+            disabled={receiptBusy}
+            onClick={() => receiptInput.current?.click()}
+          >
+            {receiptBusy ? 'Uploading…' : 'Attach shipping receipt'}
+          </button>
+        )}
       </div>
       <div>
         <h4>Customer</h4>

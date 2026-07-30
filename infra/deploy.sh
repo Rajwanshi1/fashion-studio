@@ -76,7 +76,7 @@ cmd_stacks() {
     EcrRepoName="$ECR_REPO_NAME" DetailedMonitoring="$DETAILED_MONITORING" \
     PaymentProvider="$PAYMENT_PROVIDER" AllowMockPayments="$ALLOW_MOCK_PAYMENTS" \
     SmsProvider="${SMS_PROVIDER:-disabled}" AllowConsoleOtp="${ALLOW_CONSOLE_OTP:-false}" \
-    UploadsCorsOrigins="$uploads_cors" \
+    UploadsCorsOrigins="$uploads_cors" AnthropicModel="${ANTHROPIC_MODEL:-claude-sonnet-5}" \
     DomainName="$DOMAIN_NAME" CertificateArn="$cert_arn" HostedZoneId="$hosted_zone_id"
 }
 

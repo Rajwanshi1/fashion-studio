@@ -9,6 +9,10 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: { port: 5174 },
+    // Pre-bundle the HEIC decoder at startup. Discovered on first use instead,
+    // it triggers a dep re-optimisation and full reload that aborts the
+    // in-flight conversion.
+    optimizeDeps: { include: ['libheif-js/wasm-bundle'] },
     test: {
       environment: 'jsdom',
       globals: true,

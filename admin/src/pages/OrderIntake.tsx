@@ -6,9 +6,11 @@ import { formatINR } from '../lib/format';
 import { normalizePhone } from '../lib/phone';
 import type { AdminUser, BillType, Order, OrderChannel, ReceiptMode } from '../lib/types';
 import { BILL_TYPE_LABELS, CHANNEL_LABELS, OFFLINE_CHANNELS } from '../lib/types';
+import KeyValueEditor, { EMPTY_SET } from '../components/KeyValueEditor';
+import type { MeasurementSetState } from '../components/KeyValueEditor';
 import { useToast } from '../components/Toast';
 
-interface ItemRow {
+export interface ItemRow {
   description: string;
   qty: string;
   unitRupees: string;
@@ -16,7 +18,7 @@ interface ItemRow {
 
 const EMPTY_ITEM: ItemRow = { description: '', qty: '1', unitRupees: '' };
 
-interface FormState {
+export interface FormState {
   phone: string;
   firstName: string;
   lastName: string;
@@ -69,12 +71,29 @@ function plusDays(days: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export default function OrderIntake() {
+export interface OrderIntakeFormProps {
+  /** Prefill from a parsed bill draft — absent fields keep the blank defaults. */
+  initial?: { form?: Partial<FormState>; items?: ItemRow[] };
+  /** Uploaded photo document ids — confirmed + attached when the order records. */
+  documentIds?: string[];
+  /** Prefilled measurement sets (from parsed measurement pages). */
+  measurementSets?: MeasurementSetState[];
+  /** Called with the created order instead of the default toast + /orders redirect. */
+  onDone?: (order: Order) => void;
+}
+
+/** The shared bill-entry form — used directly at /orders/new and as the review step of /intake. */
+export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone }: OrderIntakeFormProps) {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [items, setItems] = useState<ItemRow[]>([{ ...EMPTY_ITEM }]);
+  const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, ...initial?.form });
+  const [items, setItems] = useState<ItemRow[]>(
+    initial?.items?.length ? initial.items.map((r) => ({ ...r })) : [{ ...EMPTY_ITEM }],
+  );
+  const [msets, setMsets] = useState<MeasurementSetState[]>(
+    (measurementSets ?? []).map((s) => ({ ...s, rows: s.rows.map((r) => ({ ...r })) })),
+  );
   const [candidates, setCandidates] = useState<AdminUser[]>([]);
   const [linked, setLinked] = useState<AdminUser | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -163,6 +182,18 @@ export default function OrderIntake() {
       };
     }
 
+    // Sets keep only their named rows; a set with no named rows is dropped.
+    const sets = msets
+      .map((s) => ({
+        label: s.label.trim() || undefined,
+        data: Object.fromEntries(
+          s.rows.filter((r) => r.name.trim() !== '').map((r) => [r.name.trim(), r.value]),
+        ),
+        notes: s.notes.trim() || undefined,
+        documentId: s.documentId ?? undefined,
+      }))
+      .filter((s) => Object.keys(s.data).length > 0);
+
     const body = {
       channel: form.channel,
       billType: form.billType,
@@ -182,11 +213,17 @@ export default function OrderIntake() {
       deliveryDueDate: form.dueDate || undefined,
       notes: form.notes.trim() || undefined,
       initialStatus: form.initialStatus,
+      documentIds: documentIds?.length ? documentIds : undefined,
+      measurementSets: sets.length ? sets : undefined,
     };
 
     setBusy(true);
     try {
       const order = await api<Order>('/api/admin/orders', { method: 'POST', body });
+      if (onDone) {
+        onDone(order);
+        return;
+      }
       toast(`Order ${order.orderNumber} recorded`);
       navigate('/orders');
     } catch (err) {
@@ -196,13 +233,7 @@ export default function OrderIntake() {
   };
 
   return (
-    <>
-      <div className="page-head-admin">
-        <span className="eyebrow">The Order Book</span>
-        <h1>New Order</h1>
-      </div>
-
-      <form className="form-card" onSubmit={onSubmit} noValidate>
+    <form className="form-card" onSubmit={onSubmit} noValidate>
         {error && (
           <div className="form-err" role="alert">
             {error}
@@ -442,6 +473,24 @@ export default function OrderIntake() {
           + Add Item
         </button>
 
+        <p className="section-label">Measurements</p>
+        {msets.map((set, i) => (
+          <KeyValueEditor
+            key={i}
+            idPrefix={`ms-${i}`}
+            set={set}
+            onChange={(next) => setMsets((all) => all.map((s, j) => (j === i ? next : s)))}
+            onRemove={() => setMsets((all) => all.filter((_, j) => j !== i))}
+          />
+        ))}
+        <button
+          type="button"
+          className="btn-outline fit"
+          onClick={() => setMsets((all) => [...all, structuredClone(EMPTY_SET)])}
+        >
+          + Add Measurement Set
+        </button>
+
         <p className="section-label">Totals</p>
         <p className="x">Items sum to {formatINR(subtotalPaise)}</p>
         <div className="grid2">
@@ -555,7 +604,19 @@ export default function OrderIntake() {
             Cancel
           </button>
         </div>
-      </form>
+    </form>
+  );
+}
+
+/** Manual entry page — the wizard-free path at /orders/new. */
+export default function OrderIntake() {
+  return (
+    <>
+      <div className="page-head-admin">
+        <span className="eyebrow">The Order Book</span>
+        <h1>New Order</h1>
+      </div>
+      <OrderIntakeForm />
     </>
   );
 }

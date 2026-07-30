@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import { fakeTx, FakePaymentProvider, makeFakes } from './fakes';
+import { fakeTx, FakeObjectStore, FakePaymentProvider, makeFakes } from './fakes';
 
 const SECRET = 'ready-test-secret';
 
@@ -8,6 +8,7 @@ function makeTestApp(overrides: { pingDb?: () => Promise<void> } = {}) {
   return createApp({
     repos: makeFakes(),
     paymentProvider: new FakePaymentProvider(),
+    objectStore: new FakeObjectStore(),
     jwtSecret: SECRET,
     corsOrigins: ['http://localhost:5173'],
     runInTransaction: fakeTx,

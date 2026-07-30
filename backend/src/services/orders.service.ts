@@ -1,3 +1,5 @@
+import type { DocumentsRepo } from '../data/documents.repo';
+import type { MeasurementsRepo } from '../data/measurements.repo';
 import type { OrderDetailsPatch, OrdersRepo } from '../data/orders.repo';
 import type { ProductsRepo } from '../data/products.repo';
 import type { ReceiptsRepo } from '../data/receipts.repo';
@@ -68,6 +70,16 @@ export interface CreateOfflineOrderInput {
   notes?: string;
   /** Default in_atelier; delivered = exhibition spot sale. */
   initialStatus?: 'in_atelier' | 'delivered';
+  /** Uploaded bill/measurement photos — confirmed + linked in the same transaction. */
+  documentIds?: string[];
+  /** Reviewed measurement sets, saved against the linked/created customer. */
+  measurementSets?: {
+    label?: string;
+    /** Names/values verbatim from the page, e.g. { SH: '15 in' }. */
+    data: Record<string, string>;
+    notes?: string;
+    documentId?: string | null;
+  }[];
 }
 
 export interface RecordReceiptInput {
@@ -126,6 +138,8 @@ export function createOrdersService(deps: {
   orders: OrdersRepo;
   users: UsersRepo;
   receipts: ReceiptsRepo;
+  documents: DocumentsRepo;
+  measurements: MeasurementsRepo;
   runInTransaction: TxRunner;
 }): OrdersService {
   const service: OrdersService = {
@@ -283,6 +297,25 @@ export function createOrdersService(deps: {
             quantity: it.quantity,
           })),
         );
+
+        // Attach the scanned photos + save reviewed measurements in the SAME
+        // transaction — a failed order must leave no confirmed documents behind.
+        if (input.documentIds?.length) {
+          await deps.documents.setStatusAndOrder(input.documentIds, 'confirmed', order.id, tx);
+        }
+        for (const set of input.measurementSets ?? []) {
+          await deps.measurements.create(
+            {
+              userId: user.id,
+              orderId: order.id,
+              documentId: set.documentId ?? null,
+              label: set.label,
+              data: set.data,
+              notes: set.notes,
+            },
+            tx,
+          );
+        }
 
         if (!input.advance) return order;
         await deps.receipts.create(

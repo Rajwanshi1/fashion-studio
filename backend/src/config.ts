@@ -15,10 +15,13 @@ export interface Config {
   msg91TemplateId: string | null;
   /** Fixed OTP for dev/e2e. Only honored alongside the console provider. */
   otpDevCode: string | null;
-  /** Null → LocalObjectStore under uploadsDir (dev/tests). */
+  /** Null keeps document parsing masked (parse endpoint answers 503). */
+  anthropicApiKey: string | null;
+  /** Null means no S3 — the dev LocalObjectStore serves uploads instead. */
   s3UploadsBucket: string | null;
+  /** LocalObjectStore directory (dev only; ignored when S3 is configured). */
   uploadsDir: string;
-  /** Base URL the local uploads transport is reachable at (dev only). */
+  /** Public base URL of this API — the LocalObjectStore presigns against it. */
   publicApiUrl: string;
   awsRegion: string;
 }
@@ -77,9 +80,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
   }
 
+  const port = parseInt(env.PORT ?? '3001', 10);
+
   return {
     nodeEnv,
-    port: parseInt(env.PORT ?? '3001', 10),
+    port,
     databaseUrl: env.DATABASE_URL ?? 'postgres://boutique:boutique@localhost:5433/boutique',
     jwtSecret,
     corsOrigins: (env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174')
@@ -93,9 +98,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     msg91AuthKey: env.MSG91_AUTH_KEY?.trim() || null,
     msg91TemplateId: env.MSG91_TEMPLATE_ID?.trim() || null,
     otpDevCode: env.OTP_DEV_CODE?.trim() || null,
+    // No fail-closed guard needed: a missing key just masks the parser (503),
+    // uploads themselves keep working.
+    anthropicApiKey: env.ANTHROPIC_API_KEY?.trim() || null,
+    // ANTHROPIC_MODEL is deliberately NOT read. The deployed launch template
+    // still exports ANTHROPIC_MODEL=claude-sonnet-5 (main.yaml's AnthropicModel
+    // parameter, now vestigial), and honouring it as a global override would
+    // silently read handwritten bills with Sonnet instead of the Opus 5 that
+    // PARSE_SPECS picks for them. Models live in src/services/ai/prompts.ts,
+    // which is the file prompt tuning edits anyway. index.ts warns if it is set.
     s3UploadsBucket: env.S3_UPLOADS_BUCKET?.trim() || null,
-    uploadsDir: env.UPLOADS_DIR ?? `${process.cwd()}/.data/uploads`,
-    publicApiUrl: env.PUBLIC_API_URL ?? `http://localhost:${parseInt(env.PORT ?? '3001', 10)}`,
-    awsRegion: env.AWS_REGION ?? 'ap-south-1',
+    uploadsDir: env.UPLOADS_DIR?.trim() || `${process.cwd()}/.data/uploads`,
+    publicApiUrl: env.PUBLIC_API_URL?.trim() || `http://localhost:${port}`,
+    awsRegion: env.AWS_REGION?.trim() || 'ap-south-1',
   };
 }

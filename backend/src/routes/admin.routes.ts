@@ -1,12 +1,15 @@
 import { zValidator } from '@hono/zod-validator';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import type { DocumentsRepo } from '../data/documents.repo';
+import type { MeasurementsRepo } from '../data/measurements.repo';
 import type { OrdersRepo } from '../data/orders.repo';
 import type { PaymentsRepo } from '../data/payments.repo';
 import type { ProductsRepo } from '../data/products.repo';
 import type { UsersRepo } from '../data/users.repo';
 import { normalizePhone } from '../lib/phone';
 import { AuthEnv, requireAdmin, requireAuth } from '../middleware/auth';
+import type { DocumentsService } from '../services/documents.service';
 import { newStorageKey, type ObjectStore } from '../services/objectstore';
 import type { OrdersService } from '../services/orders.service';
 import { OrderStatus } from '../types';
@@ -44,6 +47,14 @@ const offlineCustomerSchema = z.discriminatedUnion('action', [
   }),
 ]);
 
+const measurementSetSchema = z.object({
+  label: z.string().optional(),
+  /** Names/values verbatim from the measurement page. */
+  data: z.record(z.string()),
+  notes: z.string().optional(),
+  documentId: z.string().nullable().optional(),
+});
+
 const createOfflineOrderSchema = z.object({
   channel: z.enum(OFFLINE_CHANNELS),
   billType: z.enum(BILL_TYPES),
@@ -64,6 +75,8 @@ const createOfflineOrderSchema = z.object({
   deliveryDueDate: z.string().regex(DATE_RE).optional(),
   notes: z.string().optional(),
   initialStatus: z.enum(['in_atelier', 'delivered']).optional(),
+  documentIds: z.array(z.string().min(1)).optional(),
+  measurementSets: z.array(measurementSetSchema).optional(),
 });
 
 const receiptSchema = z.object({
@@ -81,7 +94,17 @@ const patchOrderSchema = z.object({
   billNumber: z.string().nullable().optional(),
   billType: z.enum(BILL_TYPES).nullable().optional(),
   gstAmount: z.number().int().min(0).nullable().optional(),
+  carrier: z.string().nullable().optional(),
+  awb: z.string().nullable().optional(),
   notes: z.string().optional(),
+});
+
+const DOCUMENT_KINDS = ['bill', 'measurement', 'shipping_receipt'] as const;
+const UPLOAD_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
+const presignSchema = z.object({
+  kind: z.enum(DOCUMENT_KINDS),
+  contentType: z.enum(UPLOAD_CONTENT_TYPES),
 });
 
 const flagSchema = z.enum(['bestseller', 'new']).nullable();
@@ -125,7 +148,10 @@ export interface AdminDeps {
   orders: OrdersRepo;
   payments: PaymentsRepo;
   users: UsersRepo;
+  documents: DocumentsRepo;
+  measurements: MeasurementsRepo;
   ordersService: OrdersService;
+  documentsService: DocumentsService;
   /** Null → product-image presign answers 503. */
   objectStore: ObjectStore | null;
   jwtSecret: string;
@@ -271,6 +297,64 @@ export function adminRoutes(deps: AdminDeps) {
     if (status) return c.json(await deps.ordersService.updateStatus(c.req.param('id'), status));
     return c.json(await deps.ordersService.updateOrderDetails(c.req.param('id'), details));
   });
+
+  // ---- Document scanning (bill/measurement/receipt photos → Claude drafts) ----
+
+  const toDocumentSummary = (d: { id: string; kind: string; status: string; createdAt: string }) => ({
+    id: d.id,
+    kind: d.kind,
+    status: d.status,
+    createdAt: d.createdAt,
+  });
+
+  r.post('/uploads/presign', zValidator('json', presignSchema, zodHook), async (c) => {
+    const { kind, contentType } = c.req.valid('json');
+    return c.json(await deps.documentsService.startUpload(kind, contentType, c.var.user!.id), 201);
+  });
+
+  // 503 (NOT_CONFIGURED) while ANTHROPIC_API_KEY is absent — the SPA falls back
+  // to manual entry with the photos still attached.
+  r.post('/documents/:id/parse', async (c) => {
+    const draft = await deps.documentsService.parseDocument(c.req.param('id'));
+    return c.json(draft as Record<string, unknown>);
+  });
+
+  r.get('/documents/:id/url', async (c) => {
+    return c.json({ url: await deps.documentsService.viewUrl(c.req.param('id')) });
+  });
+
+  r.get('/orders/:id/documents', async (c) => {
+    const docs = await deps.documentsService.listByOrder(c.req.param('id'));
+    return c.json(docs.map(toDocumentSummary));
+  });
+
+  // Attach a late document (shipping receipt) to an existing order — confirmed
+  // immediately, unlike intake documents which confirm with the order create.
+  r.post(
+    '/orders/:id/documents',
+    zValidator('json', z.object({ documentId: z.string().min(1) }), zodHook),
+    async (c) => {
+      const orderId = c.req.param('id');
+      const { documentId } = c.req.valid('json');
+      const order = await deps.orders.getById(orderId);
+      if (!order) return c.json({ error: 'Order not found' }, 404);
+      const doc = await deps.documents.getById(documentId);
+      if (!doc) return c.json({ error: 'Document not found' }, 404);
+      await deps.documentsService.attachToOrder([documentId], orderId);
+      return c.json(toDocumentSummary({ ...doc, status: 'confirmed' }), 201);
+    },
+  );
+
+  r.get(
+    '/measurements',
+    zValidator('query', z.object({ userId: z.string().optional(), orderId: z.string().optional() }), zodHook),
+    async (c) => {
+      const { userId, orderId } = c.req.valid('query');
+      if (userId) return c.json(await deps.measurements.listByUser(userId));
+      if (orderId) return c.json(await deps.measurements.listByOrder(orderId));
+      return c.json({ error: 'userId or orderId is required' }, 400);
+    },
+  );
 
   r.get(
     '/customers/match',

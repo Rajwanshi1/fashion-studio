@@ -48,11 +48,20 @@ Parameters:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'false'
-  # Browser origins allowed to PUT the uploads bucket directly (presigned
+  # Browser origins allowed to PUT/GET the uploads bucket directly (presigned
   # URLs). '*' for domainless envs; the admin origin once a domain exists.
   UploadsCorsOrigins:
     Type: CommaDelimitedList
     Default: '*'
+  # Vestigial: the API no longer reads ANTHROPIC_MODEL. Models are chosen per
+  # document kind in backend/src/services/ai/prompts.ts, because a single global
+  # override would read handwritten bills with Sonnet instead of the Opus 5 picked
+  # for them (the API logs a warning if this reaches it). Left in place so
+  # enabling parsing needs no stack update — drop it, and the -e below, at the
+  # next deliberate `deploy.sh <env> stacks` run.
+  AnthropicModel:
+    Type: String
+    Default: claude-sonnet-5
   # All three empty for domainless envs (staging).
   DomainName:
     Type: String
@@ -106,10 +115,14 @@ Resources:
     Properties:
       LogGroupName: !Sub '/fashion/${EnvName}/api'
       RetentionInDays: 30
-  # Product photos. The admin SPA uploads via presigned PUT; the products/
-  # prefix is public-read (bucket policy below) so its permanent URLs can sit
-  # in products.image_url and serve storefront <img> tags directly. ACL-based
-  # public access stays blocked; only the bucket policy grants reads.
+  # Admin photo uploads, two populations in one bucket:
+  #   - Product images under products/, made public-read by the bucket policy
+  #     below so their permanent URLs can sit in products.image_url and serve
+  #     storefront <img> tags directly.
+  #   - Customer documents (bills, measurement pages, shipping receipts), which
+  #     carry names, phones and addresses. NO policy grants these, so they stay
+  #     private and are read only through short-lived presigned GETs.
+  # Either way the admin SPA uploads by presigned PUT, so browser CORS is needed.
   UploadsBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -172,6 +185,11 @@ Resources:
                     'Fn::Sub': 'fashion-${EnvName}-db-secret-arn'
                   # Created manually (aws secretsmanager create-secret) when MSG91 goes live.
                   - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fashion/${EnvName}/msg91-auth-key*'
+                  # Created manually when bill parsing goes live — absent secret keeps parsing masked.
+                  - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fashion/${EnvName}/anthropic-api-key*'
+              - Effect: Allow
+                Action: ['s3:PutObject', 's3:GetObject']
+                Resource: !Sub '${UploadsBucket.Arn}/*'
               - Effect: Allow
                 Action: ['s3:PutObject', 's3:GetObject']
                 Resource: !Sub '${UploadsBucket.Arn}/*'
@@ -230,6 +248,8 @@ Resources:
             # Both absent until MSG91 is provisioned; the API boots with OTP masked.
             MSG91_KEY=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/msg91-auth-key --region $REGION --query SecretString --output text 2>/dev/null || echo "")
             MSG91_TEMPLATE=$(aws ssm get-parameter --name /fashion/${EnvName}/msg91-template-id --region $REGION --query Parameter.Value --output text 2>/dev/null || echo "")
+            # Absent until bill parsing is provisioned; the API boots with parsing masked.
+            ANTHROPIC=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/anthropic-api-key --region $REGION --query SecretString --output text 2>/dev/null || echo "")
             until DATA_IP=$(aws ssm get-parameter --name /fashion/${EnvName}/db-host --region $REGION --query Parameter.Value --output text) && [ -n "$DATA_IP" ]; do echo "db-host param not ready"; sleep 15; done
             TOK=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
             IID=$(curl -s -H "X-aws-ec2-metadata-token: $TOK" http://169.254.169.254/latest/meta-data/instance-id)
@@ -245,6 +265,7 @@ Resources:
               -e SMS_PROVIDER=${SmsProvider} -e ALLOW_CONSOLE_OTP=${AllowConsoleOtp} \
               -e MSG91_AUTH_KEY="$MSG91_KEY" -e MSG91_TEMPLATE_ID="$MSG91_TEMPLATE" \
               -e AWS_REGION=$REGION -e S3_UPLOADS_BUCKET=${UploadsBucket} \
+              -e ANTHROPIC_API_KEY="$ANTHROPIC" -e ANTHROPIC_MODEL=${AnthropicModel} \
               $REPO:$TAG
   Alb:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer

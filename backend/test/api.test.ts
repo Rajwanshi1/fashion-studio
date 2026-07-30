@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import { FakeGoogleVerifier, FakePaymentProvider, Fakes, FakeSmsProvider, fakeTx, makeFakes, seedCatalog, seedSetProduct } from './fakes';
+import { FakeGoogleVerifier, FakeObjectStore, FakePaymentProvider, Fakes, FakeSmsProvider, fakeTx, makeFakes, seedCatalog, seedSetProduct } from './fakes';
 
 const SECRET = 'api-test-secret';
 
@@ -63,6 +63,7 @@ describe('API', () => {
     app = createApp({
       repos: f,
       paymentProvider: new FakePaymentProvider(),
+      objectStore: new FakeObjectStore(),
       jwtSecret: SECRET,
       corsOrigins: ['http://localhost:5173'],
       runInTransaction: fakeTx,
@@ -152,6 +153,7 @@ describe('API', () => {
       googleApp = createApp({
         repos: f,
         paymentProvider: new FakePaymentProvider(),
+        objectStore: new FakeObjectStore(),
         verifyGoogleToken: google.verify,
         jwtSecret: SECRET,
         corsOrigins: ['http://localhost:5173'],
@@ -359,6 +361,7 @@ describe('API', () => {
       otpApp = createApp({
         repos: f,
         paymentProvider: new FakePaymentProvider(),
+        objectStore: new FakeObjectStore(),
         smsProvider: sms,
         otpDevCode: '123456',
         jwtSecret: SECRET,

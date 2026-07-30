@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './lib/auth';
 import { ToastProvider } from './components/Toast';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import BillIntake from './pages/BillIntake';
 import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
 import ProductEdit from './pages/ProductEdit';
@@ -31,6 +32,7 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route element={<Layout />}>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/intake" element={<BillIntake />} />
               <Route path="/products" element={<Products />} />
               <Route path="/products/new" element={<ProductEdit />} />
               <Route path="/products/:id" element={<ProductEdit />} />

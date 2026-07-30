@@ -42,7 +42,8 @@ describe('product image uploads (local store)', () => {
       jwtSecret: SECRET,
       corsOrigins: ['http://localhost:5174'],
       runInTransaction: fakeTx,
-      uploads: { store: local, local },
+      objectStore: local,
+      localUploads: local,
     });
     const login = await app.request('/api/auth/login', post({ email: 'admin@tanviagnihotry.com', password: 'TanviAdmin@2026' }));
     adminToken = (await login.json()).token;

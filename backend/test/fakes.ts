@@ -21,6 +21,17 @@ import type {
 } from '../src/data/products.repo';
 import type { ClicksRepo, LinkStats } from '../src/data/clicks.repo';
 import type {
+  CreateDocumentInput,
+  DocumentRow,
+  DocumentStatus,
+  DocumentsRepo,
+} from '../src/data/documents.repo';
+import type {
+  CreateMeasurementInput,
+  MeasurementRow,
+  MeasurementsRepo,
+} from '../src/data/measurements.repo';
+import type {
   ColorRow,
   DeviceRow,
   EventsRepo,
@@ -35,7 +46,9 @@ import type {
 import type { OtpRecord, OtpsRepo } from '../src/data/otps.repo';
 import type { ScansRepo, SourceStats } from '../src/data/scans.repo';
 import type { AdminUser, CreateUserInput, UsersRepo } from '../src/data/users.repo';
+import type { BillParser, ParseKind } from '../src/services/ai/parser';
 import type { GoogleTokenClaims, VerifyGoogleToken } from '../src/services/auth.service';
+import type { ObjectStore } from '../src/services/objectstore';
 import type { PaymentProvider } from '../src/services/payments.service';
 import type { SmsProvider } from '../src/services/sms.provider';
 import {
@@ -533,6 +546,8 @@ export class FakeOrdersRepo implements OrdersRepo {
       billNumber: null,
       gstAmount: null,
       deliveryDueDate: null,
+      carrier: null,
+      awb: null,
       notes: '',
       advancePaid: 0,
       balance: order.total,
@@ -634,6 +649,8 @@ export class FakeOrdersRepo implements OrdersRepo {
     if (patch.billNumber !== undefined) o.billNumber = patch.billNumber;
     if (patch.billType !== undefined) o.billType = patch.billType;
     if (patch.gstAmount !== undefined) o.gstAmount = patch.gstAmount;
+    if (patch.carrier !== undefined) o.carrier = patch.carrier;
+    if (patch.awb !== undefined) o.awb = patch.awb;
     if (patch.notes !== undefined) o.notes = patch.notes;
     return structuredClone(o);
   }
@@ -999,6 +1016,126 @@ export class FakeEventsRepo implements EventsRepo {
   }
 }
 
+export class FakeDocumentsRepo implements DocumentsRepo {
+  docs: DocumentRow[] = [];
+  private clock = 0;
+
+  async create(input: CreateDocumentInput): Promise<DocumentRow> {
+    const doc: DocumentRow = {
+      id: `00000000-0000-4000-8000-${String(++idCounter).padStart(12, '0')}`,
+      storageKey: input.storageKey,
+      kind: input.kind,
+      contentType: input.contentType,
+      orderId: null,
+      uploadedBy: input.uploadedBy,
+      parse: null,
+      status: 'uploaded',
+      createdAt: new Date(Date.UTC(2026, 6, 1) + ++this.clock * 60_000).toISOString(),
+    };
+    this.docs.push(doc);
+    return structuredClone(doc);
+  }
+
+  async getById(id: string): Promise<DocumentRow | null> {
+    const doc = this.docs.find((d) => d.id === id);
+    return doc ? structuredClone(doc) : null;
+  }
+
+  async setParse(id: string, parse: unknown, status: DocumentStatus): Promise<DocumentRow | null> {
+    const doc = this.docs.find((d) => d.id === id);
+    if (!doc) return null;
+    doc.parse = parse;
+    doc.status = status;
+    return structuredClone(doc);
+  }
+
+  async setStatusAndOrder(ids: string[], status: DocumentStatus, orderId: string): Promise<void> {
+    for (const doc of this.docs) {
+      if (ids.includes(doc.id)) {
+        doc.status = status;
+        doc.orderId = orderId;
+      }
+    }
+  }
+
+  async listByOrder(orderId: string): Promise<DocumentRow[]> {
+    return this.docs
+      .filter((d) => d.orderId === orderId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((d) => structuredClone(d));
+  }
+}
+
+export class FakeMeasurementsRepo implements MeasurementsRepo {
+  measurements: MeasurementRow[] = [];
+  private clock = 0;
+
+  async create(input: CreateMeasurementInput, _tx?: Tx): Promise<MeasurementRow> {
+    const row: MeasurementRow = {
+      id: nextId('m'),
+      userId: input.userId,
+      orderId: input.orderId ?? null,
+      documentId: input.documentId ?? null,
+      label: input.label ?? '',
+      data: input.data,
+      notes: input.notes ?? '',
+      createdAt: new Date(Date.UTC(2026, 6, 2) + ++this.clock * 60_000).toISOString(),
+    };
+    this.measurements.push(row);
+    return structuredClone(row);
+  }
+
+  async listByUser(userId: string): Promise<MeasurementRow[]> {
+    return this.measurements
+      .filter((m) => m.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((m) => structuredClone(m));
+  }
+
+  async listByOrder(orderId: string): Promise<MeasurementRow[]> {
+    return this.measurements
+      .filter((m) => m.orderId === orderId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((m) => structuredClone(m));
+  }
+}
+
+/** In-memory ObjectStore — "presigned" URLs point at a fake host nothing calls. */
+export class FakeObjectStore implements ObjectStore {
+  objects = new Map<string, { bytes: Uint8Array; contentType: string }>();
+
+  async presignPut(key: string, contentType: string) {
+    return { url: `https://uploads.test/${encodeURIComponent(key)}`, headers: { 'Content-Type': contentType } };
+  }
+
+  async presignGet(key: string): Promise<string> {
+    return `https://uploads.test/${encodeURIComponent(key)}?signed=1`;
+  }
+
+  /** Test helper mirroring LocalObjectStore.put. */
+  put(key: string, bytes: Uint8Array, contentType: string): void {
+    this.objects.set(key, { bytes, contentType });
+  }
+
+  async getObject(key: string) {
+    const obj = this.objects.get(key);
+    if (!obj) throw new Error(`FakeObjectStore: no object for key ${key}`);
+    return obj;
+  }
+}
+
+export class FakeBillParser implements BillParser {
+  calls: { kind: ParseKind; mediaType: string; byteLength: number }[] = [];
+  draft: unknown = { hello: 'draft' };
+  failWith: Error | null = null;
+
+  async parse(kind: ParseKind, image: { bytes: Uint8Array; mediaType: string }): Promise<unknown> {
+    this.calls.push({ kind, mediaType: image.mediaType, byteLength: image.bytes.byteLength });
+    if (this.failWith) throw this.failWith;
+    return this.draft;
+  }
+}
+
 export interface Fakes {
   users: FakeUsersRepo;
   products: FakeProductsRepo;
@@ -1010,6 +1147,8 @@ export interface Fakes {
   events: FakeEventsRepo;
   otps: FakeOtpsRepo;
   receipts: FakeReceiptsRepo;
+  documents: FakeDocumentsRepo;
+  measurements: FakeMeasurementsRepo;
 }
 
 export function makeFakes(): Fakes {
@@ -1023,7 +1162,9 @@ export function makeFakes(): Fakes {
   const events = new FakeEventsRepo();
   const otps = new FakeOtpsRepo();
   const receipts = new FakeReceiptsRepo(orders);
-  return { users, products, wishlist, orders, payments, scans, clicks, events, otps, receipts };
+  const documents = new FakeDocumentsRepo();
+  const measurements = new FakeMeasurementsRepo();
+  return { users, products, wishlist, orders, payments, scans, clicks, events, otps, receipts, documents, measurements };
 }
 
 /** Small catalog covering both categories, all flags, an inactive product and low stock. */
