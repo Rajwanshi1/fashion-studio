@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { API_URL, api, storedToken } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatDate } from '../lib/format';
 import type { AdminUser, Role } from '../lib/types';
@@ -38,6 +38,25 @@ export default function Users() {
     } catch (err) {
       setUsers(previous ?? null);
       toast(err instanceof Error ? err.message : 'Unable to update role');
+    }
+  };
+
+  // Bypasses the JSON client deliberately: the response is a file download.
+  // On iPhone Safari the .vcf hands straight off to the Contacts app.
+  const exportContacts = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/customers.vcf`, {
+        headers: { Authorization: `Bearer ${storedToken() ?? ''}` },
+      });
+      if (!res.ok) throw new Error('Unable to export contacts');
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ta-customers.vcf';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Unable to export contacts');
     }
   };
 
@@ -101,6 +120,9 @@ export default function Users() {
       <div className="page-head-admin">
         <span className="eyebrow">The House · Access</span>
         <h1>Users</h1>
+        <button type="button" className="ulink vcf-export" onClick={() => void exportContacts()}>
+          Export contacts (.vcf)
+        </button>
       </div>
 
       {error && <p className="state-note">{error}</p>}

@@ -66,7 +66,11 @@ export default function DataTable<T>({
                   onClick={clickable ? () => handleRow(row) : undefined}
                 >
                   {columns.map((col) => (
-                    <td key={col.key} className={col.align === 'right' ? 'num' : undefined}>
+                    <td
+                      key={col.key}
+                      className={col.align === 'right' ? 'num' : undefined}
+                      data-label={col.label}
+                    >
                       {col.render(row)}
                     </td>
                   ))}
