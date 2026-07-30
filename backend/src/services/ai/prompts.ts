@@ -18,6 +18,17 @@ export interface KindSpec {
   schema: Record<string, unknown>;
   /** Instruction prompt sent alongside the photo. */
   prompt: string;
+  /**
+   * Model for this kind, written bare — the parser adds the transport's
+   * `anthropic.` prefix, so this file stays independent of how we reach Claude.
+   */
+  model: string;
+  /**
+   * Thinking effort. Claude 5 models think adaptively and default to `high` on
+   * the API, which for mechanical extraction mostly buys latency and output
+   * tokens. Start low-ish and raise only where a real photo proves it helps.
+   */
+  effort: 'low' | 'medium' | 'high';
 }
 
 const nullableString = { type: ['string', 'null'] };
@@ -164,8 +175,22 @@ Extract exactly per the response schema:
 - notes: anything else useful (weight, COD amount, service type), else null.
 - Use null for anything absent or illegible. Never invent values.`;
 
+/**
+ * Model per kind. Opus 5 reads the two handwritten pages: handwriting is the
+ * hardest OCR there is, the numbers on them are money and body measurements,
+ * and every miss costs a correction on the review screen. Courier receipts are
+ * mostly printed labels, so Sonnet 5 handles them at a fraction of the cost.
+ *
+ * Compare these empirically with backend/scripts/parse-photo.mjs rather than by
+ * argument — it prints tokens, latency and measured cost per photo.
+ */
 export const PARSE_SPECS: Record<ParseKind, KindSpec> = {
-  bill: { schema: billSchema, prompt: billPrompt },
-  measurement: { schema: measurementSchema, prompt: measurementPrompt },
-  shipping_receipt: { schema: shippingReceiptSchema, prompt: shippingReceiptPrompt },
+  bill: { schema: billSchema, prompt: billPrompt, model: 'claude-opus-5', effort: 'medium' },
+  measurement: { schema: measurementSchema, prompt: measurementPrompt, model: 'claude-opus-5', effort: 'medium' },
+  shipping_receipt: {
+    schema: shippingReceiptSchema,
+    prompt: shippingReceiptPrompt,
+    model: 'claude-sonnet-5',
+    effort: 'low',
+  },
 };

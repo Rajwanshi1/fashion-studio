@@ -16,7 +16,9 @@ import { createUsersRepo } from './data/users.repo';
 import { createPool, makeTxRunner } from './db';
 import { migrate } from './migrate';
 import { seed } from './seed';
+import { createBedrockClient } from './services/ai/bedrock';
 import { AnthropicBillParser } from './services/ai/parser';
+import { PARSE_SPECS } from './services/ai/prompts';
 import { createGoogleVerifier } from './services/google.verifier';
 import { LocalObjectStore, S3ObjectStore } from './services/objectstore';
 import { MockRazorpayProvider } from './services/payments.service';
@@ -43,9 +45,11 @@ async function main() {
   // /api/uploads transport) only when no bucket is configured.
   const localUploads = config.s3UploadsBucket ? null : new LocalObjectStore(config.uploadsDir, config.publicApiUrl);
   const objectStore = config.s3UploadsBucket ? new S3ObjectStore(config.s3UploadsBucket) : localUploads!;
-  const billParser = config.anthropicApiKey
-    ? new AnthropicBillParser(config.anthropicApiKey, config.anthropicModel)
-    : null;
+  // Always constructed: with IAM auth there is no key to be missing, so
+  // "configured" means "IAM and Bedrock model access allow it". If they don't,
+  // the parse call fails as NOT_CONFIGURED (503) and the wizard falls back to
+  // manual entry — the same degradation a missing key used to produce.
+  const billParser = new AnthropicBillParser(createBedrockClient(config.bedrockRegion));
 
   const app = createApp({
     repos: {
@@ -94,8 +98,10 @@ async function main() {
   else console.log('auth: phone OTP masked — set SMS_PROVIDER to enable');
   if (config.s3UploadsBucket) console.log(`documents: S3 bucket ${config.s3UploadsBucket}`);
   else console.warn(`documents: local dev store at ${config.uploadsDir} — set S3_UPLOADS_BUCKET in production`);
-  if (config.anthropicApiKey) console.log(`ai: bill parsing via ${config.anthropicModel}`);
-  else console.log('ai: parsing masked — set ANTHROPIC_API_KEY to enable');
+  const models = Object.entries(PARSE_SPECS)
+    .map(([kind, spec]) => `${kind}=${spec.model}/${spec.effort}`)
+    .join(' ');
+  console.log(`ai: bill parsing via Bedrock in ${config.bedrockRegion} — ${models}`);
 
   const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
     console.log(`Tanvi Agnihotry API listening on :${info.port}`);

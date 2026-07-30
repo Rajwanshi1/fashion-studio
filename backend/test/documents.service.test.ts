@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ParseKind } from '../src/services/ai/parser';
+import { ParserUnavailableError, type ParseKind } from '../src/services/ai/parser';
 import { createDocumentsService, DocumentsService } from '../src/services/documents.service';
 import { LocalObjectStore } from '../src/services/objectstore';
 import { DomainError } from '../src/types';
@@ -85,6 +85,17 @@ describe('DocumentsService', () => {
       const id = await uploadedDoc();
       parser.failWith = new Error('Claude returned malformed JSON');
       await expect(service.parseDocument(id)).rejects.toThrow(/malformed JSON/);
+      expect(repo.docs[0].status).toBe('uploaded');
+      expect(repo.docs[0].parse).toBeNull();
+    });
+
+    it('maps an unavailable parser to NOT_CONFIGURED so the wizard falls back to manual entry', async () => {
+      const id = await uploadedDoc();
+      parser.failWith = new ParserUnavailableError('model access not granted in the Bedrock console');
+      await expect(service.parseDocument(id)).rejects.toMatchObject({
+        code: 'NOT_CONFIGURED',
+        message: /model access not granted/,
+      });
       expect(repo.docs[0].status).toBe('uploaded');
       expect(repo.docs[0].parse).toBeNull();
     });

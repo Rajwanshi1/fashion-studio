@@ -1,20 +1,44 @@
-import { describe, expect, it } from 'vitest';
-import { AnthropicBillParser, AnthropicMessagesClient, ParseKind } from '../src/services/ai/parser';
+import { describe, expect, it, vi } from 'vitest';
+import { AnthropicBillParser, AnthropicMessagesClient, ParseKind, ParserUnavailableError } from '../src/services/ai/parser';
 import { PARSE_SPECS } from '../src/services/ai/prompts';
 
 /** Fake Anthropic client — records the request and returns a canned response. */
-function fakeClient(response: { stop_reason: string | null; content: Array<{ type: string; text?: string }> }) {
+function fakeClient(response: {
+  stop_reason: string | null;
+  content: Array<{ type: string; text?: string }>;
+  usage?: unknown;
+}) {
   const calls: any[] = [];
   const client: AnthropicMessagesClient = {
     messages: {
       async create(params) {
         calls.push(params);
-        return response;
+        return response as any;
       },
     },
   };
   return { client, calls };
 }
+
+/** Fake client that rejects the way the Bedrock SDK does. */
+function failingClient(err: unknown) {
+  const client: AnthropicMessagesClient = {
+    messages: {
+      async create() {
+        throw err;
+      },
+    },
+  };
+  return client;
+}
+
+const okShippingReceipt = JSON.stringify({
+  carrier: null,
+  awb_number: null,
+  ship_date: null,
+  destination_hint: null,
+  notes: null,
+});
 
 const image = { bytes: new Uint8Array([1, 2, 3, 4]), mediaType: 'image/jpeg' };
 
@@ -25,16 +49,16 @@ describe('AnthropicBillParser', () => {
       stop_reason: 'end_turn',
       content: [{ type: 'text', text: JSON.stringify(draft) }],
     });
-    const parser = new AnthropicBillParser('sk-test', 'claude-sonnet-5', client);
+    const parser = new AnthropicBillParser(client);
 
     const result = await parser.parse('shipping_receipt', image);
     expect(result).toEqual(draft);
 
     expect(calls).toHaveLength(1);
     const params = calls[0];
-    expect(params.model).toBe('claude-sonnet-5');
-    expect(params.max_tokens).toBe(8192);
+    expect(params.max_tokens).toBe(32_768);
     expect(params.output_config).toEqual({
+      effort: 'low',
       format: { type: 'json_schema', schema: PARSE_SPECS.shipping_receipt.schema },
     });
     const [imageBlock, textBlock] = params.messages[0].content;
@@ -45,6 +69,110 @@ describe('AnthropicBillParser', () => {
     expect(textBlock).toEqual({ type: 'text', text: PARSE_SPECS.shipping_receipt.prompt });
   });
 
+  it('picks the model and effort configured for each kind, prefixed for Bedrock', async () => {
+    const seen: Array<{ model: string; effort: string | undefined }> = [];
+    const client: AnthropicMessagesClient = {
+      messages: {
+        async create(params) {
+          seen.push({ model: params.model, effort: params.output_config.effort });
+          return { stop_reason: 'end_turn', content: [{ type: 'text', text: '{}' }] };
+        },
+      },
+    };
+    const parser = new AnthropicBillParser(client);
+
+    await parser.parse('bill', image);
+    await parser.parse('measurement', image);
+    await parser.parse('shipping_receipt', image);
+
+    expect(seen).toEqual([
+      { model: 'anthropic.claude-opus-5', effort: 'medium' },
+      { model: 'anthropic.claude-opus-5', effort: 'medium' },
+      { model: 'anthropic.claude-sonnet-5', effort: 'low' },
+    ]);
+  });
+
+  it('lets an override force one model for every kind', async () => {
+    const { client, calls } = fakeClient({ stop_reason: 'end_turn', content: [{ type: 'text', text: okShippingReceipt }] });
+    const parser = new AnthropicBillParser(client, 'claude-haiku-4-5');
+    await parser.parse('bill', image);
+    expect(calls[0].model).toBe('anthropic.claude-haiku-4-5');
+  });
+
+  it('does not double-prefix an override that already carries the provider prefix', async () => {
+    const { client, calls } = fakeClient({ stop_reason: 'end_turn', content: [{ type: 'text', text: okShippingReceipt }] });
+    const parser = new AnthropicBillParser(client, 'anthropic.claude-sonnet-5');
+    await parser.parse('bill', image);
+    expect(calls[0].model).toBe('anthropic.claude-sonnet-5');
+  });
+
+  it('logs token usage so real cost is visible rather than estimated', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const { client } = fakeClient({
+      stop_reason: 'end_turn',
+      content: [{ type: 'text', text: okShippingReceipt }],
+      usage: { input_tokens: 5400, output_tokens: 1600, output_tokens_details: { thinking_tokens: 900 } },
+    });
+    await new AnthropicBillParser(client).parse('shipping_receipt', image);
+
+    expect(log).toHaveBeenCalledWith(
+      '[parse] usage',
+      expect.objectContaining({
+        kind: 'shipping_receipt',
+        model: 'anthropic.claude-sonnet-5',
+        inputTokens: 5400,
+        outputTokens: 1600,
+        thinkingTokens: 900,
+      }),
+    );
+    log.mockRestore();
+  });
+
+  it('rejects a photo over the 5 MB per-image transport limit before calling out', async () => {
+    const calls: any[] = [];
+    const client: AnthropicMessagesClient = {
+      messages: {
+        async create(params) {
+          calls.push(params);
+          return { stop_reason: 'end_turn', content: [{ type: 'text', text: '{}' }] };
+        },
+      },
+    };
+    // 5 MB of base64 needs 3/4 as many raw bytes; go comfortably past it.
+    const huge = { bytes: new Uint8Array(4 * 1024 * 1024), mediaType: 'image/jpeg' };
+    await expect(new AnthropicBillParser(client).parse('bill', huge)).rejects.toThrow(/over the 5 MB per-image limit/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('reports missing Bedrock model access as unavailable, so parsing answers 503 and the wizard falls back', async () => {
+    const client = failingClient({
+      status: 403,
+      error: { error: { type: 'permission_error', message: 'anthropic.claude-opus-5 is not available for this account.' } },
+    });
+    const err = await new AnthropicBillParser(client).parse('bill', image).catch((e) => e);
+    expect(err).toBeInstanceOf(ParserUnavailableError);
+    expect(err.message).toMatch(/not available for this account/);
+    expect(err.message).toMatch(/Model access/);
+  });
+
+  it('reports an unknown model id as unavailable too, naming the model it tried', async () => {
+    const client = failingClient({
+      status: 404,
+      error: { error: { type: 'not_found_error', message: "The model 'anthropic.claude-opus-5' does not exist" } },
+    });
+    const err = await new AnthropicBillParser(client).parse('bill', image).catch((e) => e);
+    expect(err).toBeInstanceOf(ParserUnavailableError);
+    expect(err.message).toMatch(/anthropic\.claude-opus-5/);
+    expect(err.message).toMatch(/check the model id/);
+  });
+
+  it('treats other transport failures as ordinary errors, keeping the reason', async () => {
+    const client = failingClient({ status: 500, error: { error: { type: 'api_error', message: 'internal server error' } } });
+    const err = await new AnthropicBillParser(client).parse('bill', image).catch((e) => e);
+    expect(err).not.toBeInstanceOf(ParserUnavailableError);
+    expect(err.message).toMatch(/internal server error/);
+  });
+
   it('skips thinking blocks and reads the first text block', async () => {
     const { client } = fakeClient({
       stop_reason: 'end_turn',
@@ -53,7 +181,7 @@ describe('AnthropicBillParser', () => {
         { type: 'text', text: '{"person_name":null,"garment":null,"measurements":[],"notes":null}' },
       ],
     });
-    const parser = new AnthropicBillParser('sk-test', 'claude-sonnet-5', client);
+    const parser = new AnthropicBillParser(client);
     await expect(parser.parse('measurement', image)).resolves.toMatchObject({ measurements: [] });
   });
 
@@ -62,36 +190,26 @@ describe('AnthropicBillParser', () => {
       stop_reason: 'end_turn',
       content: [{ type: 'text', text: 'sorry, I could not read that {' }],
     });
-    const parser = new AnthropicBillParser('sk-test', 'claude-sonnet-5', client);
+    const parser = new AnthropicBillParser(client);
     await expect(parser.parse('bill', image)).rejects.toThrow(/malformed JSON for the bill image/);
   });
 
   it('throws a descriptive error on refusal', async () => {
     const { client } = fakeClient({ stop_reason: 'refusal', content: [] });
-    const parser = new AnthropicBillParser('sk-test', 'claude-sonnet-5', client);
+    const parser = new AnthropicBillParser(client);
     await expect(parser.parse('bill', image)).rejects.toThrow(/refused to parse the bill image/);
   });
 
   it('throws a descriptive error on truncated (max_tokens) output', async () => {
     const { client } = fakeClient({ stop_reason: 'max_tokens', content: [{ type: 'text', text: '{"bill":' }] });
-    const parser = new AnthropicBillParser('sk-test', 'claude-sonnet-5', client);
+    const parser = new AnthropicBillParser(client);
     await expect(parser.parse('bill', image)).rejects.toThrow(/truncated/);
   });
 
   it('throws a descriptive error when no text block comes back', async () => {
     const { client } = fakeClient({ stop_reason: 'end_turn', content: [{ type: 'thinking' }] });
-    const parser = new AnthropicBillParser('sk-test', 'claude-sonnet-5', client);
+    const parser = new AnthropicBillParser(client);
     await expect(parser.parse('bill', image)).rejects.toThrow(/no text content/);
-  });
-
-  it('defaults the model to claude-sonnet-5', async () => {
-    const { client, calls } = fakeClient({
-      stop_reason: 'end_turn',
-      content: [{ type: 'text', text: '{"carrier":null,"awb_number":null,"ship_date":null,"destination_hint":null,"notes":null}' }],
-    });
-    const parser = new AnthropicBillParser('sk-test', undefined, client);
-    await parser.parse('shipping_receipt', image);
-    expect(calls[0].model).toBe('claude-sonnet-5');
   });
 });
 
@@ -104,6 +222,18 @@ describe('prompts (PARSE_SPECS)', () => {
     expect(spec.schema).toMatchObject({ type: 'object' });
     expect(spec.schema.properties).toBeTypeOf('object');
     expect(Array.isArray(spec.schema.required)).toBe(true);
+  });
+
+  it.each(kinds)('%s names a model without the transport prefix, and a valid effort', (kind) => {
+    const spec = PARSE_SPECS[kind];
+    expect(spec.model).not.toMatch(/^anthropic\./);
+    expect(spec.model.length).toBeGreaterThan(0);
+    expect(['low', 'medium', 'high']).toContain(spec.effort);
+  });
+
+  it('reads the two handwritten kinds with Opus', () => {
+    expect(PARSE_SPECS.bill.model).toBe('claude-opus-5');
+    expect(PARSE_SPECS.measurement.model).toBe('claude-opus-5');
   });
 
   it('bill schema marks confidence_notes required and non-nullable', () => {
