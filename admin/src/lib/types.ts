@@ -45,6 +45,7 @@ export interface AdminProduct {
   id: string;
   slug: string;
   name: string;
+  /** Base garment price; dupatta/jacket prices are separate add-ons. */
   price: number;
   color: string;
   flag: ProductFlag;
@@ -53,6 +54,13 @@ export interface AdminProduct {
   categoryName: string;
   description: string;
   details: string;
+  collection: string;
+  craft: string;
+  fabric: string;
+  occasion: string;
+  /** Paise; null = no such piece in the set, 0 = included at no extra cost. */
+  dupattaPrice: number | null;
+  jacketPrice: number | null;
   active: boolean;
   variants: Variant[];
 }
@@ -73,9 +81,13 @@ export interface OrderItem {
   productName: string;
   size: string;
   color: string;
+  /** Final per-unit price: base garment + chosen add-ons. */
   unitPrice: number;
   quantity: number;
   imageUrl: string | null;
+  /** Chosen add-on price snapshot; null = excluded or not part of the set. */
+  dupattaPrice: number | null;
+  jacketPrice: number | null;
 }
 
 export interface Order {
