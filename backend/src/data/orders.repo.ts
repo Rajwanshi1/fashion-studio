@@ -27,9 +27,13 @@ export interface NewOrderItem {
   productName: string;
   size: string;
   color: string;
+  /** Final per-unit price: base garment + chosen add-ons. */
   unitPrice: number;
   quantity: number;
   imageUrl: string | null;
+  /** Chosen add-on price snapshot; null = excluded or not part of the set. */
+  dupattaPrice: number | null;
+  jacketPrice: number | null;
 }
 
 export interface OrdersRepo {
@@ -55,6 +59,8 @@ function mapItem(row: any): OrderItem {
     unitPrice: row.unit_price,
     quantity: row.quantity,
     imageUrl: row.image_url ?? null,
+    dupattaPrice: row.dupatta_price ?? null,
+    jacketPrice: row.jacket_price ?? null,
   };
 }
 
@@ -139,8 +145,8 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
       for (const item of items) {
         const { rows: itemRows } = await client.query(
           `INSERT INTO order_items (order_id, product_id, variant_id, product_name, size, color,
-                                    unit_price, quantity, image_url)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+                                    unit_price, quantity, image_url, dupatta_price, jacket_price)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
           [
             orderRow.id,
             item.productId,
@@ -151,6 +157,8 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
             item.unitPrice,
             item.quantity,
             item.imageUrl,
+            item.dupattaPrice,
+            item.jacketPrice,
           ],
         );
         created.push(mapItem(itemRows[0]));

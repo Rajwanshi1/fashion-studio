@@ -52,6 +52,7 @@ export interface AppDeps {
 
 const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 503> = {
   EMAIL_TAKEN: 409,
+  SLUG_TAKEN: 409,
   INSUFFICIENT_STOCK: 409,
   PAYMENT_ALREADY_FINAL: 409,
   INVALID_CREDENTIALS: 401,

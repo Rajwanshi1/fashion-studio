@@ -8,6 +8,7 @@ import { zodHook } from './hooks';
 
 const listQuerySchema = z.object({
   category: z.string().optional(),
+  collection: z.string().optional(),
   search: z.string().optional(),
   sort: z.enum(['featured', 'new', 'price_asc', 'price_desc']).optional(),
   page: z.coerce.number().int().min(1).optional(),
@@ -18,6 +19,8 @@ export function catalogRoutes(catalog: CatalogService, wishlist: WishlistRepo, j
   const r = new Hono<AuthEnv>();
 
   r.get('/categories', async (c) => c.json(await catalog.listCategories()));
+
+  r.get('/collections', async (c) => c.json(await catalog.listCollections()));
 
   r.get('/products', zValidator('query', listQuerySchema, zodHook), async (c) => {
     return c.json(await catalog.listProducts(c.req.valid('query')));

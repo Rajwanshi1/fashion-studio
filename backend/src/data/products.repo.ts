@@ -25,8 +25,11 @@ export interface VariantForOrder {
   stock: number;
   productName: string;
   color: string;
+  /** Base garment price; add-on prices are applied per chosen include. */
   unitPrice: number;
   imageUrl: string | null;
+  dupattaPrice: number | null;
+  jacketPrice: number | null;
 }
 
 export interface CreateCategoryInput {
@@ -47,6 +50,12 @@ export interface CreateProductInput {
   flag?: ProductFlag;
   imageUrl?: string | null;
   active?: boolean;
+  collection?: string;
+  craft?: string;
+  fabric?: string;
+  occasion?: string;
+  dupattaPrice?: number | null;
+  jacketPrice?: number | null;
   variants?: { size: string; stock: number }[];
 }
 
@@ -61,6 +70,18 @@ export interface UpdateProductInput {
   flag?: ProductFlag;
   imageUrl?: string | null;
   active?: boolean;
+  collection?: string;
+  craft?: string;
+  fabric?: string;
+  occasion?: string;
+  dupattaPrice?: number | null;
+  jacketPrice?: number | null;
+}
+
+/** Per-id outcome of a bulk delete: ordered products are archived, the rest removed. */
+export interface BulkDeleteResult {
+  deleted: string[];
+  archived: string[];
 }
 
 export interface ProductsRepo {
@@ -76,6 +97,8 @@ export interface ProductsRepo {
   updateProduct(id: string, input: UpdateProductInput): Promise<AdminProduct | null>;
   setVariantStock(variantId: string, stock: number): Promise<Variant | null>;
   listAllProducts(): Promise<AdminProduct[]>;
+  listCollections(): Promise<string[]>;
+  bulkDelete(ids: string[]): Promise<BulkDeleteResult>;
 }
 
 export interface WishlistRepo {
@@ -89,6 +112,7 @@ const DEFAULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'Custom'];
 
 const SUMMARY_SELECT = `
   SELECT p.id, p.slug, p.name, p.price, p.color, p.flag, p.image_url,
+         p.collection, p.occasion, p.dupatta_price, p.jacket_price,
          c.slug AS category_slug, c.name AS category_name
   FROM products p JOIN categories c ON c.id = p.category_id`;
 
@@ -96,11 +120,13 @@ const DETAIL_SELECT = `
   SELECT p.*, c.slug AS category_slug, c.name AS category_name
   FROM products p JOIN categories c ON c.id = p.category_id`;
 
+// Price sorts use the full-set price (base + default-included add-ons) so the
+// order matches the price shoppers see on the cards.
 const ORDER_BY: Record<string, string> = {
   featured: `(p.flag = 'bestseller') IS TRUE DESC, (p.flag = 'new') IS TRUE DESC, p.created_at ASC`,
   new: 'p.created_at DESC',
-  price_asc: 'p.price ASC',
-  price_desc: 'p.price DESC',
+  price_asc: '(p.price + COALESCE(p.dupatta_price, 0) + COALESCE(p.jacket_price, 0)) ASC',
+  price_desc: '(p.price + COALESCE(p.dupatta_price, 0) + COALESCE(p.jacket_price, 0)) DESC',
 };
 
 function mapSummary(row: any): ProductSummary {
@@ -114,6 +140,10 @@ function mapSummary(row: any): ProductSummary {
     imageUrl: row.image_url ?? null,
     categorySlug: row.category_slug,
     categoryName: row.category_name,
+    collection: row.collection ?? '',
+    occasion: row.occasion ?? '',
+    dupattaPrice: row.dupatta_price ?? null,
+    jacketPrice: row.jacket_price ?? null,
   };
 }
 
@@ -126,11 +156,21 @@ function mapDetail(row: any, variants: Variant[]): AdminProduct {
     ...mapSummary(row),
     description: row.description,
     details: row.details,
+    craft: row.craft ?? '',
+    fabric: row.fabric ?? '',
     active: row.active,
     variants,
     categoryId: row.category_id,
     createdAt: row.created_at.toISOString(),
   };
+}
+
+/** Maps a unique-violation on products.slug to a friendly 409. */
+function rethrowSlugTaken(err: any): never {
+  if (err?.code === '23505' && err?.constraint === 'products_slug_key') {
+    throw new DomainError('SLUG_TAKEN', 'A piece with this slug already exists — choose a different slug');
+  }
+  throw err;
 }
 
 export function createProductsRepo(pool: Pool): ProductsRepo {
@@ -176,11 +216,15 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
     },
 
     async listProducts(filter) {
-      const where: string[] = ['p.active'];
+      const where: string[] = ['p.active', 'p.deleted_at IS NULL'];
       const params: unknown[] = [];
       if (filter.categorySlug) {
         params.push(filter.categorySlug);
         where.push(`c.slug = $${params.length}`);
+      }
+      if (filter.collection) {
+        params.push(filter.collection);
+        where.push(`p.collection = $${params.length}`);
       }
       if (filter.search) {
         params.push(`%${filter.search}%`);
@@ -204,7 +248,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
     },
 
     async getBySlug(slug) {
-      const { rows } = await pool.query(`${DETAIL_SELECT} WHERE p.slug = $1`, [slug]);
+      const { rows } = await pool.query(`${DETAIL_SELECT} WHERE p.slug = $1 AND p.deleted_at IS NULL`, [slug]);
       if (!rows[0]) return null;
       const variants = await loadVariants(pool, [rows[0].id]);
       return mapDetail(rows[0], variants.get(rows[0].id) ?? []);
@@ -213,7 +257,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
     async getRelated(productId, categoryId, limit) {
       const { rows } = await pool.query(
         `${SUMMARY_SELECT}
-         WHERE p.active AND p.category_id = $1 AND p.id <> $2
+         WHERE p.active AND p.deleted_at IS NULL AND p.category_id = $1 AND p.id <> $2
          ORDER BY (p.flag IS NOT NULL) DESC, p.created_at ASC LIMIT $3`,
         [categoryId, productId, limit],
       );
@@ -226,7 +270,8 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
       if (ids.length === 0) return [];
       const { rows } = await client.query(
         `SELECT v.id, v.product_id, v.size, v.stock,
-                p.name AS product_name, p.color, p.price AS unit_price, p.image_url
+                p.name AS product_name, p.color, p.price AS unit_price, p.image_url,
+                p.dupatta_price, p.jacket_price
          FROM product_variants v JOIN products p ON p.id = v.product_id
          WHERE v.id = ANY($1::uuid[]) FOR UPDATE OF v`,
         [ids],
@@ -240,6 +285,8 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         color: row.color,
         unitPrice: row.unit_price,
         imageUrl: row.image_url ?? null,
+        dupattaPrice: row.dupatta_price ?? null,
+        jacketPrice: row.jacket_price ?? null,
       }));
     },
 
@@ -274,8 +321,9 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         let productId: string;
         try {
           const { rows } = await client.query(
-            `INSERT INTO products (category_id, slug, name, description, details, price, color, flag, image_url, active)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+            `INSERT INTO products (category_id, slug, name, description, details, price, color, flag, image_url, active,
+                                   collection, craft, fabric, occasion, dupatta_price, jacket_price)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id`,
             [
               input.categoryId,
               input.slug,
@@ -287,6 +335,12 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
               input.flag ?? null,
               input.imageUrl ?? null,
               input.active ?? true,
+              input.collection ?? '',
+              input.craft ?? '',
+              input.fabric ?? '',
+              input.occasion ?? '',
+              input.dupattaPrice ?? null,
+              input.jacketPrice ?? null,
             ],
           );
           productId = rows[0].id;
@@ -294,7 +348,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
           if (err?.code === '23503' || err?.code === '22P02') {
             throw new DomainError('NOT_FOUND', 'Category not found');
           }
-          throw err;
+          rethrowSlugTaken(err);
         }
         const variants = input.variants ?? DEFAULT_SIZES.map((size) => ({ size, stock: 0 }));
         for (const v of variants) {
@@ -322,6 +376,12 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         flag: 'flag',
         imageUrl: 'image_url',
         active: 'active',
+        collection: 'collection',
+        craft: 'craft',
+        fabric: 'fabric',
+        occasion: 'occasion',
+        dupattaPrice: 'dupatta_price',
+        jacketPrice: 'jacket_price',
       };
       const sets: string[] = [];
       const params: unknown[] = [id];
@@ -333,7 +393,12 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         }
       }
       if (sets.length === 0) return getById(pool, id);
-      const { rowCount } = await pool.query(`UPDATE products SET ${sets.join(', ')} WHERE id = $1`, params);
+      let rowCount: number | null;
+      try {
+        ({ rowCount } = await pool.query(`UPDATE products SET ${sets.join(', ')} WHERE id = $1`, params));
+      } catch (err: any) {
+        rethrowSlugTaken(err);
+      }
       if (!rowCount) return null;
       return getById(pool, id);
     },
@@ -348,9 +413,50 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
     },
 
     async listAllProducts() {
-      const { rows } = await pool.query(`${DETAIL_SELECT} ORDER BY p.created_at ASC, p.slug`);
+      const { rows } = await pool.query(
+        `${DETAIL_SELECT} WHERE p.deleted_at IS NULL ORDER BY p.created_at ASC, p.slug`,
+      );
       const variants = await loadVariants(pool, rows.map((r) => r.id));
       return rows.map((row) => mapDetail(row, variants.get(row.id) ?? []));
+    },
+
+    async listCollections() {
+      const { rows } = await pool.query(
+        `SELECT DISTINCT collection FROM products
+         WHERE active AND deleted_at IS NULL AND collection <> ''
+         ORDER BY collection`,
+      );
+      return rows.map((row) => row.collection as string);
+    },
+
+    async bulkDelete(ids) {
+      const valid = ids.filter((id) => UUID_RE.test(id));
+      if (valid.length === 0) return { deleted: [], archived: [] };
+      return withTransaction(pool, async (client) => {
+        // Ordered products stay for order history: archive them (hidden
+        // everywhere, slug freed for re-use). The rest are removed outright —
+        // variants and wishlist rows cascade.
+        const { rows: archivedRows } = await client.query(
+          `UPDATE products
+              SET deleted_at = now(), active = false,
+                  slug = slug || '-archived-' || to_char(now(), 'YYYYMMDDHH24MISS')
+            WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL
+              AND EXISTS (SELECT 1 FROM order_items oi WHERE oi.product_id = products.id)
+            RETURNING id`,
+          [valid],
+        );
+        const { rows: deletedRows } = await client.query(
+          `DELETE FROM products
+            WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL
+              AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.product_id = products.id)
+            RETURNING id`,
+          [valid],
+        );
+        return {
+          deleted: deletedRows.map((r) => r.id as string),
+          archived: archivedRows.map((r) => r.id as string),
+        };
+      });
     },
   };
 }
@@ -360,11 +466,12 @@ export function createWishlistRepo(pool: Pool): WishlistRepo {
     async list(userId) {
       const { rows } = await pool.query(
         `SELECT p.id, p.slug, p.name, p.price, p.color, p.flag, p.image_url,
+                p.collection, p.occasion, p.dupatta_price, p.jacket_price,
                 c.slug AS category_slug, c.name AS category_name
          FROM wishlists w
          JOIN products p ON p.id = w.product_id
          JOIN categories c ON c.id = p.category_id
-         WHERE w.user_id = $1 AND p.active
+         WHERE w.user_id = $1 AND p.active AND p.deleted_at IS NULL
          ORDER BY w.created_at DESC`,
         [userId],
       );
