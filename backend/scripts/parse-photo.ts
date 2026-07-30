@@ -9,12 +9,11 @@
  *   npm run parse:photo -- measurement page.jpg --model claude-sonnet-5 --effort low
  *
  * Kinds: bill | measurement | shipping_receipt
- * Flags: --model <bare id>          override the model configured for the kind
+ * Flags: --model <model id>         override the model configured for the kind
  *        --effort low|medium|high   override the effort configured for the kind
- *        --region <aws region>
  *
- * Costs real money (a few rupees per run) and needs AWS credentials plus Bedrock
- * model access for whichever model it uses.
+ * Costs real money (a few rupees per run). Needs ANTHROPIC_API_KEY, which it
+ * picks up from backend/.env.
  *
  * HEIC is converted with `sips` first: the backend cannot decode iPhone HEIC
  * (sharp rejects its `iref` box), which is why the admin wizard does that work in
@@ -24,17 +23,19 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
-import { createBedrockClient } from '../src/services/ai/bedrock';
+import { createAnthropicClient } from '../src/services/ai/anthropic';
 import { AnthropicBillParser, ParseKind } from '../src/services/ai/parser';
 import { PARSE_SPECS } from '../src/services/ai/prompts';
 
 /**
  * USD per million tokens, only so the output carries a number worth reasoning
- * about. Rates change — treat this as indicative, and the AWS bill as truth.
+ * about. Rates change — treat this as indicative and the Anthropic console as
+ * truth. Sonnet 5 is on introductory pricing ($2/$10) until 2026-08-31, after
+ * which it is $3/$15.
  */
 const USD_PER_MTOK: Record<string, { input: number; output: number }> = {
   'claude-opus-5': { input: 5, output: 25 },
-  'claude-sonnet-5': { input: 3, output: 15 },
+  'claude-sonnet-5': { input: 2, output: 10 },
   'claude-haiku-4-5': { input: 1, output: 5 },
 };
 const USD_TO_INR = 88;
@@ -43,7 +44,7 @@ const KINDS = Object.keys(PARSE_SPECS) as ParseKind[];
 
 function bail(msg: string): never {
   console.error(
-    `${msg}\n\n  npm run parse:photo -- <${KINDS.join('|')}> <photo> [--model id] [--effort low|medium|high] [--region r]`,
+    `${msg}\n\n  npm run parse:photo -- <${KINDS.join('|')}> <photo> [--model id] [--effort low|medium|high]`,
   );
   process.exit(1);
 }
@@ -63,7 +64,8 @@ const file = rawPath.replace(/^~/, homedir());
 const spec = PARSE_SPECS[kind as ParseKind];
 const model = flag('model') ?? spec.model;
 const effort = (flag('effort') ?? spec.effort) as typeof spec.effort;
-const region = flag('region') ?? process.env.BEDROCK_REGION ?? 'us-east-1';
+const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+if (!apiKey) bail('ANTHROPIC_API_KEY is not set — put it in backend/.env (gitignored) or export it.');
 
 /** Returns JPEG/PNG bytes, converting HEIC through sips when needed. */
 function loadImage(p: string): { bytes: Uint8Array; mediaType: string } {
@@ -89,7 +91,7 @@ async function main(): Promise<void> {
 
   console.log(`kind    ${kind}`);
   console.log(`photo   ${file} (${(image.bytes.length / 1024).toFixed(0)} KB ${image.mediaType})`);
-  console.log(`model   ${model}   effort ${effort}   region ${region}`);
+  console.log(`model   ${model}   effort ${effort}`);
 
   // PARSE_SPECS drives model and effort, so override them for this run only.
   const original = { model: spec.model, effort: spec.effort };
@@ -107,7 +109,7 @@ async function main(): Promise<void> {
 
   let draft: unknown;
   try {
-    draft = await new AnthropicBillParser(createBedrockClient(region)).parse(kind as ParseKind, image);
+    draft = await new AnthropicBillParser(createAnthropicClient(apiKey)).parse(kind as ParseKind, image);
   } catch (err) {
     console.log = realLog;
     console.error(`\nFAILED: ${(err as Error).message}`);
@@ -119,7 +121,7 @@ async function main(): Promise<void> {
 
   if (usageLine) {
     const { inputTokens, outputTokens, thinkingTokens, ms } = usageLine as UsageLine;
-    const rate = USD_PER_MTOK[model.replace(/^anthropic\./, '')];
+    const rate = USD_PER_MTOK[model];
     const cost =
       rate && inputTokens != null && outputTokens != null
         ? `~₹${(((inputTokens * rate.input + outputTokens * rate.output) / 1e6) * USD_TO_INR).toFixed(2)}`

@@ -98,7 +98,7 @@ export async function uploadDocument(kind: DocumentKind, file: File): Promise<Up
   return { documentId: presign.documentId, kind, previewUrl: URL.createObjectURL(blob) };
 }
 
-/** 503 while Bedrock model access is missing — callers fall back to manual entry. */
+/** 503 while ANTHROPIC_API_KEY is unset — callers fall back to manual entry. */
 export function parseDocument<T>(documentId: string): Promise<T> {
   return api<T>(`/api/admin/documents/${documentId}/parse`, { method: 'POST' });
 }

@@ -91,10 +91,10 @@ describe('DocumentsService', () => {
 
     it('maps an unavailable parser to NOT_CONFIGURED so the wizard falls back to manual entry', async () => {
       const id = await uploadedDoc();
-      parser.failWith = new ParserUnavailableError('model access not granted in the Bedrock console');
+      parser.failWith = new ParserUnavailableError('invalid x-api-key — check the ANTHROPIC_API_KEY value');
       await expect(service.parseDocument(id)).rejects.toMatchObject({
         code: 'NOT_CONFIGURED',
-        message: /model access not granted/,
+        message: /invalid x-api-key/,
       });
       expect(repo.docs[0].status).toBe('uploaded');
       expect(repo.docs[0].parse).toBeNull();

@@ -20,7 +20,7 @@ function fakeClient(response: {
   return { client, calls };
 }
 
-/** Fake client that rejects the way the Bedrock SDK does. */
+/** Fake client that rejects the way the Anthropic SDK does (status + error body). */
 function failingClient(err: unknown) {
   const client: AnthropicMessagesClient = {
     messages: {
@@ -69,7 +69,7 @@ describe('AnthropicBillParser', () => {
     expect(textBlock).toEqual({ type: 'text', text: PARSE_SPECS.shipping_receipt.prompt });
   });
 
-  it('picks the model and effort configured for each kind, prefixed for Bedrock', async () => {
+  it('picks the model and effort configured for each kind', async () => {
     const seen: Array<{ model: string; effort: string | undefined }> = [];
     const client: AnthropicMessagesClient = {
       messages: {
@@ -85,10 +85,11 @@ describe('AnthropicBillParser', () => {
     await parser.parse('measurement', image);
     await parser.parse('shipping_receipt', image);
 
+    // Opus on the two handwritten kinds is the whole point of the per-kind table.
     expect(seen).toEqual([
-      { model: 'anthropic.claude-opus-5', effort: 'medium' },
-      { model: 'anthropic.claude-opus-5', effort: 'medium' },
-      { model: 'anthropic.claude-sonnet-5', effort: 'low' },
+      { model: 'claude-opus-5', effort: 'medium' },
+      { model: 'claude-opus-5', effort: 'medium' },
+      { model: 'claude-sonnet-5', effort: 'low' },
     ]);
   });
 
@@ -96,14 +97,7 @@ describe('AnthropicBillParser', () => {
     const { client, calls } = fakeClient({ stop_reason: 'end_turn', content: [{ type: 'text', text: okShippingReceipt }] });
     const parser = new AnthropicBillParser(client, 'claude-haiku-4-5');
     await parser.parse('bill', image);
-    expect(calls[0].model).toBe('anthropic.claude-haiku-4-5');
-  });
-
-  it('does not double-prefix an override that already carries the provider prefix', async () => {
-    const { client, calls } = fakeClient({ stop_reason: 'end_turn', content: [{ type: 'text', text: okShippingReceipt }] });
-    const parser = new AnthropicBillParser(client, 'anthropic.claude-sonnet-5');
-    await parser.parse('bill', image);
-    expect(calls[0].model).toBe('anthropic.claude-sonnet-5');
+    expect(calls[0].model).toBe('claude-haiku-4-5');
   });
 
   it('logs token usage so real cost is visible rather than estimated', async () => {
@@ -119,7 +113,7 @@ describe('AnthropicBillParser', () => {
       '[parse] usage',
       expect.objectContaining({
         kind: 'shipping_receipt',
-        model: 'anthropic.claude-sonnet-5',
+        model: 'claude-sonnet-5',
         inputTokens: 5400,
         outputTokens: 1600,
         thinkingTokens: 900,
@@ -128,7 +122,7 @@ describe('AnthropicBillParser', () => {
     log.mockRestore();
   });
 
-  it('rejects a photo over the 5 MB per-image transport limit before calling out', async () => {
+  it('rejects a photo over the 10 MB per-image transport limit before calling out', async () => {
     const calls: any[] = [];
     const client: AnthropicMessagesClient = {
       messages: {
@@ -138,32 +132,52 @@ describe('AnthropicBillParser', () => {
         },
       },
     };
-    // 5 MB of base64 needs 3/4 as many raw bytes; go comfortably past it.
-    const huge = { bytes: new Uint8Array(4 * 1024 * 1024), mediaType: 'image/jpeg' };
-    await expect(new AnthropicBillParser(client).parse('bill', huge)).rejects.toThrow(/over the 5 MB per-image limit/);
+    // Base64 inflates by 4/3, so 8 MB of raw bytes encodes to ~10.7 MB.
+    const huge = { bytes: new Uint8Array(8 * 1024 * 1024), mediaType: 'image/jpeg' };
+    await expect(new AnthropicBillParser(client).parse('bill', huge)).rejects.toThrow(/over the 10 MB per-image limit/);
     expect(calls).toHaveLength(0);
   });
 
-  it('reports missing Bedrock model access as unavailable, so parsing answers 503 and the wizard falls back', async () => {
+  it('reports a rejected API key as unavailable, so parsing answers 503 and the wizard falls back', async () => {
     const client = failingClient({
-      status: 403,
-      error: { error: { type: 'permission_error', message: 'anthropic.claude-opus-5 is not available for this account.' } },
+      status: 401,
+      error: { error: { type: 'authentication_error', message: 'invalid x-api-key' } },
     });
     const err = await new AnthropicBillParser(client).parse('bill', image).catch((e) => e);
     expect(err).toBeInstanceOf(ParserUnavailableError);
-    expect(err.message).toMatch(/not available for this account/);
-    expect(err.message).toMatch(/Model access/);
+    expect(err.message).toMatch(/invalid x-api-key/);
+    expect(err.message).toMatch(/anthropic-api-key/);
+  });
+
+  it('reports a spend limit or model permission failure as unavailable', async () => {
+    const client = failingClient({
+      status: 403,
+      error: { error: { type: 'permission_error', message: 'not permitted to use claude-opus-5' } },
+    });
+    const err = await new AnthropicBillParser(client).parse('bill', image).catch((e) => e);
+    expect(err).toBeInstanceOf(ParserUnavailableError);
+    expect(err.message).toMatch(/spend limit/);
   });
 
   it('reports an unknown model id as unavailable too, naming the model it tried', async () => {
     const client = failingClient({
       status: 404,
-      error: { error: { type: 'not_found_error', message: "The model 'anthropic.claude-opus-5' does not exist" } },
+      error: { error: { type: 'not_found_error', message: "The model 'claude-opus-5' does not exist" } },
     });
     const err = await new AnthropicBillParser(client).parse('bill', image).catch((e) => e);
     expect(err).toBeInstanceOf(ParserUnavailableError);
-    expect(err.message).toMatch(/anthropic\.claude-opus-5/);
+    expect(err.message).toMatch(/claude-opus-5/);
     expect(err.message).toMatch(/check the model id/);
+  });
+
+  it('reports an exhausted credit balance as unavailable, though it arrives as a 400', async () => {
+    const client = failingClient({
+      status: 400,
+      error: { error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the API' } },
+    });
+    const err = await new AnthropicBillParser(client).parse('bill', image).catch((e) => e);
+    expect(err).toBeInstanceOf(ParserUnavailableError);
+    expect(err.message).toMatch(/top up the Anthropic account/);
   });
 
   it('treats other transport failures as ordinary errors, keeping the reason', async () => {
