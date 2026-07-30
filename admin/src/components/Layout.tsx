@@ -30,8 +30,11 @@ export default function Layout() {
           <NavLink to="/products" className={navClass}>
             Products
           </NavLink>
-          <NavLink to="/orders" className={navClass}>
+          <NavLink to="/orders" end className={navClass}>
             Orders
+          </NavLink>
+          <NavLink to="/orders/new" className={navClass}>
+            New Order
           </NavLink>
           <NavLink to="/payments" className={navClass}>
             Payments

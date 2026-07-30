@@ -139,7 +139,7 @@ export default function OrderConfirmation() {
                       <div>
                         <div className="nm">{it.productName}</div>
                         <div className="at">
-                          {it.color} · {it.size} · Qty {it.quantity}
+                          {[it.color, it.size, `Qty ${it.quantity}`].filter(Boolean).join(' · ')}
                           {(it.dupattaPrice != null || it.jacketPrice != null) &&
                             ` · With ${[it.dupattaPrice != null && 'dupatta', it.jacketPrice != null && 'jacket']
                               .filter(Boolean)
@@ -150,9 +150,17 @@ export default function OrderConfirmation() {
                     </div>
                   ))}
                   <div className="oc-tot">
-                    <span className="l">Total Paid</span>
+                    <span className="l">
+                      {order.channel !== 'online' && order.balance > 0 ? 'Total' : 'Total Paid'}
+                    </span>
                     <span className="v">{formatINR(order.total)}</span>
                   </div>
+                  {order.channel !== 'online' && order.balance > 0 && (
+                    <div className="oc-tot">
+                      <span className="l">Balance due on delivery</span>
+                      <span className="v">{formatINR(order.balance)}</span>
+                    </div>
+                  )}
                 </div>
               </aside>
             </div>

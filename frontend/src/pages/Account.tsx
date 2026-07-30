@@ -153,11 +153,16 @@ export default function Account() {
                         {pieces} {pieces === 1 ? 'piece' : 'pieces'} ·{' '}
                         {o.status === 'delivered'
                           ? `delivered ${fmtDate(o.createdAt)}`
-                          : 'est. dispatch 4–6 weeks'}
+                          : o.deliveryDueDate
+                            ? `delivery by ${fmtDate(o.deliveryDueDate)}`
+                            : 'est. dispatch 4–6 weeks'}
                       </div>
                     </div>
                     <div className="tot">
                       <div className="v">{formatINR(o.total)}</div>
+                      {o.channel !== 'online' && o.balance > 0 && (
+                        <div className="x">{formatINR(o.balance)} due on delivery</div>
+                      )}
                       <Link to={`/order/${o.orderNumber}?email=${encodeURIComponent(o.email)}`}>
                         {o.status === 'delivered' ? 'Buy Again' : 'Track Order'}
                       </Link>

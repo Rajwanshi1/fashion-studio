@@ -97,10 +97,17 @@ export type OrderStatus =
 
 export type DeliveryMethod = 'standard' | 'priority';
 
+export type OrderChannel = 'online' | 'in_store' | 'instagram' | 'exhibition';
+
+export type BillType = 'gst_invoice' | 'cash_memo';
+
+export type ReceiptMode = 'cash' | 'online';
+
 export interface OrderItem {
   id: string;
-  productId: string;
-  variantId: string;
+  /** Null for offline freeform lines (handwritten-bill descriptions). */
+  productId: string | null;
+  variantId: string | null;
   productName: string;
   size: string;
   color: string;
@@ -111,6 +118,17 @@ export interface OrderItem {
   /** Chosen add-on price snapshot; null = excluded or not part of the set. */
   dupattaPrice: number | null;
   jacketPrice: number | null;
+}
+
+export interface Receipt {
+  id: string;
+  orderId: string;
+  amount: number;
+  mode: ReceiptMode;
+  /** YYYY-MM-DD. */
+  receivedAt: string;
+  note: string;
+  createdAt: string;
 }
 
 export interface Order {
@@ -132,6 +150,19 @@ export interface Order {
   subtotal: number;
   total: number;
   status: OrderStatus;
+  channel: OrderChannel;
+  billType: BillType | null;
+  billNumber: string | null;
+  /** Paise; null when the bill carries no GST line. */
+  gstAmount: number | null;
+  /** YYYY-MM-DD; null when no delivery date was promised. */
+  deliveryDueDate: string | null;
+  notes: string;
+  /** SUM of receipts, paise. */
+  advancePaid: number;
+  /** total − advancePaid, paise. */
+  balance: number;
+  receipts: Receipt[];
   createdAt: string;
   items: OrderItem[];
 }
@@ -173,6 +204,7 @@ export class DomainError extends Error {
       | 'INSUFFICIENT_STOCK'
       | 'EMPTY_ORDER'
       | 'INVALID_STATUS_TRANSITION'
+      | 'OVER_COLLECTION'
       | 'PAYMENT_ALREADY_FINAL'
       | 'NOT_CONFIGURED'
       | 'INVALID_SOURCE'

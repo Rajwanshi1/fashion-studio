@@ -791,6 +791,236 @@ describe('API', () => {
     });
   });
 
+  describe('admin offline orders', () => {
+    const offlineBody = (over: Record<string, unknown> = {}) => ({
+      channel: 'in_store',
+      billType: 'gst_invoice',
+      billNumber: 'GST-001',
+      customer: { action: 'create', firstName: 'Rhea', phone: '98200 11223' },
+      items: [{ description: 'Custom lehenga, bridal fit', quantity: 1, unitPrice: 12000000 }],
+      total: 12000000,
+      ...over,
+    });
+
+    async function createOffline(over: Record<string, unknown> = {}) {
+      const res = await app.request('/api/admin/orders', post(offlineBody(over), adminToken));
+      expect(res.status).toBe(201);
+      return res.json() as Promise<any>;
+    }
+
+    it('POST creates an offline order with a new customer and an advance receipt', async () => {
+      const order = await createOffline({
+        advance: { amount: 2000000, mode: 'cash' },
+        deliveryDueDate: '2026-08-20',
+        notes: 'Walk-in',
+      });
+      expect(order).toMatchObject({
+        channel: 'in_store',
+        billType: 'gst_invoice',
+        billNumber: 'GST-001',
+        status: 'in_atelier',
+        phone: '+919820011223',
+        email: '',
+        total: 12000000,
+        advancePaid: 2000000,
+        balance: 10000000,
+        deliveryDueDate: '2026-08-20',
+        notes: 'Walk-in',
+      });
+      expect(order.items[0]).toMatchObject({ productId: null, variantId: null, productName: 'Custom lehenga, bridal fit' });
+      expect(order.receipts).toHaveLength(1);
+      expect(f.users.users.find((u) => u.phone === '+919820011223')).toMatchObject({ authProvider: 'otp' });
+    });
+
+    it('POST links an existing customer by id', async () => {
+      const { user } = await registerCustomer();
+      const order = await createOffline({ customer: { action: 'link', userId: user.id } });
+      expect(order).toMatchObject({ userId: user.id, email: 'aanya@example.com', firstName: 'Aanya' });
+    });
+
+    it('POST rejects invalid bodies with 400 and domain errors with their statuses', async () => {
+      for (const bad of [
+        offlineBody({ channel: 'online' }),
+        offlineBody({ billType: 'receipt' }),
+        offlineBody({ items: [] }),
+        offlineBody({ customer: { action: 'create', firstName: 'X' } }), // phone missing
+        offlineBody({ customer: { action: 'link' } }), // userId missing
+        offlineBody({ total: 12.5 }),
+        offlineBody({ deliveryDueDate: '20-08-2026' }),
+      ]) {
+        const res = await app.request('/api/admin/orders', post(bad, adminToken));
+        expect(res.status).toBe(400);
+        expect(typeof (await res.json()).error).toBe('string');
+      }
+      const badPhone = await app.request(
+        '/api/admin/orders',
+        post(offlineBody({ customer: { action: 'create', firstName: 'X', phone: '12345' } }), adminToken),
+      );
+      expect(badPhone.status).toBe(400);
+      const ghost = await app.request(
+        '/api/admin/orders',
+        post(offlineBody({ customer: { action: 'link', userId: 'ghost' } }), adminToken),
+      );
+      expect(ghost.status).toBe(404);
+      const over = await app.request(
+        '/api/admin/orders',
+        post(offlineBody({ advance: { amount: 12000001, mode: 'cash' } }), adminToken),
+      );
+      expect(over.status).toBe(409);
+    });
+
+    it('POST requires admin: 401 anonymous, 403 customer', async () => {
+      const { token: customerToken } = await registerCustomer();
+      expect((await app.request('/api/admin/orders', post(offlineBody()))).status).toBe(401);
+      expect((await app.request('/api/admin/orders', post(offlineBody(), customerToken))).status).toBe(403);
+      expect((await app.request('/api/admin/customers/match?phone=9820011223')).status).toBe(401);
+      expect((await app.request('/api/admin/customers/match?phone=9820011223', bearer(customerToken))).status).toBe(403);
+    });
+
+    it('POST /orders/:id/receipts records payments and refuses over-collection', async () => {
+      const order = await createOffline({ advance: { amount: 2000000, mode: 'cash' } });
+      const res = await app.request(
+        `/api/admin/orders/${order.id}/receipts`,
+        post({ amount: 10000000, mode: 'online', receivedAt: '2026-08-01', note: 'Final' }, adminToken),
+      );
+      expect(res.status).toBe(200);
+      const updated = await res.json();
+      expect(updated.advancePaid).toBe(12000000);
+      expect(updated.balance).toBe(0);
+      expect(updated.receipts).toHaveLength(2);
+
+      const over = await app.request(
+        `/api/admin/orders/${order.id}/receipts`,
+        post({ amount: 1, mode: 'cash' }, adminToken),
+      );
+      expect(over.status).toBe(409);
+      expect((await over.json()).error).toMatch(/exceed/i);
+
+      expect(
+        (await app.request(`/api/admin/orders/${order.id}/receipts`, post({ amount: 0, mode: 'cash' }, adminToken)))
+          .status,
+      ).toBe(400);
+      expect(
+        (await app.request('/api/admin/orders/ghost/receipts', post({ amount: 1, mode: 'cash' }, adminToken))).status,
+      ).toBe(404);
+    });
+
+    it('PATCH /orders/:id patches details when no status is given, still walks the machine with one', async () => {
+      const order = await createOffline();
+      const details = await app.request(
+        `/api/admin/orders/${order.id}`,
+        withMethod('PATCH', { deliveryDueDate: '2026-09-01', notes: 'Client travelling' }, adminToken),
+      );
+      expect(details.status).toBe(200);
+      expect(await details.json()).toMatchObject({
+        deliveryDueDate: '2026-09-01',
+        notes: 'Client travelling',
+        status: 'in_atelier',
+      });
+
+      const moved = await app.request(
+        `/api/admin/orders/${order.id}`,
+        withMethod('PATCH', { status: 'quality_check' }, adminToken),
+      );
+      expect(moved.status).toBe(200);
+      expect((await moved.json()).status).toBe('quality_check');
+
+      // offline cancel from quality_check is allowed and does not restock
+      const cancelled = await app.request(
+        `/api/admin/orders/${order.id}`,
+        withMethod('PATCH', { status: 'cancelled' }, adminToken),
+      );
+      expect((await cancelled.json()).status).toBe('cancelled');
+
+      expect(
+        (await app.request('/api/admin/orders/ghost', withMethod('PATCH', { notes: 'x' }, adminToken))).status,
+      ).toBe(404);
+    });
+
+    it('GET /orders filters by channel and billType alongside status', async () => {
+      await createOffline(); // in_store, gst_invoice
+      await createOffline({
+        channel: 'exhibition',
+        billType: 'cash_memo',
+        billNumber: 'CM-9',
+        customer: { action: 'create', firstName: 'Zoya', phone: '98200 33445' },
+        initialStatus: 'delivered',
+      });
+      await placeOrder([{ variantId: sageM().id, quantity: 1 }]); // online
+
+      const byChannel = await (await app.request('/api/admin/orders?channel=in_store', bearer(adminToken))).json();
+      expect(byChannel).toHaveLength(1);
+      expect(byChannel[0].channel).toBe('in_store');
+
+      const online = await (await app.request('/api/admin/orders?channel=online', bearer(adminToken))).json();
+      expect(online).toHaveLength(1);
+
+      const byBill = await (await app.request('/api/admin/orders?billType=cash_memo', bearer(adminToken))).json();
+      expect(byBill).toHaveLength(1);
+      expect(byBill[0].billNumber).toBe('CM-9');
+
+      const combined = await (
+        await app.request('/api/admin/orders?status=delivered&channel=exhibition', bearer(adminToken))
+      ).json();
+      expect(combined).toHaveLength(1);
+
+      expect((await app.request('/api/admin/orders?channel=fax', bearer(adminToken))).status).toBe(400);
+    });
+
+    it('GET /customers/match ranks the exact phone first, then email/name matches', async () => {
+      await registerCustomer(); // aanya@example.com
+      await createOffline(); // creates Rhea +919820011223 with one order
+
+      const byPhone = await (
+        await app.request('/api/admin/customers/match?phone=98200 11223', bearer(adminToken))
+      ).json();
+      expect(byPhone.candidates[0]).toMatchObject({ phone: '+919820011223', firstName: 'Rhea', ordersCount: 1 });
+
+      const byName = await (await app.request('/api/admin/customers/match?q=aanya', bearer(adminToken))).json();
+      expect(byName.candidates).toHaveLength(1);
+      expect(byName.candidates[0]).toMatchObject({ email: 'aanya@example.com', ordersCount: 0 });
+
+      const both = await (
+        await app.request('/api/admin/customers/match?phone=9820011223&q=aanya', bearer(adminToken))
+      ).json();
+      expect(both.candidates.map((c: any) => c.firstName)).toEqual(['Rhea', 'Aanya']);
+
+      const none = await (await app.request('/api/admin/customers/match', bearer(adminToken))).json();
+      expect(none).toEqual({ candidates: [] });
+    });
+
+    it('summary reports revenueByChannel, revenueByBillType and pendingToCollect', async () => {
+      const paidOrder = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
+      const { paymentId } = await (
+        await app.request('/api/payments/checkout', post({ orderId: paidOrder.id, email: 'guest@example.com' }))
+      ).json();
+      await app.request('/api/payments/confirm', post({ paymentId, outcome: 'success', email: 'guest@example.com' }));
+      await createOffline({ advance: { amount: 2000000, mode: 'cash' } }); // in_atelier, owes 1,00,00,000
+      await createOffline({
+        channel: 'exhibition',
+        billType: 'cash_memo',
+        customer: { action: 'create', firstName: 'Zoya', phone: '98200 33445' },
+        total: 5000000,
+        items: [{ description: 'Stole', quantity: 1, unitPrice: 5000000 }],
+        advance: { amount: 5000000, mode: 'online' },
+        initialStatus: 'delivered', // fully collected — not pending
+      });
+
+      const summary = await (await app.request('/api/admin/summary', bearer(adminToken))).json();
+      expect(summary.revenue).toBe(paidOrder.total + 12000000 + 5000000);
+      expect(summary.revenueByChannel).toEqual({
+        online: paidOrder.total,
+        in_store: 12000000,
+        exhibition: 5000000,
+      });
+      expect(summary.revenueByBillType).toEqual({ gst_invoice: 12000000, cash_memo: 5000000 });
+      expect(summary.pendingToCollect).toBe(10000000);
+      // existing fields keep working
+      expect(summary.activeOrders).toBe(2); // paid online + in_atelier offline
+      expect(summary.recentOrders.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('socials', () => {
     it('POST /api/socials/scan records a scan and returns empty 204', async () => {
       const res = await app.request('/api/socials/scan', post({ source: 'Instagram Bio' }));

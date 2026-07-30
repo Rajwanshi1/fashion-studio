@@ -76,10 +76,17 @@ export type OrderStatus =
   | 'delivered'
   | 'cancelled';
 
+export type OrderChannel = 'online' | 'in_store' | 'instagram' | 'exhibition';
+
+export type BillType = 'gst_invoice' | 'cash_memo';
+
+export type ReceiptMode = 'cash' | 'online';
+
 export interface OrderItem {
   id: string;
-  productId: string;
-  variantId: string;
+  /** Null for offline freeform lines (handwritten-bill descriptions). */
+  productId: string | null;
+  variantId: string | null;
   productName: string;
   size: string;
   color: string;
@@ -90,6 +97,17 @@ export interface OrderItem {
   /** Chosen add-on price snapshot; null = excluded or not part of the set. */
   dupattaPrice: number | null;
   jacketPrice: number | null;
+}
+
+export interface Receipt {
+  id: string;
+  orderId: string;
+  amount: number;
+  mode: ReceiptMode;
+  /** YYYY-MM-DD. */
+  receivedAt: string;
+  note: string;
+  createdAt: string;
 }
 
 export interface Order {
@@ -111,6 +129,18 @@ export interface Order {
   subtotal: number;
   total: number;
   status: OrderStatus;
+  channel: OrderChannel;
+  billType: BillType | null;
+  billNumber: string | null;
+  gstAmount: number | null;
+  /** YYYY-MM-DD; null when no delivery date was promised. */
+  deliveryDueDate: string | null;
+  notes: string;
+  /** SUM of receipts, paise. */
+  advancePaid: number;
+  /** total − advancePaid, paise. */
+  balance: number;
+  receipts: Receipt[];
   createdAt: string;
   items: OrderItem[];
 }
@@ -143,6 +173,10 @@ export interface AdminSummary {
   activeOrders: number;
   revenue: number;
   pendingPayments: number;
+  revenueByChannel: Partial<Record<OrderChannel, number>>;
+  revenueByBillType: Partial<Record<BillType, number>>;
+  /** SUM(total − advancePaid) over open offline orders, paise. */
+  pendingToCollect: number;
   lowStock: LowStockItem[];
   recentOrders: Order[];
 }
@@ -216,3 +250,44 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   delivered: 'Delivered',
   cancelled: 'Cancelled',
 };
+
+export const CHANNELS: OrderChannel[] = ['online', 'in_store', 'instagram', 'exhibition'];
+
+/** Channels an offline bill can be entered under (everything but online). */
+export const OFFLINE_CHANNELS: Exclude<OrderChannel, 'online'>[] = ['in_store', 'instagram', 'exhibition'];
+
+export const CHANNEL_LABELS: Record<OrderChannel, string> = {
+  online: 'Online',
+  in_store: 'In Store',
+  instagram: 'Instagram',
+  exhibition: 'Exhibition',
+};
+
+export const BILL_TYPE_LABELS: Record<BillType, string> = {
+  gst_invoice: 'GST Invoice',
+  cash_memo: 'Cash Memo',
+};
+
+/**
+ * Offline machine, mirrored from the backend: bills start in production and
+ * remain cancellable (a bookkeeping correction — no restock) until dispatch.
+ */
+const OFFLINE_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  pending_payment: [],
+  paid: [],
+  in_atelier: ['quality_check', 'cancelled'],
+  quality_check: ['dispatched', 'cancelled'],
+  dispatched: ['delivered'],
+  delivered: [],
+  cancelled: [],
+};
+
+/** Valid next statuses for an order, channel-aware. */
+export function transitionsFor(order: Order): OrderStatus[] {
+  return order.channel === 'online' ? ORDER_TRANSITIONS[order.status] : OFFLINE_TRANSITIONS[order.status];
+}
+
+/** Whether the order can still be cancelled from its current status. */
+export function cancellableFrom(order: Order): boolean {
+  return transitionsFor(order).includes('cancelled');
+}

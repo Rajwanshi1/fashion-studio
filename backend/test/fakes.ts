@@ -1,4 +1,13 @@
-import type { NewOrder, NewOrderItem, OrdersRepo } from '../src/data/orders.repo';
+import type {
+  AdminOrdersFilter,
+  NewOfflineItem,
+  NewOfflineOrder,
+  NewOrder,
+  NewOrderItem,
+  OrderDetailsPatch,
+  OrdersRepo,
+} from '../src/data/orders.repo';
+import type { CreateReceiptInput, ReceiptsRepo } from '../src/data/receipts.repo';
 import type { AdminPayment, CreatePaymentInput, PaymentsRepo } from '../src/data/payments.repo';
 import type {
   AdminProduct,
@@ -39,6 +48,7 @@ import {
   PaymentStatus,
   ProductFilter,
   ProductSummary,
+  Receipt,
   Role,
   Tx,
   TxRunner,
@@ -116,6 +126,25 @@ export class FakeUsersRepo implements UsersRepo {
   async listAdmin(): Promise<AdminUser[]> {
     return [...this.users]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((u) => this.toAdmin(u));
+  }
+
+  async searchAdmin(phone?: string | null, q?: string | null): Promise<AdminUser[]> {
+    if (!phone && !q) return [];
+    const needle = q?.toLowerCase();
+    const matchesQ = (u: User) =>
+      !!needle &&
+      ((u.email ?? '').toLowerCase().includes(needle) ||
+        u.firstName.toLowerCase().includes(needle) ||
+        u.lastName.toLowerCase().includes(needle));
+    return this.users
+      .filter((u) => (phone && u.phone === phone) || matchesQ(u))
+      .sort(
+        (a, b) =>
+          Number(phone ? b.phone === phone : false) - Number(phone ? a.phone === phone : false) ||
+          b.createdAt.localeCompare(a.createdAt),
+      )
+      .slice(0, 8)
       .map((u) => this.toAdmin(u));
   }
 
@@ -479,12 +508,9 @@ export class FakeOrdersRepo implements OrdersRepo {
 
   constructor(private productsRepo?: FakeProductsRepo) {}
 
-  async createWithItems(_tx: Tx, order: NewOrder, items: NewOrderItem[]): Promise<Order> {
-    // Mirror the order_items FK: once ordered, a product can only be archived.
-    for (const it of items) this.productsRepo?.orderedProductIds.add(it.productId);
-    const id = nextId('o');
-    const created: Order = {
-      id,
+  private baseOrder(order: NewOrder, items: OrderItem[]): Order {
+    return {
+      id: nextId('o'),
       orderNumber: order.orderNumber,
       userId: order.userId,
       email: order.email,
@@ -502,11 +528,67 @@ export class FakeOrdersRepo implements OrdersRepo {
       subtotal: order.subtotal,
       total: order.total,
       status: order.status,
+      channel: 'online',
+      billType: null,
+      billNumber: null,
+      gstAmount: null,
+      deliveryDueDate: null,
+      notes: '',
+      advancePaid: 0,
+      balance: order.total,
+      receipts: [],
       createdAt: new Date(Date.UTC(2026, 5, 1) + ++this.clock * 60_000).toISOString(),
-      items: items.map((it): OrderItem => ({ ...it, id: nextId('oi') })),
+      items,
+    };
+  }
+
+  async createWithItems(_tx: Tx, order: NewOrder, items: NewOrderItem[]): Promise<Order> {
+    // Mirror the order_items FK: once ordered, a product can only be archived.
+    for (const it of items) this.productsRepo?.orderedProductIds.add(it.productId);
+    const created = this.baseOrder(
+      order,
+      items.map((it): OrderItem => ({ ...it, id: nextId('oi') })),
+    );
+    this.orders.push(created);
+    return structuredClone(created);
+  }
+
+  async createOffline(_tx: Tx, order: NewOfflineOrder, items: NewOfflineItem[]): Promise<Order> {
+    const created: Order = {
+      ...this.baseOrder(
+        order,
+        items.map(
+          (it): OrderItem => ({
+            id: nextId('oi'),
+            productId: null,
+            variantId: null,
+            productName: it.productName,
+            size: '',
+            color: '',
+            unitPrice: it.unitPrice,
+            quantity: it.quantity,
+            imageUrl: null,
+          }),
+        ),
+      ),
+      channel: order.channel,
+      billType: order.billType,
+      billNumber: order.billNumber,
+      gstAmount: order.gstAmount,
+      deliveryDueDate: order.deliveryDueDate,
+      notes: order.notes,
     };
     this.orders.push(created);
     return structuredClone(created);
+  }
+
+  /** Wired from FakeReceiptsRepo so advancePaid/balance stay consistent. */
+  attachReceipt(receipt: Receipt): void {
+    const o = this.orders.find((x) => x.id === receipt.orderId);
+    if (!o) throw new Error(`unknown order ${receipt.orderId}`); // mimics the FK
+    o.receipts.push({ ...receipt });
+    o.advancePaid = o.receipts.reduce((sum, r) => sum + r.amount, 0);
+    o.balance = o.total - o.advancePaid;
   }
 
   async getByNumber(orderNumber: string): Promise<Order | null> {
@@ -526,9 +608,14 @@ export class FakeOrdersRepo implements OrdersRepo {
       .map((o) => structuredClone(o));
   }
 
-  async listAdmin(status?: OrderStatus): Promise<Order[]> {
+  async listAdmin(filter: AdminOrdersFilter = {}): Promise<Order[]> {
     return this.orders
-      .filter((o) => !status || o.status === status)
+      .filter(
+        (o) =>
+          (!filter.status || o.status === filter.status) &&
+          (!filter.channel || o.channel === filter.channel) &&
+          (!filter.billType || o.billType === filter.billType),
+      )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((o) => structuredClone(o));
   }
@@ -540,8 +627,49 @@ export class FakeOrdersRepo implements OrdersRepo {
     return structuredClone(o);
   }
 
+  async updateDetails(id: string, patch: OrderDetailsPatch): Promise<Order | null> {
+    const o = this.orders.find((x) => x.id === id);
+    if (!o) return null;
+    if (patch.deliveryDueDate !== undefined) o.deliveryDueDate = patch.deliveryDueDate;
+    if (patch.billNumber !== undefined) o.billNumber = patch.billNumber;
+    if (patch.billType !== undefined) o.billType = patch.billType;
+    if (patch.gstAmount !== undefined) o.gstAmount = patch.gstAmount;
+    if (patch.notes !== undefined) o.notes = patch.notes;
+    return structuredClone(o);
+  }
+
   async nextOrderNumber(_tx: Tx): Promise<string> {
     return `TA-2026-${String(this.seq++).padStart(5, '0')}`;
+  }
+}
+
+export class FakeReceiptsRepo implements ReceiptsRepo {
+  receipts: Receipt[] = [];
+  private clock = 0;
+
+  constructor(private ordersRepo: FakeOrdersRepo) {}
+
+  async create(input: CreateReceiptInput, _tx?: Tx): Promise<Receipt> {
+    const receipt: Receipt = {
+      id: nextId('rcpt'),
+      orderId: input.orderId,
+      amount: input.amount,
+      mode: input.mode,
+      receivedAt: input.receivedAt ?? '2026-07-24',
+      note: input.note ?? '',
+      createdAt: new Date(Date.UTC(2026, 5, 2) + ++this.clock * 60_000).toISOString(),
+    };
+    this.ordersRepo.attachReceipt(receipt);
+    this.receipts.push(receipt);
+    return { ...receipt };
+  }
+
+  async listByOrder(orderId: string): Promise<Receipt[]> {
+    return this.receipts.filter((r) => r.orderId === orderId).map((r) => ({ ...r }));
+  }
+
+  async sumByOrder(orderId: string): Promise<number> {
+    return this.receipts.filter((r) => r.orderId === orderId).reduce((sum, r) => sum + r.amount, 0);
   }
 }
 
@@ -881,6 +1009,7 @@ export interface Fakes {
   clicks: FakeClicksRepo;
   events: FakeEventsRepo;
   otps: FakeOtpsRepo;
+  receipts: FakeReceiptsRepo;
 }
 
 export function makeFakes(): Fakes {
@@ -893,7 +1022,8 @@ export function makeFakes(): Fakes {
   const clicks = new FakeClicksRepo();
   const events = new FakeEventsRepo();
   const otps = new FakeOtpsRepo();
-  return { users, products, wishlist, orders, payments, scans, clicks, events, otps };
+  const receipts = new FakeReceiptsRepo(orders);
+  return { users, products, wishlist, orders, payments, scans, clicks, events, otps, receipts };
 }
 
 /** Small catalog covering both categories, all flags, an inactive product and low stock. */
