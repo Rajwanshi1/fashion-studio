@@ -71,6 +71,9 @@ export interface AppDeps {
   runInTransaction: TxRunner;
   /** Liveness probe against the DB pool; absent → /api/ready always 503. */
   pingDb?: () => Promise<void>;
+  /** Product-image uploads; absent → the presign endpoint answers 503.
+   *  `local` mounts the dev-only /api/uploads/local transport. */
+  uploads?: { store: ObjectStore; local?: LocalObjectStore | null };
 }
 
 const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 429 | 503> = {
@@ -78,6 +81,7 @@ const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 429 | 5
   PHONE_TAKEN: 409,
   INVALID_PHONE: 400,
   TOO_MANY_REQUESTS: 429,
+  SLUG_TAKEN: 409,
   INSUFFICIENT_STOCK: 409,
   OVER_COLLECTION: 409,
   PAYMENT_ALREADY_FINAL: 409,
@@ -185,6 +189,7 @@ export function createApp(deps: AppDeps) {
       measurements: repos.measurements,
       ordersService: orders,
       documentsService: documents,
+      objectStore: deps.objectStore,
       jwtSecret,
     }),
   );

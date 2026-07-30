@@ -32,7 +32,13 @@ export interface CreateOrderInput {
     country?: string;
   };
   deliveryMethod: DeliveryMethod;
-  items: { variantId: string; quantity: number }[];
+  items: {
+    variantId: string;
+    quantity: number;
+    /** Set pieces are included unless explicitly opted out. */
+    includeDupatta?: boolean;
+    includeJacket?: boolean;
+  }[];
 }
 
 /** Manual entry of a handwritten bill (in-store, Instagram DM, exhibition). */
@@ -138,13 +144,24 @@ export function createOrdersService(deps: {
 }): OrdersService {
   const service: OrdersService = {
     async createOrder(input) {
-      // Merge duplicate variant lines so stock is checked once per variant.
-      const quantities = new Map<string, number>();
+      // Merge duplicate lines per variant + set-includes combo: the same
+      // variant with and without a dupatta is two distinct order lines.
+      const combos = new Map<string, { variantId: string; dupatta: boolean; jacket: boolean; qty: number }>();
       for (const item of input.items ?? []) {
-        quantities.set(item.variantId, (quantities.get(item.variantId) ?? 0) + item.quantity);
+        const dupatta = item.includeDupatta !== false; // default: included
+        const jacket = item.includeJacket !== false;
+        const key = `${item.variantId}|${dupatta ? 1 : 0}${jacket ? 1 : 0}`;
+        const existing = combos.get(key);
+        if (existing) existing.qty += item.quantity;
+        else combos.set(key, { variantId: item.variantId, dupatta, jacket, qty: item.quantity });
       }
-      if (quantities.size === 0) {
+      if (combos.size === 0) {
         throw new DomainError('EMPTY_ORDER', 'Order must contain at least one item');
+      }
+      // Stock is held per variant, so aggregate across combos for the check.
+      const quantities = new Map<string, number>();
+      for (const combo of combos.values()) {
+        quantities.set(combo.variantId, (quantities.get(combo.variantId) ?? 0) + combo.qty);
       }
 
       return deps.runInTransaction(async (tx) => {
@@ -161,18 +178,23 @@ export function createOrdersService(deps: {
           }
         }
 
-        // Prices always come from the DB, never the client.
-        const items = variantIds.map((id) => {
-          const v = byId.get(id)!;
+        // Prices always come from the DB, never the client. An opt-in only
+        // counts when the product actually has that piece in its set.
+        const items = [...combos.values()].map((combo) => {
+          const v = byId.get(combo.variantId)!;
+          const dupattaPrice = combo.dupatta && v.dupattaPrice != null ? v.dupattaPrice : null;
+          const jacketPrice = combo.jacket && v.jacketPrice != null ? v.jacketPrice : null;
           return {
             productId: v.productId,
             variantId: v.id,
             productName: v.productName,
             size: v.size,
             color: v.color,
-            unitPrice: v.unitPrice,
-            quantity: quantities.get(id)!,
+            unitPrice: v.unitPrice + (dupattaPrice ?? 0) + (jacketPrice ?? 0),
+            quantity: combo.qty,
             imageUrl: v.imageUrl,
+            dupattaPrice,
+            jacketPrice,
           };
         });
         const subtotal = items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);

@@ -3,6 +3,7 @@ import { Category, DomainError, ProductSort, ProductSummary } from '../types';
 
 export interface ListProductsQuery {
   category?: string;
+  collection?: string;
   search?: string;
   sort?: ProductSort;
   page?: number;
@@ -18,6 +19,7 @@ export interface ProductListing {
 
 export interface CatalogService {
   listCategories(): Promise<Category[]>;
+  listCollections(): Promise<string[]>;
   listProducts(query: ListProductsQuery): Promise<ProductListing>;
   getProduct(slug: string): Promise<AdminProduct & { related: ProductSummary[] }>;
 }
@@ -32,12 +34,17 @@ export function createCatalogService(deps: { products: ProductsRepo }): CatalogS
       return deps.products.listCategories();
     },
 
+    listCollections() {
+      return deps.products.listCollections();
+    },
+
     async listProducts(query) {
       const page = Math.max(1, Math.floor(query.page ?? 1));
       const limit = Math.min(MAX_LIMIT, Math.max(1, Math.floor(query.limit ?? DEFAULT_LIMIT)));
       const search = query.search?.trim() || undefined;
       const { items, total } = await deps.products.listProducts({
         categorySlug: query.category?.trim() || undefined,
+        collection: query.collection?.trim() || undefined,
         search,
         sort: query.sort ?? 'featured',
         page,

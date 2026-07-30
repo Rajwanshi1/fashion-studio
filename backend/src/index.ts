@@ -43,8 +43,14 @@ async function main() {
 
   // S3 in any deployed environment; the LocalObjectStore (plus its dev-only
   // /api/uploads transport) only when no bucket is configured.
-  const localUploads = config.s3UploadsBucket ? null : new LocalObjectStore(config.uploadsDir, config.publicApiUrl);
-  const objectStore = config.s3UploadsBucket ? new S3ObjectStore(config.s3UploadsBucket) : localUploads!;
+  const localUploads = config.s3UploadsBucket
+    ? null
+    : new LocalObjectStore(config.uploadsDir, config.publicApiUrl);
+  // Region is passed explicitly because publicUrl builds a virtual-hosted URL
+  // for the public-read products/ prefix.
+  const objectStore = config.s3UploadsBucket
+    ? new S3ObjectStore(config.s3UploadsBucket, { region: config.awsRegion })
+    : localUploads!;
   // Null until the key exists, which keeps the parse endpoint answering 503 and
   // the intake wizard falling back to manual entry. Models come from PARSE_SPECS
   // per document kind, so no model is passed here.
@@ -97,8 +103,11 @@ async function main() {
   if (config.smsProvider === 'msg91') console.log('auth: phone OTP via MSG91');
   else if (config.smsProvider === 'console') console.warn('auth: phone OTP codes printed to console — dev only');
   else console.log('auth: phone OTP masked — set SMS_PROVIDER to enable');
-  if (config.s3UploadsBucket) console.log(`documents: S3 bucket ${config.s3UploadsBucket}`);
-  else console.warn(`documents: local dev store at ${config.uploadsDir} — set S3_UPLOADS_BUCKET in production`);
+  if (config.s3UploadsBucket) {
+    console.log(`uploads: S3 bucket ${config.s3UploadsBucket} — product images (public products/) + documents (private)`);
+  } else {
+    console.warn(`uploads: local dev store at ${config.uploadsDir} — set S3_UPLOADS_BUCKET in production`);
+  }
   if (config.anthropicApiKey) {
     const models = Object.entries(PARSE_SPECS)
       .map(([kind, spec]) => `${kind}=${spec.model}/${spec.effort}`)

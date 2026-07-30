@@ -23,6 +23,7 @@ export interface Config {
   uploadsDir: string;
   /** Public base URL of this API — the LocalObjectStore presigns against it. */
   publicApiUrl: string;
+  awsRegion: string;
 }
 
 const DEV_JWT_SECRET = 'dev-secret-change-in-prod';
@@ -109,5 +110,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     s3UploadsBucket: env.S3_UPLOADS_BUCKET?.trim() || null,
     uploadsDir: env.UPLOADS_DIR?.trim() || `${process.cwd()}/.data/uploads`,
     publicApiUrl: env.PUBLIC_API_URL?.trim() || `http://localhost:${port}`,
+    awsRegion: env.AWS_REGION?.trim() || 'ap-south-1',
   };
 }

@@ -44,12 +44,19 @@ export interface ProductSummary {
   id: string;
   slug: string;
   name: string;
+  /** Base garment price; add dupattaPrice/jacketPrice for the full-set price. */
   price: number;
   color: string;
   flag: ProductFlag;
   imageUrl: string | null;
   categorySlug: string;
   categoryName: string;
+  collection: string;
+  occasion: string;
+  /** Paise; null = no dupatta in the set, 0 = included at no extra cost. */
+  dupattaPrice: number | null;
+  /** Paise; null = no jacket in the set, 0 = included at no extra cost. */
+  jacketPrice: number | null;
 }
 
 export interface Variant {
@@ -62,6 +69,8 @@ export interface Variant {
 export interface ProductDetail extends ProductSummary {
   description: string;
   details: string;
+  craft: string;
+  fabric: string;
   active: boolean;
   variants: Variant[];
 }
@@ -70,6 +79,7 @@ export type ProductSort = 'featured' | 'new' | 'price_asc' | 'price_desc';
 
 export interface ProductFilter {
   categorySlug?: string;
+  collection?: string;
   search?: string;
   sort?: ProductSort;
   page: number;
@@ -101,9 +111,13 @@ export interface OrderItem {
   productName: string;
   size: string;
   color: string;
+  /** Final per-unit price: base garment + chosen add-ons. */
   unitPrice: number;
   quantity: number;
   imageUrl: string | null;
+  /** Chosen add-on price snapshot; null = excluded or not part of the set. */
+  dupattaPrice: number | null;
+  jacketPrice: number | null;
 }
 
 export interface Receipt {
@@ -188,6 +202,7 @@ export class DomainError extends Error {
       | 'PHONE_TAKEN'
       | 'INVALID_PHONE'
       | 'TOO_MANY_REQUESTS'
+      | 'SLUG_TAKEN'
       | 'INVALID_CREDENTIALS'
       | 'NOT_FOUND'
       | 'INSUFFICIENT_STOCK'

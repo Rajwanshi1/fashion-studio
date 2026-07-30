@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { ADMIN_URL, adminLogin, cartDrawer, selectFirstAvailableSize } from './helpers';
 
-// Untouched by the other specs (storefront.spec.ts / admin.spec.ts visit Sage
-// Lehenga / Moss Gown / Pistachio Anarkali / Fern Gown / Celadon Cape), so its
+// Untouched by the other specs (storefront.spec.ts / admin.spec.ts visit the
+// Court Lehenga / Trail Kaftan / Threadwork Anarkali / Column Kaftan), so its
 // analytics row is unambiguously produced by this test's own journey — even
 // though the suite shares one backend and other specs emit their own events
 // into the same 30-day window.
-const IVY_JACKET = 'Ivy Zardozi Jacket Set';
+const IVY_JACKET = 'Zardozi Vine Suit';
 
 test('storefront journey emits analytics events that surface on the admin dashboard', async ({
   page,
@@ -21,9 +21,9 @@ test('storefront journey emits analytics events that surface on the admin dashbo
 
   // Home -> collection -> PDP -> select size -> add to bag.
   await page.goto('/');
-  await page.getByRole('link', { name: /Jacket Sets Explore/ }).click();
-  await expect(page).toHaveURL(/\/collection\/jacket-sets/);
-  await expect(page.getByRole('heading', { name: 'Jacket Sets', level: 1 })).toBeVisible();
+  await page.getByRole('link', { name: /Suits Explore/ }).click();
+  await expect(page).toHaveURL(/\/collection\/suits/);
+  await expect(page.getByRole('heading', { name: 'Suits', level: 1 })).toBeVisible();
 
   await page.getByRole('link', { name: new RegExp(IVY_JACKET) }).click();
   await expect(page.getByRole('heading', { name: IVY_JACKET, level: 1 })).toBeVisible();

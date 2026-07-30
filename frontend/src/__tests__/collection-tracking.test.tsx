@@ -37,7 +37,7 @@ describe('Collection page — filter_apply mount guard', () => {
 
     render(
       <StrictMode>
-        <MemoryRouter initialEntries={['/collection/lehenga-sets']}>
+        <MemoryRouter initialEntries={['/collection/lehenga']}>
           <Providers>
             <Routes>
               <Route path="/collection/:categorySlug" element={<Collection />} />
@@ -47,7 +47,7 @@ describe('Collection page — filter_apply mount guard', () => {
       </StrictMode>,
     );
 
-    await screen.findByRole('heading', { level: 1, name: 'Lehenga Sets' });
+    await screen.findByRole('heading', { level: 1, name: 'Lehenga' });
 
     // Give the (buggy version's) 500ms debounce timer a chance to fire.
     await new Promise((resolve) => setTimeout(resolve, 600));

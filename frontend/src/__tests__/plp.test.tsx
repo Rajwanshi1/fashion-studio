@@ -31,12 +31,39 @@ describe('PLP', () => {
       return undefined;
     });
 
-    renderApp('/collection/lehenga-sets');
+    renderApp('/collection/lehenga');
 
     expect((await screen.findAllByText('Sage Sequin Jacket Lehenga')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Moss Tissue Mirror Lehenga').length).toBeGreaterThan(0);
     expect(screen.getByText('2 Pieces')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1, name: 'Lehenga Sets' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Lehenga' })).toBeInTheDocument();
+  });
+
+  it('refetches server-side when a collection is picked, and filters occasions client-side', async () => {
+    const fetchMock = mockFetch((url) => {
+      if (url.includes('/api/categories')) return CATEGORIES;
+      if (url.includes('/api/collections')) return ['Festive Edit', 'The Verdant Edit'];
+      if (url.includes('/api/products')) return productsPayload();
+      return undefined;
+    });
+
+    renderApp('/collection/lehenga');
+    await screen.findAllByText('Sage Sequin Jacket Lehenga');
+
+    const user = userEvent.setup();
+    // Collection group is rendered from GET /api/collections.
+    await user.click(await screen.findByRole('checkbox', { name: 'Festive Edit' }));
+    await waitFor(() => {
+      const productCalls = fetchMock.mock.calls
+        .map((c) => String(c[0]))
+        .filter((u) => u.includes('/api/products'));
+      expect(productCalls.some((u) => u.includes('collection=Festive%20Edit'))).toBe(true);
+    });
+
+    // Occasion checkboxes now really filter (P1 = Wedding, P2 = Festive).
+    await user.click(screen.getByRole('checkbox', { name: 'Wedding' }));
+    expect(screen.getAllByText('Sage Sequin Jacket Lehenga').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Moss Tissue Mirror Lehenga')).not.toBeInTheDocument();
   });
 
   it('refetches with the chosen sort', async () => {
@@ -46,7 +73,7 @@ describe('PLP', () => {
       return undefined;
     });
 
-    renderApp('/collection/lehenga-sets');
+    renderApp('/collection/lehenga');
     await screen.findAllByText('Sage Sequin Jacket Lehenga');
 
     const user = userEvent.setup();
@@ -60,7 +87,7 @@ describe('PLP', () => {
     });
 
     expect(track).toHaveBeenCalledWith('sort_change', {
-      props: { category: 'lehenga-sets', sort: 'price_asc' },
+      props: { category: 'lehenga', sort: 'price_asc' },
     });
   });
 
@@ -71,7 +98,7 @@ describe('PLP', () => {
       return undefined;
     });
 
-    renderApp('/collection/lehenga-sets');
+    renderApp('/collection/lehenga');
     await screen.findAllByText('Sage Sequin Jacket Lehenga');
 
     // Initial render establishes colors/priceMax without firing an event
@@ -91,19 +118,19 @@ describe('PLP', () => {
     const filterCalls = vi.mocked(track).mock.calls.filter(([type]) => type === 'filter_apply');
     expect(filterCalls).toHaveLength(1);
     expect(filterCalls[0][1]).toEqual({
-      props: { category: 'lehenga-sets', colors: ['Sage', 'Moss'], priceMax: 300000 },
+      props: { category: 'lehenga', colors: ['Sage', 'Moss'], occasions: [], priceMax: 300000, collection: '' },
     });
   });
 
   it('shows a graceful error state on API 404s', async () => {
     mockFetch(() => undefined);
-    renderApp('/collection/lehenga-sets');
+    renderApp('/collection/lehenga');
     expect(await screen.findByText('Not found')).toBeInTheDocument();
   });
 
   it('renders gracefully when the API is unreachable', async () => {
     mockFetchDown();
-    renderApp('/collection/lehenga-sets');
+    renderApp('/collection/lehenga');
     // Chrome still renders; results area shows a calm error note.
     expect(
       await screen.findByText('The atelier is unreachable right now.'),
