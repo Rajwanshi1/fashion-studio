@@ -11,7 +11,7 @@ import {
   type CreatedOrder,
 } from './helpers';
 
-const FERN_GOWN = 'Fern Pleated Tissue Gown';
+const FERN_GOWN = 'Tissue Column Kaftan';
 
 // A paid order created through the public API before the admin tests run,
 // so every assertion below is against data this run created.
@@ -66,7 +66,7 @@ test('payments: the captured payment for the order is listed', async ({ page }) 
   await expect(row).toContainText('₹');
 });
 
-test('products: 16+ pieces listed; S-size stock edit persists and is restored', async ({
+test('products: 13+ pieces listed; S-size stock edit persists and is restored', async ({
   page,
   request,
 }) => {
@@ -74,9 +74,9 @@ test('products: 16+ pieces listed; S-size stock edit persists and is restored', 
   await page.goto(`${ADMIN_URL}/products`);
   await expect(page.getByRole('heading', { name: 'Products' })).toBeVisible();
 
-  // 16 seeded pieces (at least) — the 16th body row must exist.
+  // 13 seeded pieces (at least) — the 13th body row must exist.
   const bodyRows = page.locator('table.data tbody tr');
-  await expect(bodyRows.nth(15)).toBeVisible();
+  await expect(bodyRows.nth(12)).toBeVisible();
 
   // Open one piece and bump its S-size stock.
   await page.getByRole('cell', { name: FERN_GOWN }).click();
