@@ -6,7 +6,7 @@ import {
   requesterOwnsOrder,
 } from '../src/services/orders.service';
 import type { Order } from '../src/types';
-import { FakeOrdersRepo, FakeProductsRepo, fakeTx, seedCatalog } from './fakes';
+import { FakeOrdersRepo, FakeProductsRepo, fakeTx, seedCatalog, seedSetProduct } from './fakes';
 
 const customer = {
   email: 'Guest@Example.com',
@@ -129,6 +129,78 @@ describe('OrdersService', () => {
       expect(order.items[0].quantity).toBe(50);
       const [v] = await products.getVariantsForUpdate({}, [sageCustom().id]);
       expect(v.stock).toBe(0);
+    });
+  });
+
+  describe('set includes (dupatta/jacket add-ons)', () => {
+    // Fern Zardozi Set: base 15000000, dupatta 1200000, jacket 2400000, M stock 10.
+    let setVariantId: string;
+
+    beforeEach(async () => {
+      const set = await seedSetProduct(products, seeded.lehengas.id);
+      setVariantId = set.variants[0].id;
+    });
+
+    it('includes both pieces by default and snapshots the chosen prices', async () => {
+      const order = await service.createOrder(input({ items: [{ variantId: setVariantId, quantity: 1 }] }));
+      expect(order.items[0].unitPrice).toBe(15000000 + 1200000 + 2400000);
+      expect(order.items[0].dupattaPrice).toBe(1200000);
+      expect(order.items[0].jacketPrice).toBe(2400000);
+      expect(order.subtotal).toBe(18600000);
+    });
+
+    it('reprices when a piece is opted out and snapshots null for it', async () => {
+      const order = await service.createOrder(
+        input({ items: [{ variantId: setVariantId, quantity: 2, includeJacket: false }] }),
+      );
+      expect(order.items[0].unitPrice).toBe(15000000 + 1200000);
+      expect(order.items[0].dupattaPrice).toBe(1200000);
+      expect(order.items[0].jacketPrice).toBeNull();
+      expect(order.subtotal).toBe(2 * 16200000);
+    });
+
+    it('ignores includes on products without those set pieces', async () => {
+      const order = await service.createOrder(
+        input({ items: [{ variantId: sageM().id, quantity: 1, includeDupatta: true, includeJacket: true }] }),
+      );
+      expect(order.items[0].unitPrice).toBe(18400000);
+      expect(order.items[0].dupattaPrice).toBeNull();
+      expect(order.items[0].jacketPrice).toBeNull();
+    });
+
+    it('keeps the same variant with different includes as separate lines but aggregates stock', async () => {
+      const order = await service.createOrder(
+        input({
+          items: [
+            { variantId: setVariantId, quantity: 1 },
+            { variantId: setVariantId, quantity: 1, includeDupatta: false, includeJacket: false },
+            { variantId: setVariantId, quantity: 1 }, // merges with the first line
+          ],
+        }),
+      );
+      expect(order.items).toHaveLength(2);
+      const full = order.items.find((i) => i.dupattaPrice !== null)!;
+      const bare = order.items.find((i) => i.dupattaPrice === null)!;
+      expect(full.quantity).toBe(2);
+      expect(full.unitPrice).toBe(18600000);
+      expect(bare.quantity).toBe(1);
+      expect(bare.unitPrice).toBe(15000000);
+      expect(order.subtotal).toBe(2 * 18600000 + 15000000);
+      const [v] = await products.getVariantsForUpdate({}, [setVariantId]);
+      expect(v.stock).toBe(7); // 10 - 3 across both combos
+    });
+
+    it('checks stock across combos of the same variant', async () => {
+      await expect(
+        service.createOrder(
+          input({
+            items: [
+              { variantId: setVariantId, quantity: 6 },
+              { variantId: setVariantId, quantity: 5, includeJacket: false },
+            ],
+          }),
+        ),
+      ).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK' });
     });
   });
 

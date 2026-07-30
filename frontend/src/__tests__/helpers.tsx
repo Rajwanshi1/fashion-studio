@@ -57,10 +57,11 @@ export function mockFetchDown() {
 }
 
 export const CATEGORIES: Category[] = [
-  { id: 'c1', slug: 'lehenga-sets', name: 'Lehenga Sets', description: 'Hand-embroidered indo-western lehengas.', position: 1, productCount: 24 },
-  { id: 'c2', slug: 'jacket-sets', name: 'Jacket Sets', description: 'Structured jackets.', position: 2, productCount: 18 },
-  { id: 'c3', slug: 'gowns', name: 'Gowns', description: 'Fluid gowns.', position: 3, productCount: 12 },
-  { id: 'c4', slug: 'anarkali', name: 'Anarkali', description: 'Anarkalis.', position: 4, productCount: 15 },
+  { id: 'c1', slug: 'kaftan', name: 'Kaftan', description: 'Fluid kaftans.', position: 1, productCount: 12 },
+  { id: 'c2', slug: 'anarkali', name: 'Anarkali', description: 'Anarkalis.', position: 2, productCount: 15 },
+  { id: 'c3', slug: 'suits', name: 'Suits', description: 'Tailored suit sets.', position: 3, productCount: 18 },
+  { id: 'c4', slug: 'lehenga', name: 'Lehenga', description: 'Hand-embroidered lehengas.', position: 4, productCount: 24 },
+  { id: 'c5', slug: 'antifit', name: 'Antifit', description: 'Anti-fit silhouettes.', position: 5, productCount: 9 },
 ];
 
 export const P1: ProductSummary = {
@@ -71,8 +72,12 @@ export const P1: ProductSummary = {
   color: 'Sage',
   flag: 'bestseller',
   imageUrl: null,
-  categorySlug: 'lehenga-sets',
-  categoryName: 'Lehenga Sets',
+  categorySlug: 'lehenga',
+  categoryName: 'Lehenga',
+  collection: 'The Verdant Edit',
+  occasion: 'Wedding',
+  dupattaPrice: null,
+  jacketPrice: null,
 };
 
 export const P2: ProductSummary = {
@@ -83,14 +88,20 @@ export const P2: ProductSummary = {
   color: 'Moss',
   flag: null,
   imageUrl: null,
-  categorySlug: 'lehenga-sets',
-  categoryName: 'Lehenga Sets',
+  categorySlug: 'lehenga',
+  categoryName: 'Lehenga',
+  collection: 'Festive Edit',
+  occasion: 'Festive',
+  dupattaPrice: null,
+  jacketPrice: null,
 };
 
 export const DETAIL1: ProductDetail = {
   ...P1,
   description: 'A hand-embroidered jacket lehenga in moss-sage tissue.',
   details: 'Moss-sage tissue with matte hand-sequin & zardozi embroidery\nDry clean only',
+  craft: 'Zardozi',
+  fabric: 'Tissue',
   active: true,
   variants: [
     { id: 'v1', productId: 'p1', size: 'S', stock: 3 },
@@ -98,6 +109,19 @@ export const DETAIL1: ProductDetail = {
     { id: 'v3', productId: 'p1', size: 'L', stock: 0 },
   ],
   related: [P2],
+};
+
+/** DETAIL1 with a priced dupatta + jacket, for set-includes tests. */
+export const DETAIL_SET: ProductDetail = {
+  ...DETAIL1,
+  id: 'p9',
+  slug: 'fern-zardozi-set-fern',
+  name: 'Fern Zardozi Set',
+  price: 15000000,
+  dupattaPrice: 1200000,
+  jacketPrice: 2400000,
+  variants: [{ id: 'v9', productId: 'p9', size: 'M', stock: 5 }],
+  related: [],
 };
 
 export const ORDER: Order = {
@@ -131,6 +155,8 @@ export const ORDER: Order = {
       unitPrice: 18400000,
       quantity: 1,
       imageUrl: null,
+      dupattaPrice: null,
+      jacketPrice: null,
     },
   ],
 };
@@ -149,6 +175,10 @@ export function seedCart() {
         unitPrice: 18400000,
         qty: 1,
         imageUrl: null,
+        includeDupatta: false,
+        includeJacket: false,
+        dupattaPrice: null,
+        jacketPrice: null,
       },
     ]),
   );

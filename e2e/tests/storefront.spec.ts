@@ -10,10 +10,10 @@ import {
   uniqueEmail,
 } from './helpers';
 
-const SAGE_LEHENGA = 'Sage Sequin Jacket Lehenga';
-const MOSS_GOWN = 'Moss Tissue Draped Gown';
-const PISTACHIO_ANARKALI = 'Pistachio Threadwork Anarkali';
-const FERN_GOWN = 'Fern Pleated Tissue Gown';
+const SAGE_LEHENGA = 'Zardozi Court Lehenga';
+const MOSS_GOWN = 'Organza Trail Kaftan';
+const PISTACHIO_ANARKALI = 'Threadwork Anarkali';
+const FERN_GOWN = 'Tissue Column Kaftan';
 
 // ---------------------------------------------------------------------------
 // Spec 1 — full guest purchase journey (runs on desktop AND mobile: @mobile)
@@ -32,15 +32,15 @@ test('guest purchase journey: home → collection → PDP → bag → checkout �
   // Bestseller cards are API-fed; poll until a ₹ price shows up.
   await expect(page.locator('#best .price').first()).toContainText('₹');
 
-  // Navigate to the Lehenga Sets collection.
+  // Navigate to the Lehenga collection.
   if (isMobile) {
     await page.getByRole('button', { name: 'Open menu' }).click();
     await page.getByRole('link', { name: 'Women' }).click();
   } else {
-    await page.getByRole('link', { name: /Lehenga Sets Explore/ }).click();
+    await page.getByRole('link', { name: /Lehenga Explore/ }).click();
   }
-  await expect(page).toHaveURL(/\/collection\/lehenga-sets/);
-  await expect(page.getByRole('heading', { name: 'Lehenga Sets', level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/\/collection\/lehenga/);
+  await expect(page.getByRole('heading', { name: 'Lehenga', level: 1 })).toBeVisible();
 
   // Open a product detail page.
   await page.getByRole('link', { name: new RegExp(SAGE_LEHENGA) }).click();
@@ -97,7 +97,7 @@ test('guest purchase journey: home → collection → PDP → bag → checkout �
 // ---------------------------------------------------------------------------
 
 test('payment failure shows an error and retrying succeeds', async ({ page, request }) => {
-  await page.goto('/product/moss-tissue-draped-gown');
+  await page.goto('/product/organza-trail-kaftan-celadon');
   await expect(page.getByRole('heading', { name: MOSS_GOWN, level: 1 })).toBeVisible();
   const size = await selectFirstAvailableSize(page);
   await page.getByRole('button', { name: 'Add to Bag' }).click();
@@ -148,7 +148,7 @@ test('registered customer sees their order in the account, and can manage the wi
   await expect(page.getByRole('heading', { name: /Welcome back, Meera/ })).toBeVisible();
 
   // Place an order while logged in.
-  await page.goto('/product/pistachio-threadwork-anarkali');
+  await page.goto('/product/threadwork-anarkali-pistachio');
   await expect(page.getByRole('heading', { name: PISTACHIO_ANARKALI, level: 1 })).toBeVisible();
   const size = await selectFirstAvailableSize(page);
   await page.getByRole('button', { name: 'Add to Bag' }).click();
@@ -169,7 +169,7 @@ test('registered customer sees their order in the account, and can manage the wi
   await expect(orderCard.locator('.badge')).toHaveText('In the Atelier');
 
   // Wishlist: save a piece from its PDP…
-  await page.goto('/product/fern-pleated-tissue-gown');
+  await page.goto('/product/tissue-column-kaftan-fern');
   await page.getByRole('button', { name: 'Add to Wishlist' }).click();
   await expect(page.getByRole('button', { name: 'Saved to Wishlist' })).toBeVisible();
 

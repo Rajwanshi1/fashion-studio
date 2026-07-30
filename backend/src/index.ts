@@ -14,6 +14,7 @@ import { createPool, makeTxRunner } from './db';
 import { migrate } from './migrate';
 import { seed } from './seed';
 import { createGoogleVerifier } from './services/google.verifier';
+import { LocalObjectStore, S3ObjectStore } from './services/objectstore';
 import { MockRazorpayProvider } from './services/payments.service';
 import { ConsoleSmsProvider, Msg91SmsProvider } from './services/sms.provider';
 
@@ -34,7 +35,17 @@ async function main() {
     console.log(seeded ? 'Seeded catalog + users' : 'Seed skipped (products already exist)');
   }
 
+  // S3 in production (permanent public URLs under products/); local disk +
+  // the dev-only /api/uploads/local transport otherwise.
+  const localUploads = config.s3UploadsBucket
+    ? null
+    : new LocalObjectStore(config.uploadsDir, config.publicApiUrl);
+  const objectStore = config.s3UploadsBucket
+    ? new S3ObjectStore(config.s3UploadsBucket, { region: config.awsRegion })
+    : localUploads!;
+
   const app = createApp({
+    uploads: { store: objectStore, local: localUploads },
     repos: {
       users: createUsersRepo(pool),
       products: createProductsRepo(pool),
@@ -73,6 +84,8 @@ async function main() {
   if (config.smsProvider === 'msg91') console.log('auth: phone OTP via MSG91');
   else if (config.smsProvider === 'console') console.warn('auth: phone OTP codes printed to console — dev only');
   else console.log('auth: phone OTP masked — set SMS_PROVIDER to enable');
+  if (config.s3UploadsBucket) console.log(`uploads: S3 bucket ${config.s3UploadsBucket}`);
+  else console.log(`uploads: local store at ${config.uploadsDir} (dev transport mounted)`);
 
   const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
     console.log(`Tanvi Agnihotry API listening on :${info.port}`);

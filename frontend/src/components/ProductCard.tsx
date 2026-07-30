@@ -1,4 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { displayPrice } from '../lib/format';
 import type { ProductSummary } from '../lib/types';
 import { useWishlist } from '../lib/wishlist';
 import ImageSlot from './ImageSlot';
@@ -55,7 +56,7 @@ export default function ProductCard({ product, fav = true, quick = true }: Produ
         <div className="cat">{product.categoryName}</div>
         <div className="nm">{product.name}</div>
         <div className="pr">
-          <Price paise={product.price} />
+          <Price paise={displayPrice(product)} />
         </div>
       </div>
     </Link>

@@ -140,6 +140,10 @@ export default function OrderConfirmation() {
                         <div className="nm">{it.productName}</div>
                         <div className="at">
                           {it.color} · {it.size} · Qty {it.quantity}
+                          {(it.dupattaPrice != null || it.jacketPrice != null) &&
+                            ` · With ${[it.dupattaPrice != null && 'dupatta', it.jacketPrice != null && 'jacket']
+                              .filter(Boolean)
+                              .join(' & ')}`}
                         </div>
                       </div>
                       <div className="pr">{formatINR(it.unitPrice * it.quantity)}</div>
@@ -157,7 +161,7 @@ export default function OrderConfirmation() {
               <Link className="btn-buy" to="/account">
                 Track in My Account
               </Link>
-              <Link className="btn-outline" to="/collection/lehenga-sets">
+              <Link className="btn-outline" to="/collection/lehenga">
                 Continue Shopping
               </Link>
             </div>

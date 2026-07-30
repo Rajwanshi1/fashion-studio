@@ -29,7 +29,7 @@ export default function Lookbook() {
             <span className="look-no">Look 01</span>
             <h3>The garden, after rain.</h3>
             <p>Sage sequin jacket lehenga with a hand-draped dupatta. Structured shoulder, fluid hem.</p>
-            <Link className="shop-look" to="/collection/lehenga-sets">
+            <Link className="shop-look" to="/collection/lehenga">
               Shop the Look →
             </Link>
           </div>
@@ -54,7 +54,7 @@ export default function Lookbook() {
             <span className="look-no">Look 04</span>
             <h3>Moss &amp; mirror.</h3>
             <p>A tissue draped gown caught with mirror-work — light moving as you do.</p>
-            <Link className="shop-look" to="/collection/gowns">
+            <Link className="shop-look" to="/collection/kaftan">
               Shop the Look →
             </Link>
           </div>
