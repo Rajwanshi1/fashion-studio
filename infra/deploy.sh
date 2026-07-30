@@ -66,10 +66,16 @@ cmd_stacks() {
   if [ -n "$DOMAIN_NAME" ]; then
     cert_arn=$(stack_out "$WAF_REGION" "fashion-$ENV_NAME-waf" CertificateArn)
   fi
+  # Presigned-upload CORS: the admin origin once a domain exists (mirrors
+  # cmd_cors); '*' for domainless envs — the CloudFront admin domain is a main
+  # stack output, unknowable before main's first deploy.
+  local uploads_cors='*'
+  if [ -n "$DOMAIN_NAME" ]; then uploads_cors="https://admin.$DOMAIN_NAME"; fi
   deploy_stack "$PRIMARY_REGION" "fashion-$ENV_NAME-main" infra/templates/main.yaml \
     AppInstanceType="$APP_INSTANCE_TYPE" AppMin="$APP_MIN" AppMax="$APP_MAX" WafWebAclArn="$waf_arn" \
     EcrRepoName="$ECR_REPO_NAME" DetailedMonitoring="$DETAILED_MONITORING" \
     PaymentProvider="$PAYMENT_PROVIDER" AllowMockPayments="$ALLOW_MOCK_PAYMENTS" \
+    UploadsCorsOrigins="$uploads_cors" \
     DomainName="$DOMAIN_NAME" CertificateArn="$cert_arn" HostedZoneId="$hosted_zone_id"
 }
 

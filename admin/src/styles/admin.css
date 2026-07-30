@@ -326,6 +326,18 @@ select.inp {
 @media (max-width: 480px) { .variants-grid { grid-template-columns: repeat(2, 1fr); } }
 
 .form-actions { display: flex; gap: 0.8rem; flex-wrap: wrap; margin-top: 1.8rem; }
+
+/* Product photo upload */
+.photo-row { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.photo-row .thumb { margin: 0; }
+.photo-row .thumb img {
+  width: 96px;
+  height: 128px;
+  object-fit: cover;
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  display: block;
+}
 .form-card {
   background: var(--surface);
   border: 1px solid var(--hairline);

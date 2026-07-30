@@ -20,7 +20,14 @@ const createOrderSchema = z.object({
   }),
   deliveryMethod: z.enum(['standard', 'priority']).default('standard'),
   // Emptiness is a domain rule (EMPTY_ORDER), enforced by the service.
-  items: z.array(z.object({ variantId: z.string().min(1), quantity: z.number().int().min(1) })),
+  items: z.array(
+    z.object({
+      variantId: z.string().min(1),
+      quantity: z.number().int().min(1),
+      includeDupatta: z.boolean().optional(),
+      includeJacket: z.boolean().optional(),
+    }),
+  ),
 });
 
 export function orderRoutes(orders: OrdersService, jwtSecret: string) {

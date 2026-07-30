@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import { FakeGoogleVerifier, FakePaymentProvider, Fakes, fakeTx, makeFakes, seedCatalog } from './fakes';
+import { FakeGoogleVerifier, FakePaymentProvider, Fakes, fakeTx, makeFakes, seedCatalog, seedSetProduct } from './fakes';
 
 const SECRET = 'api-test-secret';
 
@@ -267,6 +267,31 @@ describe('API', () => {
       expect((await app.request('/api/products/ghost')).status).toBe(404);
       expect((await app.request('/api/products/archived-lehenga')).status).toBe(404);
     });
+
+    it('lists distinct collections of active products and filters by collection', async () => {
+      await seedSetProduct(f.products, seeded.lehengas.id); // collection: The Verdant Edit
+      const collections = await (await app.request('/api/collections')).json();
+      expect(collections).toEqual(['The Verdant Edit']);
+
+      const filtered = await (
+        await app.request(`/api/products?collection=${encodeURIComponent('The Verdant Edit')}`)
+      ).json();
+      expect(filtered.items.map((p: any) => p.slug)).toEqual(['fern-zardozi-set-fern']);
+      expect(filtered.total).toBe(1);
+
+      const none = await (await app.request('/api/products?collection=Nope')).json();
+      expect(none.total).toBe(0);
+    });
+
+    it('exposes set-includes pricing fields on summaries and detail', async () => {
+      const set = await seedSetProduct(f.products, seeded.lehengas.id);
+      const list = await (await app.request('/api/products?search=zardozi')).json();
+      const summary = list.items.find((p: any) => p.id === set.id);
+      expect(summary).toMatchObject({ dupattaPrice: 1200000, jacketPrice: 2400000, collection: 'The Verdant Edit' });
+
+      const detail = await (await app.request('/api/products/fern-zardozi-set-fern')).json();
+      expect(detail).toMatchObject({ craft: 'Zardozi', fabric: 'Tissue', occasion: 'Wedding' });
+    });
   });
 
   describe('orders', () => {
@@ -501,6 +526,75 @@ describe('API', () => {
       expect((await app.request('/api/admin/variants/ghost', withMethod('PATCH', { stock: 1 }, adminToken))).status).toBe(404);
       expect((await app.request(`/api/admin/variants/${variantId}`, withMethod('PATCH', { stock: -2 }, adminToken))).status).toBe(400);
       expect((await app.request('/api/admin/products', withMethod('POST', { categoryId: 'ghost', slug: 'x', name: 'X', price: 1 }, adminToken))).status).toBe(404);
+    });
+
+    it('409s on duplicate slug for create and update', async () => {
+      const dupCreate = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categoryId: seeded.lehengas.id,
+          slug: 'sage-sequin-jacket-lehenga', // taken by the fixture
+          name: 'Copycat',
+          price: 100,
+        }, adminToken),
+      );
+      expect(dupCreate.status).toBe(409);
+      expect((await dupCreate.json()).error).toMatch(/slug/i);
+
+      const dupUpdate = await app.request(
+        `/api/admin/products/${seeded.moss.id}`,
+        withMethod('PUT', { slug: 'sage-sequin-jacket-lehenga' }, adminToken),
+      );
+      expect(dupUpdate.status).toBe(409);
+    });
+
+    it('bulk-deletes products: hard-deletes unordered, archives ordered, reports unknowns', async () => {
+      await placeOrder([{ variantId: sageM().id, quantity: 1 }]); // sage becomes archive-only
+      const res = await app.request(
+        '/api/admin/products/bulk-delete',
+        withMethod('POST', { ids: [seeded.sage.id, seeded.plain.id, 'ghost'] }, adminToken),
+      );
+      expect(res.status).toBe(200);
+      const { results } = await res.json();
+      expect(results).toEqual(
+        expect.arrayContaining([
+          { id: seeded.sage.id, outcome: 'archived' },
+          { id: seeded.plain.id, outcome: 'deleted' },
+          { id: 'ghost', outcome: 'not_found' },
+        ]),
+      );
+
+      // Both vanish from the admin list and the storefront…
+      const adminList = await (await app.request('/api/admin/products', bearer(adminToken))).json();
+      const adminIds = adminList.map((p: any) => p.id);
+      expect(adminIds).not.toContain(seeded.sage.id);
+      expect(adminIds).not.toContain(seeded.plain.id);
+      expect((await app.request('/api/products/celadon-tissue-draped-lehenga')).status).toBe(404);
+      expect((await app.request('/api/products/sage-sequin-jacket-lehenga')).status).toBe(404);
+
+      // …but the archived product's order history is intact.
+      const orders = await (await app.request('/api/admin/orders', bearer(adminToken))).json();
+      expect(orders[0].items[0].productName).toBe('Sage Sequin Jacket Lehenga');
+
+      // Gating: anonymous and customer requests are rejected.
+      expect((await app.request('/api/admin/products/bulk-delete', withMethod('POST', { ids: ['x'] }))).status).toBe(401);
+      // Empty list is a validation error.
+      expect((await app.request('/api/admin/products/bulk-delete', withMethod('POST', { ids: [] }, adminToken))).status).toBe(400);
+    });
+
+    it('frees an archived product\'s slug for re-use', async () => {
+      await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
+      await app.request('/api/admin/products/bulk-delete', withMethod('POST', { ids: [seeded.sage.id] }, adminToken));
+      const recreated = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categoryId: seeded.lehengas.id,
+          slug: 'sage-sequin-jacket-lehenga',
+          name: 'Sage Sequin Jacket Lehenga II',
+          price: 18400000,
+        }, adminToken),
+      );
+      expect(recreated.status).toBe(201);
     });
 
     it('creates products by categorySlug as well as categoryId', async () => {

@@ -13,6 +13,8 @@ import type { ScansRepo } from './data/scans.repo';
 import type { UsersRepo } from './data/users.repo';
 import { rateLimit } from './middleware/rate-limit';
 import { AuthEnv } from './middleware/auth';
+import type { LocalObjectStore, ObjectStore } from './services/objectstore';
+import { uploadsRoutes } from './routes/uploads.routes';
 import { adminRoutes } from './routes/admin.routes';
 import { analyticsRoutes } from './routes/analytics.routes';
 import { authRoutes } from './routes/auth.routes';
@@ -48,10 +50,14 @@ export interface AppDeps {
   runInTransaction: TxRunner;
   /** Liveness probe against the DB pool; absent → /api/ready always 503. */
   pingDb?: () => Promise<void>;
+  /** Product-image uploads; absent → the presign endpoint answers 503.
+   *  `local` mounts the dev-only /api/uploads/local transport. */
+  uploads?: { store: ObjectStore; local?: LocalObjectStore | null };
 }
 
 const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 503> = {
   EMAIL_TAKEN: 409,
+  SLUG_TAKEN: 409,
   INSUFFICIENT_STOCK: 409,
   PAYMENT_ALREADY_FINAL: 409,
   INVALID_CREDENTIALS: 401,
@@ -76,13 +82,16 @@ export function createApp(deps: AppDeps) {
   const app = new Hono<AuthEnv>();
 
   app.use(secureHeaders());
-  app.use(
-    '/api/*',
-    bodyLimit({
-      maxSize: 100 * 1024,
-      onError: (c) => c.json({ error: 'Payload too large' }, 413),
-    }),
-  );
+  // Photo uploads (up to 10 MB, own cap in uploads.routes) must bypass the
+  // JSON body limit; everything else stays capped at 100 KB.
+  const jsonBodyLimit = bodyLimit({
+    maxSize: 100 * 1024,
+    onError: (c) => c.json({ error: 'Payload too large' }, 413),
+  });
+  app.use('/api/*', (c, next) => {
+    if (c.req.path.startsWith('/api/uploads/local/')) return next();
+    return jsonBodyLimit(c, next);
+  });
 
   app.onError((err, c) => {
     if (err instanceof DomainError) return c.json({ error: err.message }, DOMAIN_STATUS[err.code]);
@@ -120,6 +129,9 @@ export function createApp(deps: AppDeps) {
   app.route('/api/payments', paymentRoutes(payments, jwtSecret));
   app.route('/api/socials', socialsRoutes(socials, jwtSecret));
   app.route('/api', analyticsRoutes(analytics, jwtSecret));
+  if (deps.uploads?.local) {
+    app.route('/api/uploads', uploadsRoutes(deps.uploads.local, jwtSecret));
+  }
   app.route(
     '/api/admin',
     adminRoutes({
@@ -128,6 +140,7 @@ export function createApp(deps: AppDeps) {
       payments: repos.payments,
       users: repos.users,
       ordersService: orders,
+      objectStore: deps.uploads?.store ?? null,
       jwtSecret,
     }),
   );

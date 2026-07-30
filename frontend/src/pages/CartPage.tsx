@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useCart } from '../lib/cart';
+import { cartLineKey, useCart } from '../lib/cart';
 import { formatINR } from '../lib/format';
 import Shop from '../components/Shop';
 import ImageSlot from '../components/ImageSlot';
@@ -29,7 +29,7 @@ export default function CartPage() {
           )}
 
           {items.map((i) => (
-            <article className="line" key={i.variantId}>
+            <article className="line" key={cartLineKey(i)}>
               <ImageSlot src={i.imageUrl} label={i.name} alt={i.name} />
               <div>
                 <div className="nm">
@@ -38,6 +38,13 @@ export default function CartPage() {
                 <div className="attrs">
                   <span>Colour — {i.color}</span>
                   <span>Size — {i.size}</span>
+                  {(i.includeDupatta || i.includeJacket) && (
+                    <span>
+                      Includes {[i.includeDupatta && 'dupatta', i.includeJacket && 'jacket']
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  )}
                   <span className="tag">Made to Order · 4–6 weeks</span>
                 </div>
                 <div className="controls">
@@ -45,7 +52,7 @@ export default function CartPage() {
                     <button
                       type="button"
                       aria-label="Decrease quantity"
-                      onClick={() => setQty(i.variantId, Math.max(1, i.qty - 1))}
+                      onClick={() => setQty(cartLineKey(i), Math.max(1, i.qty - 1))}
                     >
                       −
                     </button>
@@ -53,12 +60,12 @@ export default function CartPage() {
                     <button
                       type="button"
                       aria-label="Increase quantity"
-                      onClick={() => setQty(i.variantId, i.qty + 1)}
+                      onClick={() => setQty(cartLineKey(i), i.qty + 1)}
                     >
                       +
                     </button>
                   </div>
-                  <button className="rm" onClick={() => remove(i.variantId)}>
+                  <button className="rm" onClick={() => remove(cartLineKey(i))}>
                     Remove
                   </button>
                 </div>

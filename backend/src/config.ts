@@ -9,6 +9,12 @@ export interface Config {
   googleClientId: string | null;
   /** 'disabled' keeps checkout/confirm masked (both answer 503). */
   paymentProvider: 'mock' | 'disabled';
+  /** Null → LocalObjectStore under uploadsDir (dev/tests). */
+  s3UploadsBucket: string | null;
+  uploadsDir: string;
+  /** Base URL the local uploads transport is reachable at (dev only). */
+  publicApiUrl: string;
+  awsRegion: string;
 }
 
 const DEV_JWT_SECRET = 'dev-secret-change-in-prod';
@@ -62,5 +68,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     seedOnStart,
     googleClientId: env.GOOGLE_CLIENT_ID?.trim() || null,
     paymentProvider,
+    s3UploadsBucket: env.S3_UPLOADS_BUCKET?.trim() || null,
+    uploadsDir: env.UPLOADS_DIR ?? `${process.cwd()}/.data/uploads`,
+    publicApiUrl: env.PUBLIC_API_URL ?? `http://localhost:${parseInt(env.PORT ?? '3001', 10)}`,
+    awsRegion: env.AWS_REGION ?? 'ap-south-1',
   };
 }

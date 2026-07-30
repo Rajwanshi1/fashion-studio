@@ -25,10 +25,11 @@ export default function Footer({ mark = false }: FooterProps) {
         </div>
         <div className="foot-col">
           <h5>Shop</h5>
-          <Link to="/collection/lehenga-sets">Lehenga Sets</Link>
-          <Link to="/collection/jacket-sets">Jacket Sets</Link>
-          <Link to="/collection/gowns">Gowns</Link>
+          <Link to="/collection/lehenga">Lehenga</Link>
           <Link to="/collection/anarkali">Anarkali</Link>
+          <Link to="/collection/suits">Suits</Link>
+          <Link to="/collection/kaftan">Kaftan</Link>
+          <Link to="/collection/antifit">Antifit</Link>
         </div>
         <div className="foot-col">
           <h5>The House</h5>

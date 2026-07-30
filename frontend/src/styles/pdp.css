@@ -40,6 +40,10 @@
 .page-pdp .size:disabled { opacity: 0.4; cursor: not-allowed; text-decoration: line-through; }
 .page-pdp .size.custom { letter-spacing: var(--track-wide); text-transform: uppercase; font-size: 0.66rem; }
 
+.page-pdp .set-includes { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 1.6rem; }
+.page-pdp .set-includes .check { display: flex; gap: 0.6rem; align-items: center; font-size: var(--t-sm); color: var(--ink-soft); cursor: pointer; }
+.page-pdp .set-includes .check input { accent-color: var(--forest-700); width: 15px; height: 15px; flex: none; }
+
 .page-pdp .mto { display: flex; gap: 0.8rem; align-items: flex-start; background: var(--celadon-50); border: 1px solid var(--hairline); padding: 1rem 1.2rem; margin-bottom: 1.6rem; }
 .page-pdp .mto .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--gold); margin-top: 0.5rem; flex: none; }
 .page-pdp .mto p { margin: 0; font-size: var(--t-sm); color: var(--ink-soft); }
