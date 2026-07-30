@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 export interface Column<T> {
   key: string;
-  label: string;
+  label: ReactNode;
   align?: 'right';
   render: (row: T) => ReactNode;
 }
