@@ -1,11 +1,12 @@
 // Claude-backed document parser. Sends the stored photo plus the kind-specific
 // prompt to Claude and returns the schema-conforming draft JSON.
 //
-// Transport is Amazon Bedrock's Messages-API endpoint (see ./bedrock.ts), so the
-// only credential involved is the EC2 instance role — there is no API key
-// anywhere. This file stays transport-agnostic apart from the model-id prefix
-// below; it takes its client through `AnthropicMessagesClient`, which is what
-// lets every test run without touching AWS.
+// Transport is the first-party Claude API, authenticated with an API key held in
+// Secrets Manager (see ./anthropic.ts). Bedrock was built first and reverted: it
+// serves these models only through global routing out of ap-south-1, and model
+// access is not granted on this account, so nothing could be verified live.
+// This file is transport-agnostic — it takes its client through
+// `AnthropicMessagesClient`, which is what lets every test run offline.
 //
 // Structured output mechanism (verified against the INSTALLED SDK,
 // @anthropic-ai/sdk 0.114.0): `MessageCreateParams.output_config` takes an
@@ -25,8 +26,8 @@ export interface BillParser {
 
 /**
  * The thin slice of the Anthropic client the parser uses — injectable so tests
- * never touch the real API. Both the first-party client and the Bedrock one
- * satisfy this shape (one cast where they are constructed).
+ * never touch the real API. The real `Anthropic` client satisfies this shape
+ * (one cast where it is constructed, in ./anthropic.ts).
  */
 export interface AnthropicMessagesClient {
   messages: {
@@ -63,20 +64,25 @@ export interface AnthropicMessagesClient {
  */
 const MAX_TOKENS = 32_768;
 
-/** Bedrock rejects images over 5 MB base64 (the first-party API allows 10 MB). */
-const MAX_IMAGE_BASE64_BYTES = 5 * 1024 * 1024;
-
-/** Bedrock model ids carry a provider prefix; the tuning file stores bare names. */
-const MODEL_PREFIX = 'anthropic.';
+/** The first-party API rejects images over 10 MB base64. */
+const MAX_IMAGE_BASE64_BYTES = 10 * 1024 * 1024;
 
 /**
- * Raised when the failure is a provisioning problem rather than a bad photo —
- * model access not granted, or an unknown model id. The documents service turns
- * this into the same 503 that a missing parser produces, so the intake wizard
- * falls back to manual entry instead of showing a hard error.
+ * Raised when the failure is a provisioning problem rather than a bad photo — a
+ * rejected key, a model this account cannot use, an exhausted balance. The
+ * documents service turns this into the same 503 that a missing parser produces,
+ * so the intake wizard falls back to manual entry instead of showing a hard
+ * error mid-scan.
  */
 export class ParserUnavailableError extends Error {}
 
+/**
+ * Splits client failures into "this deployment is not set up" and everything
+ * else. The reason always travels with it either way — the HEIC bug showed what
+ * a masked reason costs. Transient failures (429, 529, 5xx) are deliberately
+ * NOT unavailable: they should surface as errors rather than be mistaken for a
+ * configuration gap and silently degrade to manual entry forever.
+ */
 function describeClientError(err: unknown): { message: string; unavailable: boolean } {
   const e = err as { status?: number; message?: string; error?: { error?: { type?: string; message?: string } } };
   const body = e?.error?.error;
@@ -84,26 +90,33 @@ function describeClientError(err: unknown): { message: string; unavailable: bool
   const type = body?.type;
   const status = e?.status;
 
-  // The two failure modes seen while provisioning this, kept distinguishable on
-  // purpose: masking the reason is what turns a one-line fix into a long hunt.
+  if (status === 401 || type === 'authentication_error') {
+    return {
+      unavailable: true,
+      message: `${detail} — check the ANTHROPIC_API_KEY value in fashion/<env>/anthropic-api-key`,
+    };
+  }
   if (status === 403 || type === 'permission_error') {
     return {
       unavailable: true,
-      message: `${detail} — enable access to this model in the Bedrock console (Model access) for the region the API calls`,
+      message: `${detail} — the key's workspace may not allow this model, or its spend limit is reached`,
     };
   }
   if (status === 404 || type === 'not_found_error') {
-    return {
-      unavailable: true,
-      message: `${detail} — check the model id and that the region serves it`,
-    };
+    return { unavailable: true, message: `${detail} — check the model id in prompts.ts` };
+  }
+  // Not a documented status of its own: a spent balance arrives as a 400 whose
+  // message names it. Worth catching, because it degrades exactly like a missing
+  // key and would otherwise read as a bad request.
+  if (/credit balance/i.test(detail)) {
+    return { unavailable: true, message: `${detail} — top up the Anthropic account or raise its spend limit` };
   }
   return { unavailable: false, message: status ? `${status} ${detail}` : detail };
 }
 
 export class AnthropicBillParser implements BillParser {
   /**
-   * @param client  the Messages client (Bedrock in every deployed environment).
+   * @param client  the Messages client (see ./anthropic.ts for the real one).
    * @param modelOverride  forces one model for every kind; only for pinning a
    *   model without a code change. Normally null so PARSE_SPECS decides per kind.
    */
@@ -113,8 +126,7 @@ export class AnthropicBillParser implements BillParser {
   ) {}
 
   private modelFor(kind: ParseKind): string {
-    const bare = this.modelOverride?.trim() || PARSE_SPECS[kind].model;
-    return bare.startsWith(MODEL_PREFIX) ? bare : `${MODEL_PREFIX}${bare}`;
+    return this.modelOverride?.trim() || PARSE_SPECS[kind].model;
   }
 
   async parse(kind: ParseKind, image: { bytes: Uint8Array; mediaType: string }): Promise<unknown> {
@@ -124,7 +136,7 @@ export class AnthropicBillParser implements BillParser {
 
     if (data.length > MAX_IMAGE_BASE64_BYTES) {
       throw new Error(
-        `The ${kind} photo is ${(data.length / 1024 / 1024).toFixed(1)} MB base64, over the 5 MB per-image limit. ` +
+        `The ${kind} photo is ${(data.length / 1024 / 1024).toFixed(1)} MB base64, over the 10 MB per-image limit. ` +
           'Re-capture it through the intake wizard, which downscales before upload.',
       );
     }

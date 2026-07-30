@@ -18,10 +18,7 @@ export interface KindSpec {
   schema: Record<string, unknown>;
   /** Instruction prompt sent alongside the photo. */
   prompt: string;
-  /**
-   * Model for this kind, written bare — the parser adds the transport's
-   * `anthropic.` prefix, so this file stays independent of how we reach Claude.
-   */
+  /** Claude API model id for this kind, e.g. `claude-opus-5`. */
   model: string;
   /**
    * Thinking effort. Claude 5 models think adaptively and default to `high` on
@@ -181,8 +178,8 @@ Extract exactly per the response schema:
  * and every miss costs a correction on the review screen. Courier receipts are
  * mostly printed labels, so Sonnet 5 handles them at a fraction of the cost.
  *
- * Compare these empirically with backend/scripts/parse-photo.mjs rather than by
- * argument — it prints tokens, latency and measured cost per photo.
+ * Compare these empirically with `npm run parse:photo` rather than by argument —
+ * it prints tokens, latency and measured cost for one real photo.
  */
 export const PARSE_SPECS: Record<ParseKind, KindSpec> = {
   bill: { schema: billSchema, prompt: billPrompt, model: 'claude-opus-5', effort: 'medium' },

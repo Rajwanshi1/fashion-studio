@@ -56,7 +56,7 @@ export interface AppDeps {
   paymentProvider: PaymentProvider | null;
   /** Document photo storage — S3 in production, LocalObjectStore in dev/tests. */
   objectStore: ObjectStore;
-  /** Parsing seam — null/undefined masks it (parse answers 503); tests inject a fake. */
+  /** Masked parsing seam — null/undefined until ANTHROPIC_API_KEY exists (parse answers 503). */
   billParser?: BillParser | null;
   /** Set only when the LocalObjectStore is active — mounts the dev-only /api/uploads transport. */
   localUploads?: LocalObjectStore | null;
