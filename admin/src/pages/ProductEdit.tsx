@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
+import { uploadProductImage } from '../lib/uploads';
 import type { AdminProduct, Category, Variant } from '../lib/types';
 import { useToast } from '../components/Toast';
 
@@ -74,7 +75,9 @@ export default function ProductEdit() {
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [pendingCategorySlug, setPendingCategorySlug] = useState<string | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let live = true;
@@ -168,6 +171,22 @@ export default function ProductEdit() {
     if (rupees.trim() === '') return null;
     const paise = Math.round(Number(rupees) * 100);
     return Number.isFinite(paise) && paise >= 0 ? paise : undefined;
+  };
+
+  const onPhotoPicked = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file (retake)
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { publicUrl } = await uploadProductImage(file);
+      set('imageUrl', publicUrl);
+      toast('Photo uploaded');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Photo upload failed');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const onSubmit = async (e: FormEvent) => {
@@ -480,9 +499,35 @@ export default function ProductEdit() {
           </div>
         </div>
 
+        <p className="section-label">Photo</p>
+        <div className="field">
+          <input
+            ref={photoInput}
+            type="file"
+            accept="image/*,.heic,.heif"
+            hidden
+            aria-label="Product photo file"
+            onChange={(e) => void onPhotoPicked(e)}
+          />
+          <div className="photo-row">
+            <button
+              type="button"
+              className="btn-outline fit"
+              disabled={uploading}
+              onClick={() => photoInput.current?.click()}
+            >
+              {uploading ? 'Uploading…' : form.imageUrl ? 'Replace photo' : 'Upload photo'}
+            </button>
+            {form.imageUrl && (
+              <figure className="thumb">
+                <img src={form.imageUrl} alt="Product photo preview" />
+              </figure>
+            )}
+          </div>
+        </div>
         <div className="field">
           <label className="lab" htmlFor="p-image">
-            Image URL (optional)
+            Image URL (or paste one directly)
           </label>
           <input
             id="p-image"

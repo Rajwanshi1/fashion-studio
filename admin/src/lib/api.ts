@@ -18,7 +18,7 @@ export class ApiError extends Error implements ApiErrorShape {
   }
 }
 
-function storedToken(): string | null {
+export function storedToken(): string | null {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;

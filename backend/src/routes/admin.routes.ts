@@ -6,6 +6,7 @@ import type { PaymentsRepo } from '../data/payments.repo';
 import type { ProductsRepo } from '../data/products.repo';
 import type { UsersRepo } from '../data/users.repo';
 import { AuthEnv, requireAdmin, requireAuth } from '../middleware/auth';
+import { newStorageKey, type ObjectStore } from '../services/objectstore';
 import type { OrdersService } from '../services/orders.service';
 import { OrderStatus } from '../types';
 import { zodHook } from './hooks';
@@ -62,6 +63,8 @@ export interface AdminDeps {
   payments: PaymentsRepo;
   users: UsersRepo;
   ordersService: OrdersService;
+  /** Null → product-image presign answers 503. */
+  objectStore: ObjectStore | null;
   jwtSecret: string;
 }
 
@@ -117,6 +120,21 @@ export function adminRoutes(deps: AdminDeps) {
     if (!categoryId) return c.json({ error: 'Category not found' }, 404);
     return c.json(await deps.products.createProduct({ ...body, categoryId }), 201);
   });
+
+  // Presign a direct-to-storage PUT for a product photo and hand back the
+  // permanent public URL to store in imageUrl. The admin client always
+  // re-encodes to JPEG (see admin/src/lib/image.ts).
+  r.post(
+    '/uploads/product-image',
+    zValidator('json', z.object({ contentType: z.literal('image/jpeg') }), zodHook),
+    async (c) => {
+      if (!deps.objectStore) return c.json({ error: 'Uploads are not configured' }, 503);
+      const { contentType } = c.req.valid('json');
+      const key = newStorageKey('products');
+      const { url, headers } = await deps.objectStore.presignPut(key, contentType);
+      return c.json({ key, uploadUrl: url, headers, publicUrl: deps.objectStore.publicUrl(key) }, 201);
+    },
+  );
 
   r.post('/products/bulk-delete', zValidator('json', bulkDeleteSchema, zodHook), async (c) => {
     const { ids } = c.req.valid('json');

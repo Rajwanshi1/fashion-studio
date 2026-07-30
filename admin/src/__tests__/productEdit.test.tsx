@@ -1,6 +1,15 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mockFetch, renderApp, seedAdminAuth } from '../test/utils';
+import { uploadProductImage } from '../lib/uploads';
+
+// prepareImage needs canvas/createImageBitmap, which jsdom lacks — the upload
+// pipeline itself is covered by backend/test/uploads.test.ts.
+vi.mock('../lib/uploads', () => ({
+  uploadProductImage: vi.fn(async () => ({
+    publicUrl: 'https://fashion-uploads.s3.ap-south-1.amazonaws.com/products/2026/07/abc.jpg',
+  })),
+}));
 
 const CATEGORIES = [
   { id: 'c1', slug: 'gowns', name: 'Gowns', description: '', position: 1 },
@@ -182,5 +191,29 @@ describe('ProductEdit', () => {
 
     const put = calls.find((c) => c.method === 'PUT');
     expect((put?.body as { slug: string }).slug).toBe('moss-drape-kaftan-fern');
+  });
+
+  it('uploading a photo fills the image URL with the permanent public URL', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/categories')) return { json: CATEGORIES };
+      if (url.endsWith('/api/admin/products')) return { json: [] };
+      return undefined;
+    });
+
+    renderApp('/products/new');
+    await screen.findByRole('option', { name: 'Gowns' });
+
+    const file = new File([new Uint8Array([1, 2, 3])], 'shot.jpg', { type: 'image/jpeg' });
+    await userEvent.upload(screen.getByLabelText('Product photo file'), file);
+
+    expect(uploadProductImage).toHaveBeenCalledWith(file);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Image URL (or paste one directly)')).toHaveValue(
+        'https://fashion-uploads.s3.ap-south-1.amazonaws.com/products/2026/07/abc.jpg',
+      ),
+    );
+    // Preview thumb renders from the new URL.
+    expect(screen.getByAltText('Product photo preview')).toBeInTheDocument();
   });
 });
