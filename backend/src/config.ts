@@ -9,6 +9,12 @@ export interface Config {
   googleClientId: string | null;
   /** 'disabled' keeps checkout/confirm masked (both answer 503). */
   paymentProvider: 'mock' | 'disabled';
+  /** 'disabled' keeps phone-OTP login masked (endpoints answer 503). */
+  smsProvider: 'msg91' | 'console' | 'disabled';
+  msg91AuthKey: string | null;
+  msg91TemplateId: string | null;
+  /** Fixed OTP for dev/e2e. Only honored alongside the console provider. */
+  otpDevCode: string | null;
   /** Null → LocalObjectStore under uploadsDir (dev/tests). */
   s3UploadsBucket: string | null;
   uploadsDir: string;
@@ -28,6 +34,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const paymentProvider = env.PAYMENT_PROVIDER ?? (nodeEnv === 'production' ? 'disabled' : 'mock');
   if (paymentProvider !== 'mock' && paymentProvider !== 'disabled') {
     throw new Error(`PAYMENT_PROVIDER must be 'mock' or 'disabled', got '${paymentProvider}'`);
+  }
+
+  // Fail-closed: an unset SMS_PROVIDER means disabled in production.
+  const smsProvider = env.SMS_PROVIDER ?? (nodeEnv === 'production' ? 'disabled' : 'console');
+  if (smsProvider !== 'msg91' && smsProvider !== 'console' && smsProvider !== 'disabled') {
+    throw new Error(`SMS_PROVIDER must be 'msg91', 'console' or 'disabled', got '${smsProvider}'`);
+  }
+  if (smsProvider === 'msg91' && (!env.MSG91_AUTH_KEY || !env.MSG91_TEMPLATE_ID)) {
+    throw new Error('SMS_PROVIDER=msg91 requires MSG91_AUTH_KEY and MSG91_TEMPLATE_ID');
   }
 
   if (nodeEnv === 'production') {
@@ -54,6 +69,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
           'only on staging.'
       );
     }
+    if (smsProvider === 'console' && env.ALLOW_CONSOLE_OTP !== 'true') {
+      throw new Error(
+        'SMS_PROVIDER=console is not allowed in production (OTP codes are printed to logs). ' +
+          'Use msg91, or set ALLOW_CONSOLE_OTP=true only on staging.'
+      );
+    }
   }
 
   return {
@@ -68,6 +89,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     seedOnStart,
     googleClientId: env.GOOGLE_CLIENT_ID?.trim() || null,
     paymentProvider,
+    smsProvider,
+    msg91AuthKey: env.MSG91_AUTH_KEY?.trim() || null,
+    msg91TemplateId: env.MSG91_TEMPLATE_ID?.trim() || null,
+    otpDevCode: env.OTP_DEV_CODE?.trim() || null,
     s3UploadsBucket: env.S3_UPLOADS_BUCKET?.trim() || null,
     uploadsDir: env.UPLOADS_DIR ?? `${process.cwd()}/.data/uploads`,
     publicApiUrl: env.PUBLIC_API_URL ?? `http://localhost:${parseInt(env.PORT ?? '3001', 10)}`,

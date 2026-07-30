@@ -28,6 +28,7 @@ describe('AuthService', () => {
     expect(user).toEqual({
       id: expect.any(String),
       email: 'aanya@example.com',
+      phone: null,
       firstName: 'Aanya',
       lastName: 'Mehra',
       role: 'customer',
@@ -108,6 +109,7 @@ describe('AuthService', () => {
       expect(user).toEqual({
         id: expect.any(String),
         email: 'riya@example.com',
+        phone: null,
         firstName: 'Riya',
         lastName: 'Kapoor',
         role: 'customer',

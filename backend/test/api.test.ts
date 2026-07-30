@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import { FakeGoogleVerifier, FakePaymentProvider, Fakes, fakeTx, makeFakes, seedCatalog, seedSetProduct } from './fakes';
+import { FakeGoogleVerifier, FakePaymentProvider, Fakes, FakeSmsProvider, fakeTx, makeFakes, seedCatalog, seedSetProduct } from './fakes';
 
 const SECRET = 'api-test-secret';
 
@@ -350,6 +350,58 @@ describe('API', () => {
     });
   });
 
+  describe('phone otp', () => {
+    let sms: FakeSmsProvider;
+    let otpApp: ReturnType<typeof createApp>;
+
+    beforeEach(() => {
+      sms = new FakeSmsProvider();
+      otpApp = createApp({
+        repos: f,
+        paymentProvider: new FakePaymentProvider(),
+        smsProvider: sms,
+        otpDevCode: '123456',
+        jwtSecret: SECRET,
+        corsOrigins: ['http://localhost:5173'],
+        runInTransaction: fakeTx,
+      });
+    });
+
+    it('503 while no SMS provider is configured (masked)', async () => {
+      const res = await app.request('/api/auth/otp/request', post({ phone: '9876543210' }));
+      expect(res.status).toBe(503);
+      expect((await res.json()).error).toMatch(/not configured/);
+    });
+
+    it('400 on an invalid phone or malformed code', async () => {
+      expect((await otpApp.request('/api/auth/otp/request', post({ phone: '12345678' }))).status).toBe(400);
+      expect((await otpApp.request('/api/auth/otp/verify', post({ phone: '9876543210', code: 'abc123' }))).status).toBe(400);
+    });
+
+    it('request → verify issues a JWT that works on /api/auth/me', async () => {
+      const req = await otpApp.request('/api/auth/otp/request', post({ phone: '98765 43210' }));
+      expect(req.status).toBe(200);
+      expect(await req.json()).toEqual({ phone: '+919876543210' });
+      expect(sms.sent).toEqual([{ phone: '+919876543210', code: '123456' }]);
+
+      const res = await otpApp.request('/api/auth/otp/verify', post({ phone: '9876543210', code: '123456' }));
+      expect(res.status).toBe(200);
+      const { token, user } = await res.json();
+      expect(user).toMatchObject({ phone: '+919876543210', email: null, role: 'customer' });
+      expect(user).not.toHaveProperty('passwordHash');
+
+      const me = await otpApp.request('/api/auth/me', bearer(token));
+      expect(me.status).toBe(200);
+      expect((await me.json()).user).toEqual(user);
+    });
+
+    it('401 on a wrong code', async () => {
+      await otpApp.request('/api/auth/otp/request', post({ phone: '9876543210' }));
+      const res = await otpApp.request('/api/auth/otp/verify', post({ phone: '9876543210', code: '999999' }));
+      expect(res.status).toBe(401);
+    });
+  });
+
   describe('payments', () => {
     it('checkout returns the masked Razorpay payload', async () => {
       const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
@@ -672,6 +724,7 @@ describe('API', () => {
       expect(list[0]).toEqual({
         id: user.id,
         email: 'aanya@example.com',
+        phone: null,
         firstName: 'Aanya',
         lastName: 'Mehra',
         role: 'customer',

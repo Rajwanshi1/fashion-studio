@@ -4,17 +4,19 @@ export type Role = 'customer' | 'admin';
 
 export interface PublicUser {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   firstName: string;
   lastName: string;
   role: Role;
 }
 
-export type AuthProvider = 'password' | 'google';
+export type AuthProvider = 'password' | 'google' | 'otp';
 
 export interface AdminUser {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   firstName: string;
   lastName: string;
   role: Role;

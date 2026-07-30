@@ -75,6 +75,7 @@ cmd_stacks() {
     AppInstanceType="$APP_INSTANCE_TYPE" AppMin="$APP_MIN" AppMax="$APP_MAX" WafWebAclArn="$waf_arn" \
     EcrRepoName="$ECR_REPO_NAME" DetailedMonitoring="$DETAILED_MONITORING" \
     PaymentProvider="$PAYMENT_PROVIDER" AllowMockPayments="$ALLOW_MOCK_PAYMENTS" \
+    SmsProvider="${SMS_PROVIDER:-disabled}" AllowConsoleOtp="${ALLOW_CONSOLE_OTP:-false}" \
     UploadsCorsOrigins="$uploads_cors" \
     DomainName="$DOMAIN_NAME" CertificateArn="$cert_arn" HostedZoneId="$hosted_zone_id"
 }

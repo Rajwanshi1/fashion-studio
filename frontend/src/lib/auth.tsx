@@ -17,6 +17,8 @@ interface AuthContextValue {
   user: PublicUser | null;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (credential: string) => Promise<void>;
+  requestOtp: (phone: string) => Promise<{ phone: string }>;
+  verifyOtp: (phone: string, code: string) => Promise<void>;
   register: (
     firstName: string,
     lastName: string,
@@ -64,6 +66,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     track('login', { props: { method: 'google' } });
   }, []);
 
+  const requestOtp = useCallback(async (phone: string) => {
+    return api.post<{ phone: string }>('/api/auth/otp/request', { phone });
+  }, []);
+
+  const verifyOtp = useCallback(async (phone: string, code: string) => {
+    const res = await api.post<AuthResponse>('/api/auth/otp/verify', { phone, code });
+    persist(res.token, res.user);
+    track('login', { props: { method: 'otp' } });
+  }, []);
+
   const register = useCallback(
     async (firstName: string, lastName: string, email: string, password: string) => {
       const res = await api.post<AuthResponse>('/api/auth/register', {
@@ -81,8 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => persist(null, null), []);
 
   const value = useMemo(
-    () => ({ token: state.token, user: state.user, login, loginWithGoogle, register, logout }),
-    [state, login, loginWithGoogle, register, logout],
+    () => ({ token: state.token, user: state.user, login, loginWithGoogle, requestOtp, verifyOtp, register, logout }),
+    [state, login, loginWithGoogle, requestOtp, verifyOtp, register, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

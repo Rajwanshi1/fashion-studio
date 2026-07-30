@@ -21,6 +21,15 @@ const googleSchema = z.object({
   credential: z.string().min(1),
 });
 
+const otpRequestSchema = z.object({
+  phone: z.string().min(8).max(20),
+});
+
+const otpVerifySchema = z.object({
+  phone: z.string().min(8).max(20),
+  code: z.string().regex(/^\d{6}$/),
+});
+
 export function authRoutes(auth: AuthService, jwtSecret: string) {
   const r = new Hono<AuthEnv>();
 
@@ -36,6 +45,15 @@ export function authRoutes(auth: AuthService, jwtSecret: string) {
   // Google Identity Services credential → our JWT. 503 until GOOGLE_CLIENT_ID is configured.
   r.post('/google', zValidator('json', googleSchema, zodHook), async (c) => {
     return c.json(await auth.loginWithGoogle(c.req.valid('json').credential));
+  });
+
+  // Phone OTP login. 503 until an SMS provider is configured.
+  r.post('/otp/request', zValidator('json', otpRequestSchema, zodHook), async (c) => {
+    return c.json(await auth.requestOtp(c.req.valid('json').phone));
+  });
+
+  r.post('/otp/verify', zValidator('json', otpVerifySchema, zodHook), async (c) => {
+    return c.json(await auth.verifyOtp(c.req.valid('json')));
   });
 
   r.get('/me', requireAuth(jwtSecret), async (c) => {

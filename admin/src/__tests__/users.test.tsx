@@ -5,6 +5,7 @@ import type { AdminUser } from '../lib/types';
 
 const ME: AdminUser = {
   ...ADMIN_AUTH.user,
+  phone: null,
   authProvider: 'password',
   createdAt: '2026-01-05T10:00:00.000Z',
   ordersCount: 0,
@@ -13,6 +14,7 @@ const ME: AdminUser = {
 const CUSTOMER: AdminUser = {
   id: 'u2',
   email: 'meera@example.in',
+  phone: '+919876543210',
   firstName: 'Meera',
   lastName: 'Kapoor',
   role: 'customer',
@@ -24,6 +26,7 @@ const CUSTOMER: AdminUser = {
 const GUEST: AdminUser = {
   id: 'u3',
   email: 'guest@example.in',
+  phone: null,
   firstName: '',
   lastName: '',
   role: 'customer',
@@ -51,7 +54,9 @@ describe('Users', () => {
     // names — em-dash when the user has no name
     expect(screen.getByText('Meera Kapoor')).toBeInTheDocument();
     expect(screen.getByText('Tanvi Agnihotry', { selector: 'td .nm' })).toBeInTheDocument();
-    expect(screen.getByText('—', { selector: 'td .dim' })).toBeInTheDocument();
+    // one for the guest's missing name, one each for ME/GUEST's missing phone
+    expect(screen.getAllByText('—', { selector: 'td .dim' })).toHaveLength(3);
+    expect(screen.getByText('+919876543210')).toBeInTheDocument();
 
     // emails, provider badges, role pills
     expect(screen.getByText('meera@example.in')).toBeInTheDocument();

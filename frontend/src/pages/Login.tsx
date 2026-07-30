@@ -42,14 +42,14 @@ declare global {
 const GSI_SRC = 'https://accounts.google.com/gsi/client';
 
 export default function Login() {
-  const { login, loginWithGoogle, register } = useAuth();
+  const { login, loginWithGoogle, requestOtp, verifyOtp, register } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
   const googleClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) || undefined;
   const googleSlotRef = useRef<HTMLDivElement | null>(null);
 
-  const [tab, setTab] = useState<'signin' | 'register'>('signin');
+  const [tab, setTab] = useState<'signin' | 'phone' | 'register'>('signin');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,6 +59,9 @@ export default function Login() {
   const [lastName, setLastName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [otpPhone, setOtpPhone] = useState<string | null>(null); // normalized number a code was sent to
+  const [otpCode, setOtpCode] = useState('');
 
   const onSignIn = async (e: FormEvent) => {
     e.preventDefault();
@@ -122,6 +125,35 @@ export default function Login() {
     };
   }, [googleClientId, loginWithGoogle, navigate]);
 
+  const onSendCode = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const { phone: normalized } = await requestOtp(phone);
+      setOtpPhone(normalized);
+      setOtpCode('');
+    } catch (err) {
+      setError((err as { message?: string }).message ?? 'Unable to send the code.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onVerifyCode = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await verifyOtp(otpPhone ?? phone, otpCode);
+      navigate('/account');
+    } catch (err) {
+      setError((err as { message?: string }).message ?? 'Unable to verify the code.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onRegister = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -158,6 +190,15 @@ export default function Login() {
               }}
             >
               Sign In
+            </button>
+            <button
+              className={`auth-tab${tab === 'phone' ? ' on' : ''}`}
+              onClick={() => {
+                setTab('phone');
+                setError(null);
+              }}
+            >
+              Phone
             </button>
             <button
               className={`auth-tab${tab === 'register' ? ' on' : ''}`}
@@ -213,6 +254,88 @@ export default function Login() {
             <button className="btn-buy" type="submit" disabled={busy}>
               {busy ? 'Signing In…' : 'Sign In'}
             </button>
+          </form>
+
+          <form
+            className={`auth-panel${tab === 'phone' ? ' on' : ''}`}
+            onSubmit={otpPhone ? onVerifyCode : onSendCode}
+          >
+            <h1>Sign in with your phone</h1>
+            <p className="lead">
+              {otpPhone
+                ? `Enter the 6-digit code sent to ${otpPhone}.`
+                : 'We’ll text you a one-time code — no password needed.'}
+            </p>
+            {tab === 'phone' && error && <p className="auth-err">{error}</p>}
+            {!otpPhone ? (
+              <div className="field">
+                <label className="lab" htmlFor="ph-number">
+                  Mobile Number
+                </label>
+                <input
+                  id="ph-number"
+                  className="inp"
+                  type="tel"
+                  autoComplete="tel"
+                  placeholder="+91 90000 00000"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+              </div>
+            ) : (
+              <div className="field">
+                <label className="lab" htmlFor="ph-code">
+                  One-Time Code
+                </label>
+                <input
+                  id="ph-code"
+                  className="inp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="\d{6}"
+                  maxLength={6}
+                  placeholder="••••••"
+                  required
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                />
+              </div>
+            )}
+            <button className="btn-buy" type="submit" disabled={busy}>
+              {otpPhone
+                ? busy
+                  ? 'Verifying…'
+                  : 'Verify & Sign In'
+                : busy
+                  ? 'Sending Code…'
+                  : 'Send Code'}
+            </button>
+            {otpPhone && (
+              <div className="auth-row" style={{ marginTop: '0.8rem' }}>
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setOtpPhone(null);
+                    setOtpCode('');
+                    setError(null);
+                  }}
+                >
+                  Use a different number
+                </a>
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (!busy) void onSendCode(e);
+                  }}
+                >
+                  Resend code
+                </a>
+              </div>
+            )}
           </form>
 
           <form className={`auth-panel${tab === 'register' ? ' on' : ''}`} onSubmit={onRegister}>
