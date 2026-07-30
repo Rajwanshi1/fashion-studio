@@ -12,6 +12,8 @@ import {
 } from './helpers';
 
 const FERN_GOWN = 'Tissue Column Kaftan';
+// Untouched by the other specs, so this run's order is unambiguously its own.
+const ORDER_SLUG = 'heritage-silk-anarkali-verdigris';
 
 // A paid order created through the public API before the admin tests run,
 // so every assertion below is against data this run created.
@@ -19,7 +21,7 @@ let order: CreatedOrder;
 
 test.beforeAll(async ({ playwright }) => {
   const ctx = await playwright.request.newContext();
-  order = await createPaidOrderViaApi(ctx, uniqueEmail('adminspec'), 'celadon-organza-cape-set');
+  order = await createPaidOrderViaApi(ctx, uniqueEmail('adminspec'), ORDER_SLUG);
   await ctx.dispose();
 });
 
@@ -78,8 +80,10 @@ test('products: 13+ pieces listed; S-size stock edit persists and is restored', 
   const bodyRows = page.locator('table.data tbody tr');
   await expect(bodyRows.nth(12)).toBeVisible();
 
-  // Open one piece and bump its S-size stock.
-  await page.getByRole('cell', { name: FERN_GOWN }).click();
+  // Open one piece and bump its S-size stock. `exact` matters: the row's
+  // bulk-select checkbox is labelled "Select <name>", so a loose name match
+  // resolves to both cells.
+  await page.getByRole('cell', { name: FERN_GOWN, exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Edit Piece' })).toBeVisible();
   const editUrl = page.url();
   const sStock = page.getByLabel('S', { exact: true });
