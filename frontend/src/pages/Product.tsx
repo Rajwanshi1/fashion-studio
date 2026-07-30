@@ -45,6 +45,9 @@ export default function Product() {
   const [color, setColor] = useState('');
   const [variantId, setVariantId] = useState('');
   const [qty, setQty] = useState(1);
+  // Set pieces are included by default; unticking removes them from the price.
+  const [incDupatta, setIncDupatta] = useState(false);
+  const [incJacket, setIncJacket] = useState(false);
 
   const lastTrackedSlugRef = useRef<string | null>(null);
 
@@ -72,6 +75,8 @@ export default function Product() {
           });
         }
         setColor(detail.color);
+        setIncDupatta(detail.dupattaPrice != null);
+        setIncJacket(detail.jacketPrice != null);
         const firstInStock = detail.variants.find((v) => v.stock > 0) ?? detail.variants[0];
         setVariantId(firstInStock?.id ?? '');
         if (rel.length) {
@@ -123,6 +128,10 @@ export default function Product() {
     [product],
   );
 
+  const chosenDupatta = product && incDupatta && product.dupattaPrice != null ? product.dupattaPrice : null;
+  const chosenJacket = product && incJacket && product.jacketPrice != null ? product.jacketPrice : null;
+  const liveTotal = product ? product.price + (chosenDupatta ?? 0) + (chosenJacket ?? 0) : 0;
+
   const addToBag = () => {
     if (!product || !selectedVariant) return;
     cart.add(
@@ -133,8 +142,12 @@ export default function Product() {
         name: product.name,
         size: selectedVariant.size,
         color,
-        unitPrice: product.price,
+        unitPrice: liveTotal,
         imageUrl: product.imageUrl,
+        includeDupatta: chosenDupatta != null,
+        includeJacket: chosenJacket != null,
+        dupattaPrice: chosenDupatta,
+        jacketPrice: chosenJacket,
       },
       qty,
     );
@@ -202,7 +215,7 @@ export default function Product() {
           <div className="brandline">{product.collection || 'The Verdant Edit'}</div>
           <h1>{product.name}</h1>
           <div className="price">
-            <Price paise={product.price} /> <span className="tax">incl. of all taxes</span>
+            <Price paise={liveTotal} /> <span className="tax">incl. of all taxes</span>
           </div>
           <p className="desc">{product.description}</p>
 
@@ -252,6 +265,38 @@ export default function Product() {
               Made to Measure
             </button>
           </div>
+
+          {(product.dupattaPrice != null || product.jacketPrice != null) && (
+            <>
+              <div className="opt-label">
+                <span>This piece includes</span>
+              </div>
+              <div className="set-includes">
+                {product.dupattaPrice != null && (
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={incDupatta}
+                      onChange={(e) => setIncDupatta(e.target.checked)}
+                    />
+                    Dupatta —{' '}
+                    {product.dupattaPrice === 0 ? 'Included' : <Price paise={product.dupattaPrice} />}
+                  </label>
+                )}
+                {product.jacketPrice != null && (
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={incJacket}
+                      onChange={(e) => setIncJacket(e.target.checked)}
+                    />
+                    Jacket —{' '}
+                    {product.jacketPrice === 0 ? 'Included' : <Price paise={product.jacketPrice} />}
+                  </label>
+                )}
+              </div>
+            </>
+          )}
 
           <div className="mto">
             <span className="dot"></span>

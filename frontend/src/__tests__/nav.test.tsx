@@ -15,6 +15,10 @@ const item: Omit<CartItem, 'qty'> = {
   color: 'Sage',
   unitPrice: 18400000,
   imageUrl: null,
+  includeDupatta: false,
+  includeJacket: false,
+  dupattaPrice: null,
+  jacketPrice: null,
 };
 
 function AddButton() {

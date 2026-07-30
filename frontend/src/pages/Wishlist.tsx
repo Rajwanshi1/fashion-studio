@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { displayPrice } from '../lib/format';
 import type { ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useWishlist } from '../lib/wishlist';
@@ -55,6 +56,7 @@ export default function Wishlist() {
         navigate(`/product/${p.slug}`);
         return;
       }
+      // Wishlist adds default to the full set — every piece included.
       cart.add({
         variantId: variant.id,
         productId: detail.id,
@@ -62,8 +64,12 @@ export default function Wishlist() {
         name: detail.name,
         size: variant.size,
         color: detail.color,
-        unitPrice: detail.price,
+        unitPrice: displayPrice(detail),
         imageUrl: detail.imageUrl,
+        includeDupatta: detail.dupattaPrice != null,
+        includeJacket: detail.jacketPrice != null,
+        dupattaPrice: detail.dupattaPrice,
+        jacketPrice: detail.jacketPrice,
       });
       showToast('Added to your bag');
       openDrawer();

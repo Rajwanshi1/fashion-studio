@@ -140,6 +140,10 @@ export default function OrderConfirmation() {
                         <div className="nm">{it.productName}</div>
                         <div className="at">
                           {it.color} · {it.size} · Qty {it.quantity}
+                          {(it.dupattaPrice != null || it.jacketPrice != null) &&
+                            ` · With ${[it.dupattaPrice != null && 'dupatta', it.jacketPrice != null && 'jacket']
+                              .filter(Boolean)
+                              .join(' & ')}`}
                         </div>
                       </div>
                       <div className="pr">{formatINR(it.unitPrice * it.quantity)}</div>

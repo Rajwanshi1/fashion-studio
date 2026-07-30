@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { displayPrice } from '../lib/format';
 import type { Category, ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useCartDrawer } from '../components/CartDrawer';
@@ -62,6 +63,7 @@ export default function Home() {
         navigate(`/product/${p.slug}`);
         return;
       }
+      // Quick adds default to the full set — every piece included.
       cart.add({
         variantId: variant.id,
         productId: detail.id,
@@ -69,8 +71,12 @@ export default function Home() {
         name: detail.name,
         size: variant.size,
         color: detail.color,
-        unitPrice: detail.price,
+        unitPrice: displayPrice(detail),
         imageUrl: detail.imageUrl,
+        includeDupatta: detail.dupattaPrice != null,
+        includeJacket: detail.jacketPrice != null,
+        dupattaPrice: detail.dupattaPrice,
+        jacketPrice: detail.jacketPrice,
       });
       showToast('Added to your bag');
       openDrawer();

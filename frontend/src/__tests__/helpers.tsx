@@ -175,6 +175,10 @@ export function seedCart() {
         unitPrice: 18400000,
         qty: 1,
         imageUrl: null,
+        includeDupatta: false,
+        includeJacket: false,
+        dupattaPrice: null,
+        jacketPrice: null,
       },
     ]),
   );

@@ -18,16 +18,31 @@ export interface CartItem {
   name: string;
   size: string;
   color: string;
+  /** Final per-unit price: base garment + the add-ons kept in this line. */
   unitPrice: number;
   qty: number;
   imageUrl: string | null;
+  /** Set pieces kept in this line — the same variant with a different
+   *  selection is a separate cart line (see cartLineKey). */
+  includeDupatta: boolean;
+  includeJacket: boolean;
+  /** Price of the kept add-on; null = excluded or not part of the set. */
+  dupattaPrice: number | null;
+  jacketPrice: number | null;
+}
+
+/** Line identity: variant + set-includes selection. */
+export function cartLineKey(
+  i: Pick<CartItem, 'variantId' | 'includeDupatta' | 'includeJacket'>,
+): string {
+  return `${i.variantId}:${i.includeDupatta ? 1 : 0}${i.includeJacket ? 1 : 0}`;
 }
 
 interface CartContextValue {
   items: CartItem[];
   add: (item: Omit<CartItem, 'qty'>, qty?: number) => void;
-  setQty: (variantId: string, qty: number) => void;
-  remove: (variantId: string) => void;
+  setQty: (lineKey: string, qty: number) => void;
+  remove: (lineKey: string) => void;
   clear: () => void;
   subtotal: number;
   count: number;
@@ -40,7 +55,16 @@ function load(): CartItem[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as CartItem[];
-    return Array.isArray(parsed) ? parsed.filter((i) => i && i.variantId && i.qty > 0) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((i) => i && i.variantId && i.qty > 0)
+      // Carts saved before set-includes lack the addon fields; their
+      // unitPrice was base-only, so "nothing included" is the consistent read.
+      .map((i) =>
+        typeof i.includeDupatta === 'boolean'
+          ? i
+          : { ...i, includeDupatta: false, includeJacket: false, dupattaPrice: null, jacketPrice: null },
+      );
   } catch {
     return [];
   }
@@ -62,29 +86,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
       productId: item.productId,
       props: { variantId: item.variantId, size: item.size, color: item.color, qty, price: item.unitPrice },
     });
+    const key = cartLineKey(item);
     setItems((prev) => {
-      const existing = prev.find((i) => i.variantId === item.variantId);
+      const existing = prev.find((i) => cartLineKey(i) === key);
       if (existing) {
-        return prev.map((i) =>
-          i.variantId === item.variantId ? { ...i, qty: i.qty + qty } : i,
-        );
+        return prev.map((i) => (cartLineKey(i) === key ? { ...i, qty: i.qty + qty } : i));
       }
       return [...prev, { ...item, qty }];
     });
   }, []);
 
-  const setQty = useCallback((variantId: string, qty: number) => {
-    if (qty < 1) track('remove_from_cart', { props: { variantId } });
+  const setQty = useCallback((lineKey: string, qty: number) => {
+    if (qty < 1) track('remove_from_cart', { props: { variantId: lineKey } });
     setItems((prev) =>
       qty < 1
-        ? prev.filter((i) => i.variantId !== variantId)
-        : prev.map((i) => (i.variantId === variantId ? { ...i, qty } : i)),
+        ? prev.filter((i) => cartLineKey(i) !== lineKey)
+        : prev.map((i) => (cartLineKey(i) === lineKey ? { ...i, qty } : i)),
     );
   }, []);
 
-  const remove = useCallback((variantId: string) => {
-    track('remove_from_cart', { props: { variantId } });
-    setItems((prev) => prev.filter((i) => i.variantId !== variantId));
+  const remove = useCallback((lineKey: string) => {
+    track('remove_from_cart', { props: { variantId: lineKey } });
+    setItems((prev) => prev.filter((i) => cartLineKey(i) !== lineKey));
   }, []);
 
   const clear = useCallback(() => setItems([]), []);

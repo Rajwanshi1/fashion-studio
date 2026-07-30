@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, type ApiError } from '../lib/api';
 import type { DeliveryMethod, Order, PaymentInit } from '../lib/types';
-import { useCart } from '../lib/cart';
+import { cartLineKey, useCart } from '../lib/cart';
 import { useAuth } from '../lib/auth';
 import { track } from '../lib/analytics';
 import { formatINR } from '../lib/format';
@@ -76,7 +76,12 @@ export default function Checkout() {
             country,
           },
           deliveryMethod: delivery,
-          items: items.map((i) => ({ variantId: i.variantId, quantity: i.qty })),
+          items: items.map((i) => ({
+            variantId: i.variantId,
+            quantity: i.qty,
+            includeDupatta: i.includeDupatta,
+            includeJacket: i.includeJacket,
+          })),
         });
         setOrder(ord);
       }
@@ -531,12 +536,16 @@ export default function Checkout() {
             <h2>Order Summary</h2>
 
             {items.map((i) => (
-              <div className="ci" key={i.variantId}>
+              <div className="ci" key={cartLineKey(i)}>
                 <ImageSlot src={i.imageUrl} label={i.name} alt={i.name} />
                 <div>
                   <div className="cn">{i.name}</div>
                   <div className="ca">
                     {i.color} · Size {i.size} · Qty {i.qty}
+                    {(i.includeDupatta || i.includeJacket) &&
+                      ` · With ${[i.includeDupatta && 'dupatta', i.includeJacket && 'jacket']
+                        .filter(Boolean)
+                        .join(' & ')}`}
                   </div>
                 </div>
                 <div className="cp">{formatINR(i.unitPrice * i.qty)}</div>
