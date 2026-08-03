@@ -26,6 +26,16 @@ services:
       CORS_ORIGINS: http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:4173,http://localhost:4174,http://localhost:4175
       SEED_ON_START: "true"
       PORT: "3001"
+      # Passed through from the host so no key is ever committed. Compose also
+      # reads a root .env automatically, so either `export ANTHROPIC_API_KEY=...`
+      # or a gitignored root .env works. Empty is a supported state: the API
+      # boots with parsing masked and /parse answers 503, exactly as the
+      # deployed launch template behaves when the secret is absent.
+      #
+      # Without this the container CANNOT see the key under any circumstance —
+      # backend/.dockerignore excludes .env and the Dockerfile never copies it —
+      # so the intake wizard always toasts "Document parsing is not configured".
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "3001:3001"
     depends_on:

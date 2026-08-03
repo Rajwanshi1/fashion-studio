@@ -13,22 +13,29 @@ export interface PresignResult {
   headers: Record<string, string>;
 }
 
-/** Mirrors backend/src/services/ai/prompts.ts billSchema — all rupees as written. */
+/**
+ * Mirrors backend/src/services/ai/prompts.ts billSchema — all rupees as written.
+ *
+ * Note the asymmetry with the other two drafts: bill STRING fields are plain
+ * `string` using "" for absent, because billSchema is the only one big enough to
+ * hit the API's 16-union-parameter ceiling (see `emptyableString` there). Number
+ * fields keep `| null` — 0 is a real rupee value.
+ */
 export interface BillDraft {
   bill: {
-    bill_number: string | null;
-    bill_date: string | null;
+    bill_number: string;
+    bill_date: string;
     bill_type: 'gst_invoice' | 'cash_memo' | null;
     channel_guess: 'in_store' | 'instagram' | 'exhibition' | null;
   };
   customer: {
-    name: string | null;
-    phone: string | null;
-    email: string | null;
-    address: string | null;
-    city: string | null;
-    state: string | null;
-    pincode: string | null;
+    name: string;
+    phone: string;
+    email: string;
+    address: string;
+    city: string;
+    state: string;
+    pincode: string;
   };
   items: {
     description: string;
@@ -44,7 +51,7 @@ export interface BillDraft {
     balance_rupees: number | null;
     advance_mode: 'cash' | 'online' | null;
   };
-  delivery: { due_date: string | null };
+  delivery: { due_date: string };
   confidence_notes: string;
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createAnthropicClient } from '../src/services/ai/anthropic';
 import { AnthropicBillParser, AnthropicMessagesClient, ParseKind, ParserUnavailableError } from '../src/services/ai/parser';
 import { PARSE_SPECS } from '../src/services/ai/prompts';
 
@@ -268,5 +269,94 @@ describe('prompts (PARSE_SPECS)', () => {
   it('measurement values are verbatim strings', () => {
     const schema = PARSE_SPECS.measurement.schema as any;
     expect(schema.properties.measurements.items.properties.value.type).toBe('string');
+  });
+
+  /**
+   * The API rejects a structured-output schema with more than 16 union-typed
+   * parameters ("Schemas contains too many parameters with union types … limit:
+   * 16"). billSchema shipped at 18 and every bill parse 400'd. Only a live call
+   * surfaces that, so this counts them statically instead — the mocked-client
+   * tests above cannot see server-side schema validation at all.
+   *
+   * Matches the API's definition: a `type` array or `anyOf`. Enums carrying a
+   * null member are NOT counted (measured against the real 400, which reported
+   * 18 for a schema whose enums-with-null would have made it 21).
+   */
+  const countUnionParams = (node: any, hits = { n: 0 }): number => {
+    if (!node || typeof node !== 'object') return hits.n;
+    if (Array.isArray(node.type) || Array.isArray(node.anyOf)) hits.n++;
+    if (node.properties) for (const child of Object.values(node.properties)) countUnionParams(child, hits);
+    if (node.items) countUnionParams(node.items, hits);
+    return hits.n;
+  };
+
+  it.each(kinds)('%s schema stays under the 16 union-typed parameter limit', (kind) => {
+    expect(countUnionParams(PARSE_SPECS[kind].schema)).toBeLessThanOrEqual(16);
+  });
+
+  it('bill text fields use "" rather than null, which is what keeps it under that limit', () => {
+    const schema = PARSE_SPECS.bill.schema as any;
+    for (const field of ['name', 'phone', 'email', 'address', 'city', 'state', 'pincode']) {
+      expect(schema.properties.customer.properties[field].type).toBe('string');
+    }
+    expect(schema.properties.bill.properties.bill_number.type).toBe('string');
+    expect(schema.properties.bill.properties.bill_date.type).toBe('string');
+    expect(schema.properties.delivery.properties.due_date.type).toBe('string');
+  });
+});
+
+/**
+ * Every other test in this file fakes the client as a plain object, which means
+ * the SDK's own request path — where the non-streaming precheck lives — is never
+ * executed. That gap is exactly how MAX_TOKENS=32_768 shipped while the SDK was
+ * refusing to send the request at all. These run the REAL client against a stub
+ * transport, so the precheck is live but the network is not.
+ */
+describe('createAnthropicClient', () => {
+  const messageResponse = (text: string) =>
+    new Response(
+      JSON.stringify({
+        id: 'msg_test',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-sonnet-5',
+        content: [{ type: 'text', text }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  it('actually sends a MAX_TOKENS request rather than tripping the non-streaming precheck', async () => {
+    let sent: any = null;
+    const stubFetch = async (_url: any, init: any) => {
+      sent = JSON.parse(init.body);
+      return messageResponse(okShippingReceipt);
+    };
+
+    const client = createAnthropicClient('sk-ant-test', stubFetch as unknown as typeof fetch);
+    const result = await new AnthropicBillParser(client).parse('shipping_receipt', image);
+
+    // Before the timeout fix this rejected with "Streaming is required for
+    // operations that may take longer than 10 minutes" and `sent` stayed null.
+    expect(sent).not.toBeNull();
+    expect(sent.max_tokens).toBe(32_768);
+    expect(result).toEqual(JSON.parse(okShippingReceipt));
+  });
+
+  it('sends every kind, not just the small-schema one', async () => {
+    const seen: string[] = [];
+    const stubFetch = async (_url: any, init: any) => {
+      seen.push(JSON.parse(init.body).model);
+      return messageResponse('{}');
+    };
+    const client = createAnthropicClient('sk-ant-test', stubFetch as unknown as typeof fetch);
+
+    for (const kind of Object.keys(PARSE_SPECS) as ParseKind[]) {
+      await new AnthropicBillParser(client).parse(kind, image);
+    }
+
+    expect(seen).toEqual([PARSE_SPECS.bill.model, PARSE_SPECS.measurement.model, PARSE_SPECS.shipping_receipt.model]);
   });
 });
