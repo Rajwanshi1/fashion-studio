@@ -6,7 +6,8 @@
 // Conventions:
 //   - All money values are RUPEES AS WRITTEN on the page (plain numbers) —
 //     conversion to integer paise happens at human-confirm time, never here.
-//   - Every extracted field is nullable; null means "not present / illegible".
+//   - "Not present / illegible" is null everywhere EXCEPT the bill schema's
+//     string fields, which use "" instead — see `emptyableString` for why.
 //   - Doubts go into `confidence_notes` (required on bill).
 //   - Measurement values are VERBATIM strings ("38½", "15 in") — no unit or
 //     fraction normalization at parse time.
@@ -32,6 +33,26 @@ const nullableString = { type: ['string', 'null'] };
 const nullableNumber = { type: ['number', 'null'] };
 const nullableInteger = { type: ['integer', 'null'] };
 
+/**
+ * A string field that signals "not present / illegible" with "" rather than null.
+ *
+ * Used by billSchema ONLY, and not for style: the API rejects a structured-output
+ * schema carrying more than 16 union-typed parameters (anything with a `type`
+ * array or `anyOf`). billSchema had 18 — 10 nullable strings + 8 nullable
+ * numbers — so every bill parse 400'd with "Schemas contains too many parameters
+ * with union types … limit: 16" while the two smaller schemas were unaffected.
+ *
+ * Strings already carry their own empty sentinel, so dropping `| null` from the
+ * 10 string fields costs no expressiveness and brings the count to 8, leaving
+ * real headroom for future fields. The numbers keep `| null` deliberately: 0 is
+ * a legitimate rupee amount, so they have no spare sentinel. Enums with a null
+ * member are not counted by the API and are left alone.
+ *
+ * Consumers need no special handling — `mapBillDraft` reads every one of these
+ * through `str()` (`?? ''`), for which "" and null are already identical.
+ */
+const emptyableString = { type: 'string', description: 'Empty string "" if absent or illegible.' };
+
 const billSchema: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
@@ -40,8 +61,8 @@ const billSchema: Record<string, unknown> = {
       type: 'object',
       additionalProperties: false,
       properties: {
-        bill_number: nullableString,
-        bill_date: { ...nullableString, description: 'ISO date yyyy-mm-dd' },
+        bill_number: emptyableString,
+        bill_date: { ...emptyableString, description: 'ISO date yyyy-mm-dd, or "" if absent/illegible' },
         bill_type: { enum: ['gst_invoice', 'cash_memo', null] },
         channel_guess: { enum: ['in_store', 'instagram', 'exhibition', null] },
       },
@@ -51,13 +72,13 @@ const billSchema: Record<string, unknown> = {
       type: 'object',
       additionalProperties: false,
       properties: {
-        name: nullableString,
-        phone: { ...nullableString, description: 'Phone number exactly as written' },
-        email: nullableString,
-        address: nullableString,
-        city: nullableString,
-        state: nullableString,
-        pincode: nullableString,
+        name: emptyableString,
+        phone: { ...emptyableString, description: 'Phone number exactly as written, or "" if absent' },
+        email: emptyableString,
+        address: emptyableString,
+        city: emptyableString,
+        state: emptyableString,
+        pincode: emptyableString,
       },
       required: ['name', 'phone', 'email', 'address', 'city', 'state', 'pincode'],
     },
@@ -92,7 +113,7 @@ const billSchema: Record<string, unknown> = {
       type: 'object',
       additionalProperties: false,
       properties: {
-        due_date: { ...nullableString, description: 'ISO date yyyy-mm-dd' },
+        due_date: { ...emptyableString, description: 'ISO date yyyy-mm-dd, or "" if absent/illegible' },
       },
       required: ['due_date'],
     },
@@ -108,7 +129,7 @@ const billPrompt = `You are reading a photo of a handwritten bill from an Indian
 
 Extract the bill exactly per the response schema:
 - All money values are rupees AS WRITTEN on the bill, as plain numbers (e.g. "₹12,500" -> 12500, "12,500.50" -> 12500.5). Do NOT convert to paise.
-- Use null for any field that is absent or illegible. Never invent values.
+- Absent or illegible: use "" for text fields (bill_number, bill_date, name, phone, email, address, city, state, pincode, due_date) and null for number fields and for bill_type/channel_guess/advance_mode. Never invent values.
 - Dates: convert to ISO yyyy-mm-dd. Handwritten dates follow the Indian dd/mm/yyyy convention (e.g. "5/3/26" means 2026-03-05). Guess the century sensibly for two-digit years.
 - bill_type: "gst_invoice" if GSTIN/GST breakup appears, "cash_memo" for a plain memo, null if unclear.
 - channel_guess: your best guess where the sale happened ("in_store", "instagram", "exhibition") based on any hints on the bill, else null.
