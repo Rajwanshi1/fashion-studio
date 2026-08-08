@@ -395,6 +395,9 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
                 <input
                   id="oi-pincode"
                   className="inp"
+                  inputMode="numeric"
+                  maxLength={6}
+                  autoComplete="postal-code"
                   value={form.pincode}
                   onChange={(e) => set('pincode', e.target.value)}
                 />
@@ -458,7 +461,7 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
                 className="inp"
                 type="number"
                 min="0"
-                inputMode="numeric"
+                inputMode="decimal"
                 value={form.gstRupees}
                 onChange={(e) => set('gstRupees', e.target.value)}
               />
@@ -506,7 +509,7 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
                 className="inp"
                 type="number"
                 min="0"
-                inputMode="numeric"
+                inputMode="decimal"
                 value={row.unitRupees}
                 onChange={(e) => setItem(i, 'unitRupees', e.target.value)}
               />
@@ -565,7 +568,7 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
               className="inp"
               type="number"
               min="0"
-              inputMode="numeric"
+              inputMode="decimal"
               placeholder={String(subtotalPaise / 100)}
               value={form.totalRupees}
               onChange={(e) => set('totalRupees', e.target.value)}
@@ -580,7 +583,7 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
               className="inp"
               type="number"
               min="0"
-              inputMode="numeric"
+              inputMode="decimal"
               value={form.advanceRupees}
               onChange={(e) => set('advanceRupees', e.target.value)}
             />

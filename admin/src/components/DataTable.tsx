@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 export interface Column<T> {
   key: string;
   label: ReactNode;
+  /** Mobile card label — required when `label` isn't a plain string (e.g. a JSX checkbox). */
+  dataLabel?: string;
   align?: 'right';
   render: (row: T) => ReactNode;
 }
@@ -72,7 +74,7 @@ export default function DataTable<T>({
                     <td
                       key={col.key}
                       className={col.align === 'right' ? 'num' : undefined}
-                      data-label={col.label}
+                      data-label={col.dataLabel ?? (typeof col.label === 'string' ? col.label : '')}
                     >
                       {col.render(row)}
                     </td>

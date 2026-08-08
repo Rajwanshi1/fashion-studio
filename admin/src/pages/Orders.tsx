@@ -367,7 +367,7 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
                 className="inp"
                 type="number"
                 min="0"
-                inputMode="numeric"
+                inputMode="decimal"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />

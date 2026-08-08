@@ -344,7 +344,7 @@ export default function ProductEdit() {
               type="number"
               min="0"
               step="1"
-              inputMode="numeric"
+              inputMode="decimal"
               value={form.priceRupees}
               onChange={(e) => set('priceRupees', e.target.value)}
               required
@@ -477,7 +477,7 @@ export default function ProductEdit() {
               type="number"
               min="0"
               step="1"
-              inputMode="numeric"
+              inputMode="decimal"
               value={form.dupattaRupees}
               onChange={(e) => set('dupattaRupees', e.target.value)}
             />
@@ -492,7 +492,7 @@ export default function ProductEdit() {
               type="number"
               min="0"
               step="1"
-              inputMode="numeric"
+              inputMode="decimal"
               value={form.jacketRupees}
               onChange={(e) => set('jacketRupees', e.target.value)}
             />
