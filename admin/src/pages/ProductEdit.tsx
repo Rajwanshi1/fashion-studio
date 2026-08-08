@@ -183,7 +183,7 @@ export default function ProductEdit() {
       set('imageUrl', publicUrl);
       toast('Photo uploaded');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Photo upload failed');
+      toast(err instanceof Error ? err.message : 'Photo upload failed', { tone: 'error' });
     } finally {
       setUploading(false);
     }

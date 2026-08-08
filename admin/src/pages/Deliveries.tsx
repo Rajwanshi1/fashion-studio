@@ -125,7 +125,7 @@ export default function Deliveries() {
       );
       toast(`${order.orderNumber} → ${ORDER_STATUS_LABELS[next]}`);
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Unable to update the order');
+      toast(err instanceof Error ? err.message : 'Unable to update the order', { tone: 'error' });
     }
   };
 

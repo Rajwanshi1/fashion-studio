@@ -192,7 +192,7 @@ export default function Socials() {
       await navigator.clipboard.writeText(targetUrl);
       toast('URL copied');
     } catch {
-      toast('Unable to copy — copy it manually');
+      toast('Unable to copy — copy it manually', { tone: 'error' });
     }
   };
 

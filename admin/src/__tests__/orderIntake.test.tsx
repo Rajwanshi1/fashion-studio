@@ -86,6 +86,66 @@ describe('OrderIntake', () => {
     expect(await screen.findByRole('heading', { name: 'Orders' })).toBeInTheDocument();
   });
 
+  it('captures address fields, flags a totals mismatch, and focuses submit errors', async () => {
+    seedAdminAuth();
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes('/api/admin/customers/match')) return { json: { candidates: [] } };
+      if (url.endsWith('/api/admin/orders') && init?.method === 'POST') {
+        return { status: 201, json: makeOrder({ orderNumber: 'TA-2026-04904' }) };
+      }
+      if (url.endsWith('/api/admin/orders')) return { json: [] };
+      return undefined;
+    });
+
+    renderApp('/orders/new');
+    await screen.findByRole('heading', { name: 'New Order' });
+
+    // the new address inputs render
+    expect(screen.getByLabelText('Address (optional)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Address Line 2 (optional)')).toBeInTheDocument();
+    expect(screen.getByLabelText('State (optional)')).toBeInTheDocument();
+
+    // chips expose pressed state to assistive tech
+    const instagram = screen.getByRole('button', { name: 'Instagram' });
+    expect(instagram).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(instagram);
+    expect(instagram).toHaveAttribute('aria-pressed', 'true');
+
+    // submitting an empty form focuses the error next to the actions
+    await userEvent.click(screen.getByRole('button', { name: 'Record Order' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Add at least one item from the bill');
+    expect(alert).toHaveFocus();
+
+    // items sum ₹1,200 vs entered total ₹1,500 → non-blocking mismatch hint
+    await userEvent.type(screen.getByLabelText('Description'), 'Sage stole');
+    await userEvent.type(screen.getByLabelText('Unit ₹'), '1200');
+    await userEvent.type(screen.getByLabelText('Bill Total (₹ rupees)'), '1500');
+    expect(screen.getByText(/check item prices or GST/)).toBeInTheDocument();
+
+    // a matching total clears the hint
+    await userEvent.clear(screen.getByLabelText('Bill Total (₹ rupees)'));
+    await userEvent.type(screen.getByLabelText('Bill Total (₹ rupees)'), '1200');
+    expect(screen.queryByText(/check item prices or GST/)).not.toBeInTheDocument();
+
+    // typed address fields land in the create-customer payload
+    await userEvent.type(screen.getByLabelText('First Name'), 'Rhea');
+    await userEvent.type(screen.getByLabelText('Phone'), '98200 11223');
+    await userEvent.type(screen.getByLabelText('Address (optional)'), '12 Marine Drive');
+    await userEvent.type(screen.getByLabelText('State (optional)'), 'Maharashtra');
+    await userEvent.click(screen.getByRole('button', { name: 'Record Order' }));
+
+    const post = calls.find((c) => c.method === 'POST' && c.url.endsWith('/api/admin/orders'));
+    expect(post?.body).toMatchObject({
+      customer: {
+        action: 'create',
+        firstName: 'Rhea',
+        addressLine1: '12 Marine Drive',
+        state: 'Maharashtra',
+      },
+    });
+  });
+
   it('links a matched customer instead of creating one', async () => {
     seedAdminAuth();
     const { calls } = mockFetch((url, init) => {

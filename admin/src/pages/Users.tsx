@@ -37,7 +37,7 @@ export default function Users() {
       toast(`${user.email ?? user.phone ?? fullName(user)} is now ${role === 'admin' ? 'an admin' : 'a customer'}`);
     } catch (err) {
       setUsers(previous ?? null);
-      toast(err instanceof Error ? err.message : 'Unable to update role');
+      toast(err instanceof Error ? err.message : 'Unable to update role', { tone: 'error' });
     }
   };
 
@@ -56,7 +56,7 @@ export default function Users() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Unable to export contacts');
+      toast(err instanceof Error ? err.message : 'Unable to export contacts', { tone: 'error' });
     }
   };
 

@@ -49,11 +49,15 @@ test('bill intake: photo upload → parse falls back (503) → manual review →
   await expect(page.getByRole('button', { name: 'Retake bill photo' })).toBeVisible();
 
   // Parse: with ANTHROPIC_API_KEY unset locally the parse 503s and the wizard
-  // continues to a blank review with the photo still attached. (If parsing IS
-  // configured the review arrives prefilled — the .fill() calls below replace
-  // whatever is there, so the spec passes either way.)
-  await page.getByRole('button', { name: 'Parse' }).click();
-  await expect(page.getByRole('button', { name: 'Record Order' })).toBeVisible();
+  // shows an explicit failure panel — "Continue manually" keeps the photo
+  // attached. (If parsing IS configured the review arrives prefilled — the
+  // .fill() calls below replace whatever is there, so the spec passes either way.)
+  await page.getByRole('button', { name: 'Parse bill' }).click();
+  const record = page.getByRole('button', { name: 'Record Order' });
+  const continueManually = page.getByRole('button', { name: 'Continue manually' });
+  await expect(record.or(continueManually).first()).toBeVisible();
+  if (await continueManually.isVisible()) await continueManually.click();
+  await expect(record).toBeVisible();
 
   // Review — complete the bill manually.
   const phone = uniquePhone();
@@ -66,9 +70,14 @@ test('bill intake: photo upload → parse falls back (503) → manual review →
   await page.locator('#oi-unit-0').fill('12000');
   await page.locator('#oi-total').fill('12000');
 
-  // The uploaded photo is reviewable from the sticky peek.
-  await page.getByRole('button', { name: 'View photos (1)' }).click();
-  await expect(page.locator('.peek-body img')).toBeVisible();
+  // The uploaded photo is reviewable — sticky peek on phones, side rail ≥1100px.
+  const peekToggle = page.getByRole('button', { name: 'View photos (1)' });
+  if (await peekToggle.isVisible()) {
+    await peekToggle.click();
+    await expect(page.locator('.peek-body img')).toBeVisible();
+  } else {
+    await expect(page.locator('.photo-rail img')).toBeVisible();
+  }
 
   await page.getByRole('button', { name: 'Record Order' }).click();
 
@@ -77,11 +86,14 @@ test('bill intake: photo upload → parse falls back (503) → manual review →
   await expect(orderHeading).toBeVisible();
   const orderNumber = (await orderHeading.innerText()).trim();
   await expect(page.getByRole('button', { name: 'Scan next bill' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'View orders' })).toBeVisible();
 
-  // The recorded order shows up in the order book.
-  await page.getByRole('button', { name: 'View orders' }).click();
+  // "Open order" deep-links into the order book with the detail row expanded.
+  await page.getByRole('button', { name: 'Open order' }).click();
   await expect(page.getByRole('heading', { name: 'Orders' })).toBeVisible();
-  const row = page.getByRole('row').filter({ hasText: orderNumber });
+  await expect(page.locator('tr.detail')).toBeVisible();
+  await expect(page.locator('tr.detail')).toContainText('Items');
+  const row = page.getByRole('row').filter({ hasText: orderNumber }).first();
   await expect(row).toBeVisible();
   await expect(row).toContainText('Scan Fallback');
   await expect(row.getByText('Cash Memo')).toBeVisible();
