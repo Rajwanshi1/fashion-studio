@@ -27,6 +27,8 @@
   /* Shell metrics (used by sticky offsets once the shell lands) */
   --appbar-h: 56px;
   --tabbar-h: 60px;
+  /* Bottom offset for sticky bars — the shell raises this above the tab bar on phones. */
+  --tabbar-off: 0px;
 }
 
 /* Inline record-payment mini-form (order detail) */
@@ -43,4 +45,174 @@
 }
 .pay-form .btn-outline {
   min-height: var(--tap);
+}
+
+/* ---- Field errors / hints (Field component) ---- */
+.field.invalid .inp { border-color: var(--danger); }
+.field-err { margin: 0.4rem 0 0; font-size: 0.74rem; color: var(--danger); }
+.field-hint { margin: 0.4rem 0 0; font-size: 0.74rem; color: var(--fg-muted); }
+
+/* ---- Segmented control ---- */
+.seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  overflow: hidden;
+}
+.seg-opt {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 1.15em;
+  background: none;
+  border: 0;
+  border-right: 1px solid var(--hairline);
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.seg-opt:last-child { border-right: 0; }
+.seg-opt.on { background: var(--ink); color: var(--paper); }
+
+/* ---- Stepper ---- */
+.stepper { display: inline-flex; align-items: stretch; }
+.step-btn {
+  width: var(--tap);
+  min-height: var(--tap);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  font-family: var(--sans);
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.step-btn:hover { background: var(--celadon-50); }
+.step-btn:disabled { color: var(--fg-muted); cursor: not-allowed; background: none; }
+.step-btn:first-child { border-radius: var(--edge) 0 0 var(--edge); border-right: 0; }
+.step-btn:last-child { border-radius: 0 var(--edge) var(--edge) 0; border-left: 0; }
+.stepper .step-inp { width: 3.4em; text-align: center; border-radius: 0; }
+
+/* ---- Sheet (bottom sheet on phones, dialog on desktop) ---- */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 38, 32, 0.5);
+  z-index: var(--z-sheet);
+}
+.sheet {
+  position: fixed;
+  z-index: calc(var(--z-sheet) + 1);
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-bottom: 0;
+  border-radius: var(--edge) var(--edge) 0 0;
+  max-height: 85dvh;
+  padding-bottom: env(safe-area-inset-bottom);
+  overscroll-behavior: contain;
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem 0.6rem;
+}
+.sheet-title { font-family: var(--serif-display); font-size: 1.15rem; margin: 0; }
+.sheet-x { width: var(--tap); height: var(--tap); margin-bottom: 0; }
+.sheet-body { padding: 0.4rem 1.25rem 1.25rem; overflow-y: auto; }
+.sheet-foot {
+  padding: 0.8rem 1.25rem calc(0.8rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--hairline);
+}
+@media (min-width: 821px) {
+  .sheet {
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    width: min(480px, calc(100vw - 2rem));
+    max-height: 85vh;
+    border-bottom: 1px solid var(--hairline);
+    border-radius: var(--edge);
+    padding-bottom: 0;
+  }
+}
+/* Opacity-only entrance — a transform animation would fight the desktop centering transform. */
+@media (prefers-reduced-motion: no-preference) {
+  .sheet, .sheet-backdrop { animation: sheet-in 200ms var(--ease); }
+  @keyframes sheet-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+/* ---- ListCard ---- */
+.lcard {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  padding: 0.95rem 1.1rem;
+  margin-bottom: 0.7rem;
+  text-align: left;
+  width: 100%;
+}
+.lcard.hit { cursor: pointer; transition: background var(--dur-fast) var(--ease); }
+.lcard.hit:hover { background: var(--celadon-50); }
+.lcard-top { display: flex; justify-content: space-between; gap: 0.9rem; align-items: baseline; }
+.lcard-main { min-width: 0; }
+.lcard-primary { font-family: var(--serif-display); font-size: 1rem; }
+.lcard-secondary { color: var(--fg-muted); font-size: 0.78rem; margin-top: 0.2rem; }
+.lcard-meta { text-align: right; font-size: 0.98rem; white-space: nowrap; }
+.lcard-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.lcard-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.7rem; }
+
+/* ---- StickyBar ---- */
+.stickybar {
+  position: sticky;
+  bottom: var(--tabbar-off);
+  z-index: var(--z-sticky);
+  background: var(--surface);
+  border-top: 1px solid var(--hairline);
+  padding: 0.7rem 0 calc(0.7rem + env(safe-area-inset-bottom));
+  margin-top: 1.4rem;
+}
+.stickybar-row { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
+.stickybar-err {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--danger);
+  border-left-width: 3px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-radius: var(--edge);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.8rem;
+  font-family: var(--sans);
+  margin: 0 0 0.7rem;
+}
+button.stickybar-err { cursor: pointer; }
+
+/* ---- Skeleton ---- */
+.skel { display: grid; gap: 0.7rem; padding: 1rem 0; }
+.skel-block {
+  height: 3.4rem;
+  border-radius: var(--edge);
+  background: linear-gradient(100deg, var(--celadon-50) 40%, var(--celadon-100) 50%, var(--celadon-50) 60%);
+  background-size: 200% 100%;
+}
+.skel-stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.skel-stats .skel-block { height: 5.4rem; }
+.skel-cards .skel-block { height: 6.4rem; }
+@media (prefers-reduced-motion: no-preference) {
+  .skel-block { animation: skel-wave 1.4s linear infinite; }
+  @keyframes skel-wave { to { background-position: -200% 0; } }
 }
