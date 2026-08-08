@@ -64,7 +64,7 @@
   text-transform: uppercase;
   color: var(--gold-soft);
 }
-.side nav { display: flex; flex-direction: column; gap: 0.1rem; flex: 1; }
+.side nav { display: flex; flex-direction: column; gap: 0.1rem; flex: 1; overflow-y: auto; min-height: 0; }
 .side nav a {
   font-family: var(--sans);
   font-size: 0.68rem;
@@ -789,34 +789,7 @@ select.inp {
 /* ---- Loading / error states ---- */
 .state-note { color: var(--fg-muted); font-size: var(--t-sm); padding: 2rem 0; }
 
-/* ---- Responsive: sidebar collapses to a top bar ---- */
-@media (max-width: 820px) {
-  .admin { grid-template-columns: 1fr; }
-  .side {
-    position: static;
-    height: auto;
-    flex-direction: column;
-    gap: 1.1rem;
-    padding: 1.1rem clamp(1.25rem, 4vw, 2rem);
-  }
-  .side .brand { display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap; }
-  .side .atelier { margin-top: 0; }
-  .side nav {
-    flex-direction: row;
-    gap: 1.4rem;
-    overflow-x: auto;
-    padding-bottom: 0.2rem;
-  }
-  .side nav a { border-bottom: 0; padding: 0.2rem 0; white-space: nowrap; }
-  .side nav a.on::before { content: none; }
-  .side nav a.on { border-bottom: 1px solid var(--gold-soft); }
-  .side-foot {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    padding-top: 0.8rem;
-  }
-}
+/* Phone layout lives in admin-ui.css: app bar + bottom tab bar replace the sidebar. */
 
 /* ---- Deliveries board (mobile-first) ---- */
 .dl-totals {
@@ -919,14 +892,3 @@ select.inp {
   .data tr.detail > td::before { content: none; }
 }
 
-/* Thumb-sized, snap-scrolling nav strip on phones */
-@media (max-width: 820px) {
-  .side nav { scroll-snap-type: x proximity; }
-  .side nav a {
-    scroll-snap-align: start;
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-    padding: 0 0.35rem;
-  }
-}

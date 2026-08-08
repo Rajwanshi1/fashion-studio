@@ -49,7 +49,7 @@ describe('Users', () => {
 
     expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument();
     expect(screen.getByText('The House · Access')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Users' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Customers' })).toBeInTheDocument();
 
     // names — em-dash when the user has no name
     expect(screen.getByText('Meera Kapoor')).toBeInTheDocument();

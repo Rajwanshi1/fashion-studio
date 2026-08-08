@@ -201,6 +201,178 @@
 }
 button.stickybar-err { cursor: pointer; }
 
+/* ---- Sidebar groups + capture actions (desktop) ---- */
+.side-cap { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 0.4rem; }
+.side-cap a {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: var(--tap);
+  padding: 0 0.9rem;
+  border: 1px solid var(--hairline-gold);
+  border-bottom: 1px solid var(--hairline-gold);
+  border-radius: var(--edge);
+  color: var(--gold-soft);
+  font-size: 0.66rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.side-cap a::before { content: '+'; color: var(--gold); font-size: 0.95rem; }
+.side-cap a:hover,
+.side-cap a.on { background: rgba(176, 137, 74, 0.16); color: var(--gold-pale); }
+.side-cap a.on::before { content: '+'; margin-right: 0; }
+.side-sec { margin-top: 1.35rem; }
+.side-sec .sec-title {
+  font-size: 0.54rem;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: rgba(207, 224, 216, 0.48);
+  margin-bottom: 0.15rem;
+}
+
+/* ---- Phone app bar ---- */
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-appbar);
+  background: var(--ink);
+  color: var(--celadon-50);
+  padding: calc(0.5rem + env(safe-area-inset-top)) 1rem 0.6rem;
+}
+.appbar-top { display: flex; align-items: center; gap: 0.5rem; min-height: var(--tap); }
+.appbar-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  margin-left: -0.6rem;
+  background: none;
+  border: 0;
+  color: var(--celadon-100);
+  cursor: pointer;
+}
+.appbar-back svg { width: 22px; height: 22px; }
+.appbar-title {
+  font-family: var(--serif-display);
+  font-size: 1.2rem;
+  font-weight: 400;
+  margin: 0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.appbar-search {
+  margin-top: 0.45rem;
+  background: rgba(247, 248, 244, 0.08);
+  border-color: rgba(230, 215, 184, 0.28);
+  color: var(--celadon-50);
+}
+.appbar-search::placeholder { color: var(--celadon-200); }
+.appbar-search:focus { border-color: var(--gold); }
+
+/* ---- Phone bottom tab bar ---- */
+.tabbar {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: var(--z-tabbar);
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: stretch;
+  background: var(--ink);
+  border-top: 1px solid rgba(230, 215, 184, 0.14);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: var(--tabbar-h);
+  background: none;
+  border: 0;
+  font-family: var(--sans);
+  font-size: 0.54rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--celadon-200);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+}
+.tab svg { width: 22px; height: 22px; }
+.tab.on { color: var(--gold-soft); }
+.tab-plus-wrap { display: flex; align-items: center; justify-content: center; }
+.tab-plus {
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--surface);
+  border: 0;
+  font-size: 1.7rem;
+  font-weight: 300;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(30, 38, 32, 0.4);
+  transition: background var(--dur-fast) var(--ease);
+}
+.tab-plus:hover { background: var(--gold-soft); color: var(--forest-800); }
+
+/* ---- Sheet menus (capture / more) ---- */
+.sheet-menu { display: flex; flex-direction: column; }
+.sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  min-height: 56px;
+  padding: 0.65rem 0.2rem;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--sans);
+  color: var(--ink);
+  transition: background var(--dur-fast) var(--ease);
+}
+.sheet-item:last-child { border-bottom: 0; }
+.sheet-item:hover { background: var(--celadon-50); }
+.sheet-item svg { width: 24px; height: 24px; color: var(--gold); flex: 0 0 auto; }
+.sheet-item strong { display: block; font-family: var(--serif-display); font-weight: 400; font-size: 1rem; }
+.sheet-item small { display: block; color: var(--fg-muted); font-size: 0.76rem; margin-top: 0.15rem; }
+.sheet-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--hairline);
+}
+.sheet-user .who { font-size: 0.78rem; color: var(--fg-muted); }
+
+/* ---- List search (desktop inline) ---- */
+.list-search { max-width: 300px; }
+
+/* ---- Phone canvas + layout ---- */
+@media (max-width: 820px) {
+  .admin {
+    grid-template-columns: 1fr;
+    /* Sticky bars sit above the fixed tab bar. */
+    --tabbar-off: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  }
+  /* The app bar carries the page title on phones. */
+  .page-head-admin { display: none; }
+  .head-row { margin-bottom: 1.2rem; }
+  .canvas { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 2.5rem); }
+  .list-search { display: none; }
+  .dl-totals { top: 0; }
+}
+
 /* ---- Skeleton ---- */
 .skel { display: grid; gap: 0.7rem; padding: 1rem 0; }
 .skel-block {
