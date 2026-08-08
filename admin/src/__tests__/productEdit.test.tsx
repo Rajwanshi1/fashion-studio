@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mockFetch, renderApp, seedAdminAuth } from '../test/utils';
 import { uploadProductImage } from '../lib/uploads';
@@ -15,6 +15,14 @@ const CATEGORIES = [
   { id: 'c1', slug: 'gowns', name: 'Gowns', description: '', position: 1 },
   { id: 'c2', slug: 'anarkali', name: 'Anarkali', description: '', position: 2 },
 ];
+
+/** Pick a tri-state mode inside the dupatta/jacket group (both offer the same options). */
+const setAddon = (title: string, option: string) =>
+  userEvent.click(
+    within(screen.getByRole('radiogroup', { name: `${title} in the set` })).getByRole('radio', {
+      name: option,
+    }),
+  );
 
 describe('ProductEdit', () => {
   it('converts the rupee price to paise and posts variants for a new piece', async () => {
@@ -41,12 +49,13 @@ describe('ProductEdit', () => {
     await userEvent.type(screen.getByLabelText('Craft / Work'), 'Zardozi');
     await userEvent.type(screen.getByLabelText('Fabric'), 'Silk');
     await userEvent.type(screen.getByLabelText('Occasion'), 'Wedding');
-    await userEvent.type(
-      screen.getByLabelText('Dupatta price (₹ — blank if no dupatta, 0 if included free)'),
-      '12000',
-    );
-    await userEvent.clear(screen.getByLabelText('M'));
-    await userEvent.type(screen.getByLabelText('M'), '4');
+    await setAddon('Dupatta', 'Priced');
+    await userEvent.type(screen.getByLabelText('Dupatta price (₹)'), '12000');
+    // Stock steppers: four taps on + instead of typing.
+    for (let i = 0; i < 4; i += 1) {
+      await userEvent.click(screen.getByRole('button', { name: 'Increase M stock' }));
+    }
+    expect(screen.getByLabelText('M')).toHaveValue('4');
     await userEvent.click(screen.getByRole('button', { name: 'Add Piece' }));
 
     const post = calls.find((c) => c.method === 'POST');
@@ -116,6 +125,7 @@ describe('ProductEdit', () => {
       variants: [
         { id: 'v1', productId: 'p1', size: 'S', stock: 3 },
         { id: 'v2', productId: 'p1', size: 'M', stock: 4 },
+        { id: 'v3', productId: 'p1', size: 'L', stock: 1 },
       ],
     };
     const { calls } = mockFetch((url, init) => {
@@ -123,8 +133,8 @@ describe('ProductEdit', () => {
       if (url.endsWith('/api/admin/products/p1') && init?.method === 'PUT') {
         return { json: product };
       }
-      if (url.endsWith('/api/admin/variants/v2') && init?.method === 'PATCH') {
-        return { json: { ...product.variants[1], stock: 9 } };
+      if (url.includes('/api/admin/variants/') && init?.method === 'PATCH') {
+        return { json: product.variants[0] };
       }
       if (url.endsWith('/api/admin/products')) return { json: [product] };
       return undefined;
@@ -132,20 +142,35 @@ describe('ProductEdit', () => {
 
     renderApp('/products/p1');
 
-    const mInput = await screen.findByLabelText('M');
-    await userEvent.clear(mInput);
-    await userEvent.type(mInput, '9');
+    // The stored add-on price opens in "Priced" with the rupee amount filled in.
+    await screen.findByLabelText('M');
+    const dupatta = screen.getByRole('radiogroup', { name: 'Dupatta in the set' });
+    expect(within(dupatta).getByRole('radio', { name: 'Priced' })).toBeChecked();
+    expect(screen.getByLabelText('Dupatta price (₹)')).toHaveValue(12000);
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Jacket in the set' })).getByRole('radio', {
+        name: 'Not in set',
+      }),
+    ).toBeChecked();
+
+    // S 3 → 2, M 4 → 9, L untouched.
+    await userEvent.click(screen.getByRole('button', { name: 'Decrease S stock' }));
+    for (let i = 0; i < 5; i += 1) {
+      await userEvent.click(screen.getByRole('button', { name: 'Increase M stock' }));
+    }
     await userEvent.click(screen.getByRole('button', { name: 'Save Piece' }));
 
     const put = calls.find((c) => c.method === 'PUT');
     expect(put).toBeDefined();
     expect(put?.url).toMatch(/\/api\/admin\/products\/p1$/);
     expect((put?.body as { price: number }).price).toBe(18400000);
+    expect((put?.body as { dupattaPrice: number | null }).dupattaPrice).toBe(1200000);
 
+    // Only the two edited variants are PATCHed, and they go out together.
     const patches = calls.filter((c) => c.method === 'PATCH');
-    expect(patches).toHaveLength(1);
-    expect(patches[0].url).toMatch(/\/api\/admin\/variants\/v2$/);
-    expect(patches[0].body).toEqual({ stock: 9 });
+    expect(patches).toHaveLength(2);
+    expect(patches.map((p) => p.url.replace(/^.*\/variants\//, ''))).toEqual(['v1', 'v2']);
+    expect(patches.map((p) => p.body)).toEqual([{ stock: 2 }, { stock: 9 }]);
 
     expect(await screen.findByRole('heading', { name: 'Products' })).toBeInTheDocument();
     // Stored slug differs from deriveSlug(name, color), so it was kept as-is.
@@ -191,6 +216,70 @@ describe('ProductEdit', () => {
 
     const put = calls.find((c) => c.method === 'PUT');
     expect((put?.body as { slug: string }).slug).toBe('moss-drape-kaftan-fern');
+  });
+
+  it('maps the tri-states and the flag onto the saved payload', async () => {
+    seedAdminAuth();
+    const { calls } = mockFetch((url, init) => {
+      if (url.endsWith('/api/categories')) return { json: CATEGORIES };
+      if (url.endsWith('/api/admin/products') && init?.method === 'POST') return { json: { id: 'p' } };
+      if (url.endsWith('/api/admin/products')) return { json: [] };
+      return undefined;
+    });
+
+    renderApp('/products/new');
+    await screen.findByRole('option', { name: 'Gowns' });
+
+    await userEvent.type(screen.getByLabelText('Name'), 'Moss Drape Kaftan');
+    await userEvent.selectOptions(screen.getByLabelText('Category'), 'c1');
+    await userEvent.type(screen.getByLabelText('Price (₹ rupees)'), '96000');
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Bestseller' }));
+    // Included free is the literal 0 the API expects; the ₹ field stays hidden.
+    await setAddon('Dupatta', 'Included free');
+    expect(screen.queryByLabelText('Dupatta price (₹)')).not.toBeInTheDocument();
+    await setAddon('Jacket', 'Priced');
+    await userEvent.type(screen.getByLabelText('Jacket price (₹)'), '800');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add Piece' }));
+
+    const body = calls.find((c) => c.method === 'POST')?.body as {
+      flag: string | null;
+      dupattaPrice: number | null;
+      jacketPrice: number | null;
+    };
+    expect(body.flag).toBe('bestseller');
+    expect(body.dupattaPrice).toBe(0);
+    expect(body.jacketPrice).toBe(80000);
+  });
+
+  it('refuses to save a Priced add-on with no amount typed', async () => {
+    seedAdminAuth();
+    const { calls } = mockFetch((url, init) => {
+      if (url.endsWith('/api/categories')) return { json: CATEGORIES };
+      if (url.endsWith('/api/admin/products') && init?.method === 'POST') return { json: { id: 'p' } };
+      if (url.endsWith('/api/admin/products')) return { json: [] };
+      return undefined;
+    });
+
+    renderApp('/products/new');
+    await screen.findByRole('option', { name: 'Gowns' });
+
+    await userEvent.type(screen.getByLabelText('Name'), 'Moss Drape Kaftan');
+    await userEvent.selectOptions(screen.getByLabelText('Category'), 'c1');
+    await userEvent.type(screen.getByLabelText('Price (₹ rupees)'), '96000');
+    await setAddon('Dupatta', 'Priced');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Piece' }));
+
+    // A blank "Priced" is incomplete, not "no dupatta in the set".
+    expect(await screen.findByRole('alert')).toHaveTextContent(/marked Priced/);
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
+
+    // Filling it in saves the amount.
+    await userEvent.type(screen.getByLabelText('Dupatta price (₹)'), '1500');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Piece' }));
+    const body = calls.find((c) => c.method === 'POST')?.body as { dupattaPrice: number | null };
+    expect(body.dupattaPrice).toBe(150000);
   });
 
   it('uploading a photo fills the image URL with the permanent public URL', async () => {

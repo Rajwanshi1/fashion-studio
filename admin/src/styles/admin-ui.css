@@ -1,0 +1,472 @@
+/* ============================================================
+   TANVI AGNIHOTRY — Admin UI kit
+   Utility tokens + kit/shell components for the mobile-first
+   admin overhaul. Loads after admin.css; brand.css untouched.
+   ============================================================ */
+
+:root {
+  /* Touch + motion */
+  --tap: 44px;
+  --dur-fast: 150ms;
+
+  /* Spacing scale (admin chrome only) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Stacking order — every sticky/overlay layer uses one of these */
+  --z-sticky: 10;
+  --z-appbar: 20;
+  --z-tabbar: 30;
+  --z-sheet: 300;
+  --z-toast: 400;
+
+  /* Shell metrics (used by sticky offsets once the shell lands) */
+  --appbar-h: 56px;
+  --tabbar-h: 60px;
+  /* Bottom offset for sticky bars — the shell raises this above the tab bar on phones. */
+  --tabbar-off: 0px;
+}
+
+/* Inline record-payment mini-form (order detail) */
+.pay-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: flex-end;
+  margin-top: 0.8rem;
+}
+.pay-form .field {
+  flex: 1 1 130px;
+  margin-bottom: 0;
+}
+.pay-form .btn-outline {
+  min-height: var(--tap);
+}
+
+/* Non-label field captions — a SegmentedControl labels itself, so its caption
+   is a span rather than a <label> pointing at nothing. */
+span.lab {
+  display: block;
+  font-size: 0.66rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 0.5rem;
+}
+
+/* ---- Order detail page ---- */
+.odetail-sub { margin-top: 1.8rem; }
+.odetail .ototal { font-family: var(--serif-display); font-size: 0.95rem; }
+.odetail-status { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.9rem; }
+.odetail-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; margin-top: 0.9rem; }
+.odetail-acts .btn-outline,
+.odetail-acts .btn-buy { min-height: var(--tap); }
+
+/* ---- List head tools (search + filters) ---- */
+.head-tools { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+.head-tools .btn-outline { min-height: var(--tap); }
+.head-tools .vcf-export { margin-top: 0; }
+
+/* Filter sheet: group captions sit tighter than page section labels. */
+.sheet .filter-label { margin: 1.2rem 0 0.6rem; }
+.sheet .filter-label:first-child { margin-top: 0.2rem; }
+.sheet .chips .chip { min-height: var(--tap); }
+.sheet-actions { display: flex; gap: 0.7rem; flex-wrap: wrap; }
+
+/* Inline toast action ("Undo") — gold on the ink toast. An undo offer must stay
+   reachable, so the toast is lifted above sheets rather than left at z-index 200. */
+.toast { z-index: var(--z-toast); }
+.toast-action { color: var(--gold-soft); border-bottom-color: var(--gold-soft); margin-left: 0.3rem; }
+.toast-action:hover { color: var(--gold-pale); }
+
+/* ---- Field errors / hints (Field component) ---- */
+.field.invalid .inp { border-color: var(--danger); }
+.field-err { margin: 0.4rem 0 0; font-size: 0.74rem; color: var(--danger); }
+.field-hint { margin: 0.4rem 0 0; font-size: 0.74rem; color: var(--fg-muted); }
+
+/* ---- Segmented control ---- */
+.seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  overflow: hidden;
+}
+.seg-opt {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 1.15em;
+  background: none;
+  border: 0;
+  border-right: 1px solid var(--hairline);
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.seg-opt:last-child { border-right: 0; }
+.seg-opt.on { background: var(--ink); color: var(--paper); }
+
+/* ---- Stepper ---- */
+.stepper { display: inline-flex; align-items: stretch; }
+.step-btn {
+  width: var(--tap);
+  min-height: var(--tap);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  font-family: var(--sans);
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.step-btn:hover { background: var(--celadon-50); }
+.step-btn:disabled { color: var(--fg-muted); cursor: not-allowed; background: none; }
+.step-btn:first-child { border-radius: var(--edge) 0 0 var(--edge); border-right: 0; }
+.step-btn:last-child { border-radius: 0 var(--edge) var(--edge) 0; border-left: 0; }
+.stepper .step-inp { width: 3.4em; text-align: center; border-radius: 0; }
+
+/* ---- Sheet (bottom sheet on phones, dialog on desktop) ---- */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 38, 32, 0.5);
+  z-index: var(--z-sheet);
+}
+.sheet {
+  position: fixed;
+  z-index: calc(var(--z-sheet) + 1);
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-bottom: 0;
+  border-radius: var(--edge) var(--edge) 0 0;
+  max-height: 85dvh;
+  padding-bottom: env(safe-area-inset-bottom);
+  overscroll-behavior: contain;
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem 0.6rem;
+}
+.sheet-title { font-family: var(--serif-display); font-size: 1.15rem; margin: 0; }
+.sheet-x { width: var(--tap); height: var(--tap); margin-bottom: 0; }
+.sheet-body { padding: 0.4rem 1.25rem 1.25rem; overflow-y: auto; }
+.sheet-foot {
+  padding: 0.8rem 1.25rem calc(0.8rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--hairline);
+}
+@media (min-width: 821px) {
+  .sheet {
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    width: min(480px, calc(100vw - 2rem));
+    max-height: 85vh;
+    border-bottom: 1px solid var(--hairline);
+    border-radius: var(--edge);
+    padding-bottom: 0;
+  }
+}
+/* Opacity-only entrance — a transform animation would fight the desktop centering transform. */
+@media (prefers-reduced-motion: no-preference) {
+  .sheet, .sheet-backdrop { animation: sheet-in 200ms var(--ease); }
+  @keyframes sheet-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+/* ---- ListCard ---- */
+.lcard {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--edge);
+  padding: 0.95rem 1.1rem;
+  margin-bottom: 0.7rem;
+  text-align: left;
+  width: 100%;
+}
+.lcard.hit { cursor: pointer; transition: background var(--dur-fast) var(--ease); }
+.lcard.hit:hover { background: var(--celadon-50); }
+.lcard-top { display: flex; justify-content: space-between; gap: 0.9rem; align-items: baseline; }
+.lcard-main { min-width: 0; }
+.lcard-primary { font-family: var(--serif-display); font-size: 1rem; }
+.lcard-secondary { color: var(--fg-muted); font-size: 0.78rem; margin-top: 0.2rem; }
+.lcard-meta { text-align: right; font-size: 0.98rem; white-space: nowrap; }
+.lcard-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.lcard-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.7rem; }
+
+/* ---- StickyBar ---- */
+.stickybar {
+  position: sticky;
+  bottom: var(--tabbar-off);
+  z-index: var(--z-sticky);
+  background: var(--surface);
+  border-top: 1px solid var(--hairline);
+  padding: 0.7rem 0 calc(0.7rem + env(safe-area-inset-bottom));
+  margin-top: 1.4rem;
+}
+.stickybar-row { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
+.stickybar-err {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--danger);
+  border-left-width: 3px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-radius: var(--edge);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.8rem;
+  font-family: var(--sans);
+  margin: 0 0 0.7rem;
+}
+button.stickybar-err { cursor: pointer; }
+
+/* Inside a form card the bar spans the full card, so nothing scrolls visibly past its sides. */
+.form-card > .stickybar {
+  margin-inline: calc(-1 * clamp(1.4rem, 3vw, 2.2rem));
+  padding-inline: clamp(1.4rem, 3vw, 2.2rem);
+}
+
+/* Running total + balance in the order form's sticky bar; the actions sit right of it. */
+.sticky-tot { display: flex; flex-direction: column; gap: 0.1rem; margin-right: auto; }
+.sticky-tot strong { font-family: var(--serif-display); font-weight: 400; font-size: 0.95rem; }
+
+/* ---- Order intake: item rows carry a stepper in the qty column (~132px) ----
+   Redeclared (not inherited) because admin.css's own .item-row media rule would
+   otherwise lose to the base rule below on source order alone. */
+.item-row { grid-template-columns: minmax(0, 1fr) 132px 120px 44px; }
+@media (max-width: 640px) {
+  .item-row { grid-template-columns: 132px minmax(0, 1fr) 44px; }
+  .item-row .f-desc { grid-column: 1 / -1; }
+}
+
+/* ---- Bill review: the photo strip rides inside the form's sticky bar ----
+   One sticky region on phones, so the strip and the submit button travel together.
+   `.peek-extra` claims a full row of the wrapping flex bar, above the actions. */
+.peek-extra { flex: 0 0 100%; display: flex; flex-direction: column; gap: 0.7rem; }
+.peek-strip {
+  display: flex;
+  gap: 0.8rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+}
+.peek-strip .photo-zoom {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 85vw;
+  margin-bottom: 0;
+  scroll-snap-align: center;
+}
+.peek-strip .photo-zoom.zoomed { max-width: none; }
+.peek-strip img { max-height: 45vh; width: auto; }
+/* The sticky bar owns a stacking context (z-index), so a zoomed photo inside it
+   can't escape on its own — lift the whole bar while one is open. */
+.stickybar:has(.photo-zoom.zoomed) { z-index: var(--z-sheet); }
+/* Wide screens keep the side rail and never show the strip — as before. */
+@media (min-width: 1100px) {
+  .peek-extra { display: none; }
+}
+
+/* ---- Sidebar groups + capture actions (desktop) ---- */
+.side-cap { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 0.4rem; }
+.side-cap a {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: var(--tap);
+  padding: 0 0.9rem;
+  border: 1px solid var(--hairline-gold);
+  border-bottom: 1px solid var(--hairline-gold);
+  border-radius: var(--edge);
+  color: var(--gold-soft);
+  font-size: 0.66rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.side-cap a::before { content: '+'; color: var(--gold); font-size: 0.95rem; }
+.side-cap a:hover,
+.side-cap a.on { background: rgba(176, 137, 74, 0.16); color: var(--gold-pale); }
+.side-cap a.on::before { content: '+'; margin-right: 0; }
+.side-sec { margin-top: 1.35rem; }
+.side-sec .sec-title {
+  font-size: 0.54rem;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: rgba(207, 224, 216, 0.48);
+  margin-bottom: 0.15rem;
+}
+
+/* ---- Phone app bar ---- */
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-appbar);
+  background: var(--ink);
+  color: var(--celadon-50);
+  padding: calc(0.5rem + env(safe-area-inset-top)) 1rem 0.6rem;
+}
+.appbar-top { display: flex; align-items: center; gap: 0.5rem; min-height: var(--tap); }
+.appbar-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  margin-left: -0.6rem;
+  background: none;
+  border: 0;
+  color: var(--celadon-100);
+  cursor: pointer;
+}
+.appbar-back svg { width: 22px; height: 22px; }
+.appbar-title {
+  font-family: var(--serif-display);
+  font-size: 1.2rem;
+  font-weight: 400;
+  margin: 0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.appbar-search {
+  margin-top: 0.45rem;
+  background: rgba(247, 248, 244, 0.08);
+  border-color: rgba(230, 215, 184, 0.28);
+  color: var(--celadon-50);
+}
+.appbar-search::placeholder { color: var(--celadon-200); }
+.appbar-search:focus { border-color: var(--gold); }
+
+/* ---- Phone bottom tab bar ---- */
+.tabbar {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: var(--z-tabbar);
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: stretch;
+  background: var(--ink);
+  border-top: 1px solid rgba(230, 215, 184, 0.14);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: var(--tabbar-h);
+  background: none;
+  border: 0;
+  font-family: var(--sans);
+  font-size: 0.54rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--celadon-200);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+}
+.tab svg { width: 22px; height: 22px; }
+.tab.on { color: var(--gold-soft); }
+.tab-plus-wrap { display: flex; align-items: center; justify-content: center; }
+.tab-plus {
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--surface);
+  border: 0;
+  font-size: 1.7rem;
+  font-weight: 300;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(30, 38, 32, 0.4);
+  transition: background var(--dur-fast) var(--ease);
+}
+.tab-plus:hover { background: var(--gold-soft); color: var(--forest-800); }
+
+/* ---- Sheet menus (capture / more) ---- */
+.sheet-menu { display: flex; flex-direction: column; }
+.sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  min-height: 56px;
+  padding: 0.65rem 0.2rem;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--sans);
+  color: var(--ink);
+  transition: background var(--dur-fast) var(--ease);
+}
+.sheet-item:last-child { border-bottom: 0; }
+.sheet-item:hover { background: var(--celadon-50); }
+.sheet-item svg { width: 24px; height: 24px; color: var(--gold); flex: 0 0 auto; }
+.sheet-item strong { display: block; font-family: var(--serif-display); font-weight: 400; font-size: 1rem; }
+.sheet-item small { display: block; color: var(--fg-muted); font-size: 0.76rem; margin-top: 0.15rem; }
+.sheet-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--hairline);
+}
+.sheet-user .who { font-size: 0.78rem; color: var(--fg-muted); }
+
+/* ---- List search (desktop inline) ---- */
+.list-search { max-width: 300px; }
+
+/* ---- Phone canvas + layout ---- */
+@media (max-width: 820px) {
+  .admin {
+    grid-template-columns: 1fr;
+    /* Sticky bars sit above the fixed tab bar. */
+    --tabbar-off: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  }
+  /* The app bar carries the page title on phones. */
+  .page-head-admin { display: none; }
+  .head-row { margin-bottom: 1.2rem; }
+  .canvas { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 2.5rem); }
+  .list-search { display: none; }
+  .dl-totals { top: 0; }
+}
+
+/* ---- Skeleton ---- */
+.skel { display: grid; gap: 0.7rem; padding: 1rem 0; }
+.skel-block {
+  height: 3.4rem;
+  border-radius: var(--edge);
+  background: linear-gradient(100deg, var(--celadon-50) 40%, var(--celadon-100) 50%, var(--celadon-50) 60%);
+  background-size: 200% 100%;
+}
+.skel-stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.skel-stats .skel-block { height: 5.4rem; }
+.skel-cards .skel-block { height: 6.4rem; }
+@media (prefers-reduced-motion: no-preference) {
+  .skel-block { animation: skel-wave 1.4s linear infinite; }
+  @keyframes skel-wave { to { background-position: -200% 0; } }
+}

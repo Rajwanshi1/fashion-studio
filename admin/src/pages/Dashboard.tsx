@@ -7,6 +7,7 @@ import StatCard from '../components/StatCard';
 import StatusBadge from '../components/StatusBadge';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
+import { Skeleton } from '../components/ui';
 
 const lowStockColumns: Column<LowStockItem>[] = [
   { key: 'product', label: 'Piece', render: (r) => <span className="nm">{r.productName}</span> },
@@ -48,7 +49,12 @@ export default function Dashboard() {
       </div>
 
       {error && <p className="state-note">{error}</p>}
-      {!summary && !error && <p className="state-note">Loading the atelier ledger…</p>}
+      {!summary && !error && (
+        <>
+          <Skeleton variant="stats" count={4} />
+          <Skeleton variant="rows" />
+        </>
+      )}
 
       {summary && (
         <>
@@ -82,11 +88,11 @@ export default function Dashboard() {
             rowKey={(o) => o.id}
             empty="No orders yet."
           />
-          <p className="state-note">
-            <Link to="/orders" className="btn-line btn">
+          <div className="form-actions">
+            <Link className="btn-outline fit" to="/orders">
               View All Orders
             </Link>
-          </p>
+          </div>
         </>
       )}
     </>

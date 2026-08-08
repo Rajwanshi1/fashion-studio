@@ -1,195 +1,176 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { PHONE_QUERY } from '../lib/useMediaQuery';
 import { makeOrder, mockFetch, renderApp, seedAdminAuth } from '../test/utils';
 
-describe('Orders', () => {
-  it('expands a row and PATCHes the selected valid transition', async () => {
+const listCalls = (calls: { url: string; method: string }[]) =>
+  calls.filter((c) => c.method === 'GET' && c.url.includes('/api/admin/orders'));
+
+/** The jsdom stub reports desktop; this flips the shell into its phone layout. */
+function stubPhoneViewport() {
+  vi.stubGlobal(
+    'matchMedia',
+    (query: string) =>
+      ({
+        matches: query === PHONE_QUERY,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as MediaQueryList,
+  );
+}
+
+describe('Orders list', () => {
+  it('renders the order rows', async () => {
     seedAdminAuth();
-    const order = makeOrder({ status: 'paid' });
-    const { calls } = mockFetch((url, init) => {
-      if (url.endsWith('/api/admin/orders') && (init?.method ?? 'GET') === 'GET') {
-        return { json: [order] };
-      }
-      if (url.endsWith('/api/admin/orders/o1') && init?.method === 'PATCH') {
-        return { json: { ...order, status: 'in_atelier' } };
-      }
-      return undefined;
+    const offline = makeOrder({
+      status: 'in_atelier',
+      channel: 'in_store',
+      billType: 'gst_invoice',
+      deliveryDueDate: '2026-08-20',
+      balance: 10000000,
     });
+    mockFetch((url) => (url.includes('/api/admin/orders') ? { json: [offline] } : undefined));
 
     renderApp('/orders');
 
-    // row renders
-    const cell = await screen.findByText('TA-2026-04817');
+    expect(await screen.findByText('TA-2026-04817')).toBeInTheDocument();
     expect(screen.getByText('Meera Kapoor')).toBeInTheDocument();
     expect(screen.getByText('₹1,84,000', { selector: 'td' })).toBeInTheDocument();
+    expect(screen.getByText('In Store', { selector: '.badge' })).toBeInTheDocument();
+    expect(screen.getByText('GST Invoice', { selector: '.badge' })).toBeInTheDocument();
+    expect(screen.getByText('2026-08-20', { selector: 'td' })).toBeInTheDocument();
+    expect(screen.getByText('₹1,00,000', { selector: 'td' })).toBeInTheDocument();
+  });
 
-    // expand → detail pane with items + address + status select
-    await userEvent.click(cell);
-    expect(screen.getByText('Emerald Court Gown')).toBeInTheDocument();
-    expect(screen.getByText(/14 Altamount Road/)).toBeInTheDocument();
-
-    const select = screen.getByLabelText('Status');
-    const options = Array.from(select.querySelectorAll('option')).map((o) =>
-      o.getAttribute('value'),
+  it('filters loaded rows client-side without refetching', async () => {
+    seedAdminAuth();
+    const meera = makeOrder();
+    const anaya = makeOrder({
+      id: 'o2',
+      orderNumber: 'TA-2026-04999',
+      firstName: 'Anaya',
+      lastName: 'Rao',
+      phone: '+91 90000 11111',
+    });
+    const { calls } = mockFetch((url) =>
+      url.includes('/api/admin/orders') ? { json: [meera, anaya] } : undefined,
     );
-    // paid → only in_atelier | cancelled offered (plus disabled current)
-    expect(options).toEqual(['paid', 'in_atelier', 'cancelled']);
 
-    await userEvent.selectOptions(select, 'in_atelier');
+    renderApp('/orders');
+    await screen.findByText('TA-2026-04817');
+    const before = listCalls(calls).length;
 
-    const patch = calls.find((c) => c.method === 'PATCH');
-    expect(patch).toBeDefined();
-    expect(patch?.url).toMatch(/\/api\/admin\/orders\/o1$/);
-    expect(patch?.body).toEqual({ status: 'in_atelier' });
+    const search = screen.getByLabelText('Search orders…');
+    await userEvent.type(search, 'anaya');
+    expect(screen.queryByText('TA-2026-04817')).not.toBeInTheDocument();
+    expect(screen.getByText('TA-2026-04999')).toBeInTheDocument();
 
-    // status pill updates in the table
-    expect(await screen.findByText('In the Atelier', { selector: '.badge' })).toBeInTheDocument();
+    // phone digits match past the formatting
+    await userEvent.clear(search);
+    await userEvent.type(search, '9820000');
+    expect(screen.getByText('TA-2026-04817')).toBeInTheDocument();
+    expect(screen.queryByText('TA-2026-04999')).not.toBeInTheDocument();
+
+    // order number matches too
+    await userEvent.clear(search);
+    await userEvent.type(search, 'ta-2026-04999');
+    expect(screen.getByText('TA-2026-04999')).toBeInTheDocument();
+
+    // searching never hits the API
+    expect(listCalls(calls).length).toBe(before);
   });
 
-  it('filters orders via status chips', async () => {
+  it('drives the refetch query params from the filters sheet', async () => {
     seedAdminAuth();
-    const { calls } = mockFetch((url) => {
-      if (url.includes('/api/admin/orders')) return { json: [] };
-      return undefined;
-    });
+    const { calls } = mockFetch((url) => (url.includes('/api/admin/orders') ? { json: [] } : undefined));
 
     renderApp('/orders');
     await screen.findByText('No orders in this state.');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Dispatched' }));
-    await screen.findByText('No orders in this state.');
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    const sheet = screen.getByRole('dialog', { name: 'Filters' });
 
+    const status = within(sheet).getByRole('group', { name: 'Filter by status' });
+    await userEvent.click(within(status).getByRole('button', { name: 'Dispatched' }));
+    await screen.findByText('No orders in this state.');
     expect(calls.some((c) => c.url.endsWith('/api/admin/orders?status=dispatched'))).toBe(true);
-  });
 
-  it('combines channel and bill-type chips into the query string', async () => {
-    seedAdminAuth();
-    const { calls } = mockFetch((url) => {
-      if (url.includes('/api/admin/orders')) return { json: [] };
-      return undefined;
-    });
+    const channel = within(sheet).getByRole('group', { name: 'Filter by channel' });
+    await userEvent.click(within(channel).getByRole('button', { name: 'In Store' }));
+    const bill = within(sheet).getByRole('group', { name: 'Filter by bill type' });
+    await userEvent.click(within(bill).getByRole('button', { name: 'Cash Memo' }));
 
-    renderApp('/orders');
-    await screen.findByText('No orders in this state.');
-
-    await userEvent.click(screen.getByRole('button', { name: 'In Store' }));
-    await screen.findByText('No orders in this state.');
-    expect(calls.some((c) => c.url.endsWith('/api/admin/orders?channel=in_store'))).toBe(true);
-
-    await userEvent.click(screen.getByRole('button', { name: 'Cash Memo' }));
-    await screen.findByText('No orders in this state.');
-    expect(
-      calls.some((c) => c.url.endsWith('/api/admin/orders?channel=in_store&billType=cash_memo')),
-    ).toBe(true);
-
-    await userEvent.click(screen.getByRole('button', { name: 'Dispatched' }));
     await screen.findByText('No orders in this state.');
     expect(
       calls.some((c) =>
         c.url.endsWith('/api/admin/orders?status=dispatched&channel=in_store&billType=cash_memo'),
       ),
     ).toBe(true);
+
+    // the trigger counts the active filters, and Done dismisses the sheet
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Filters · 3' })).toBeInTheDocument();
   });
 
-  it('shows offline badges, due date and balance; records a payment in paise', async () => {
+  it('opens the detail page on row click, carrying the order in navigation state', async () => {
     seedAdminAuth();
-    const offline = makeOrder({
-      status: 'in_atelier',
-      channel: 'in_store',
-      billType: 'gst_invoice',
-      billNumber: 'GST-7',
-      deliveryDueDate: '2026-08-20',
-      notes: 'Blouse to be altered',
-      advancePaid: 8400000,
-      balance: 10000000,
-      receipts: [
-        {
-          id: 'r1',
-          orderId: 'o1',
-          amount: 8400000,
-          mode: 'cash',
-          receivedAt: '2026-07-10',
-          note: 'Advance',
-          createdAt: '2026-07-10T10:00:00.000Z',
-        },
-      ],
-      items: [
-        {
-          id: 'oi1',
-          productId: null,
-          variantId: null,
-          productName: 'Custom sage lehenga',
-          size: '',
-          color: '',
-          unitPrice: 18400000,
-          quantity: 1,
-          dupattaPrice: null,
-          jacketPrice: null,
-          imageUrl: null,
-        },
-      ],
-    });
-    const { calls } = mockFetch((url, init) => {
-      if (url.endsWith('/api/admin/orders/o1/receipts') && init?.method === 'POST') {
-        return {
-          json: {
-            ...offline,
-            advancePaid: 18400000,
-            balance: 0,
-            receipts: [
-              ...offline.receipts,
-              {
-                id: 'r2',
-                orderId: 'o1',
-                amount: 10000000,
-                mode: 'online',
-                receivedAt: '2026-07-24',
-                note: '',
-                createdAt: '2026-07-24T10:00:00.000Z',
-              },
-            ],
-          },
-        };
-      }
-      if (url.includes('/api/admin/orders')) return { json: [offline] };
+    const order = makeOrder();
+    const { calls } = mockFetch((url) => {
+      if (url.endsWith('/api/admin/orders/o1/documents')) return { json: [] };
+      if (url.includes('/api/admin/orders')) return { json: [order] };
       return undefined;
     });
 
     renderApp('/orders');
-    const cell = await screen.findByText('TA-2026-04817');
+    await userEvent.click(await screen.findByText('TA-2026-04817'));
 
-    // badges + new columns
-    expect(screen.getByText('In Store', { selector: '.badge' })).toBeInTheDocument();
-    expect(screen.getByText('GST Invoice', { selector: '.badge' })).toBeInTheDocument();
-    expect(screen.getByText('2026-08-20', { selector: 'td' })).toBeInTheDocument();
-    expect(screen.getByText('₹1,00,000', { selector: 'td' })).toBeInTheDocument();
+    // detail page header, rendered from state — the list is not refetched
+    expect(await screen.findByRole('heading', { name: 'TA-2026-04817' })).toBeInTheDocument();
+    expect(screen.getByText('Emerald Court Gown')).toBeInTheDocument();
+    expect(listCalls(calls).filter((c) => c.url.endsWith('/api/admin/orders')).length).toBe(1);
+  });
 
-    // expanded row: bill, notes, receipts, whatsapp link, tel link
-    await userEvent.click(cell);
-    expect(screen.getByText(/Bill GST-7/)).toBeInTheDocument();
-    expect(screen.getByText(/Blouse to be altered/)).toBeInTheDocument();
-    expect(screen.getByText(/2026-07-10 · Cash · Advance/)).toBeInTheDocument();
-    const wa = screen.getByRole('link', { name: 'Send WhatsApp update' });
-    expect(wa.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/919820000000\?text=/);
-    expect(wa.getAttribute('href')).toContain(encodeURIComponent('TA-2026-04817'));
-    expect(screen.getByRole('link', { name: '+91 98200 00000' }).getAttribute('href')).toBe(
-      'tel:+91 98200 00000',
-    );
+  it('renders tappable cards instead of the table on a phone', async () => {
+    seedAdminAuth();
+    stubPhoneViewport();
+    const order = makeOrder({ deliveryDueDate: '2026-08-20' });
+    mockFetch((url) => {
+      if (url.endsWith('/api/admin/orders/o1/documents')) return { json: [] };
+      if (url.includes('/api/admin/orders')) return { json: [order] };
+      return undefined;
+    });
 
-    // offline machine: in_atelier → quality_check | cancelled
-    const select = screen.getByLabelText('Status');
-    const options = Array.from(select.querySelectorAll('option')).map((o) => o.getAttribute('value'));
-    expect(options).toEqual(['in_atelier', 'quality_check', 'cancelled']);
+    renderApp('/orders');
 
-    // record a payment — rupees in, paise out
-    await userEvent.type(screen.getByLabelText('Amount (₹)'), '100000');
-    await userEvent.selectOptions(screen.getByLabelText('Mode'), 'online');
-    await userEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+    const card = await screen.findByRole('button', { name: 'Open order TA-2026-04817' });
+    expect(within(card).getByText('Meera Kapoor')).toBeInTheDocument();
+    expect(within(card).getByText('TA-2026-04817 · due 20 Aug 2026')).toBeInTheDocument();
+    expect(within(card).getByText('₹1,84,000')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
 
-    const post = calls.find((c) => c.method === 'POST' && c.url.endsWith('/orders/o1/receipts'));
-    expect(post?.body).toEqual({ amount: 10000000, mode: 'online' });
+    await userEvent.click(card);
+    // Detail page opens; usePageTitle puts the order number in the phone app bar too.
+    expect(await screen.findAllByRole('heading', { name: 'TA-2026-04817' })).toHaveLength(2);
+    expect(document.querySelector('.appbar-title')).toHaveTextContent('TA-2026-04817');
+  });
 
-    // refreshed order lands in the table — balance cleared
-    expect(await screen.findByText('—', { selector: 'td.num' })).toBeInTheDocument();
+  it('redirects the legacy ?focus= deep link to the order page', async () => {
+    seedAdminAuth();
+    const order = makeOrder();
+    mockFetch((url) => {
+      if (url.endsWith('/api/admin/orders/o1/documents')) return { json: [] };
+      if (url.includes('/api/admin/orders')) return { json: [order] };
+      return undefined;
+    });
+
+    renderApp('/orders?focus=o1');
+
+    expect(await screen.findByRole('heading', { name: 'TA-2026-04817' })).toBeInTheDocument();
   });
 });

@@ -18,17 +18,27 @@ interface Props {
   /** Unique per set — keeps input ids/labels distinct across sets. */
   idPrefix: string;
   set: MeasurementSetState;
+  /** Measurement names offered as autocomplete on every name input in this set. */
+  suggestions?: string[];
   onChange: (next: MeasurementSetState) => void;
   onRemove: () => void;
 }
 
 /** Free-form name/value rows for a measurement set: label + rows + add/remove. */
-export default function KeyValueEditor({ idPrefix, set, onChange, onRemove }: Props) {
+export default function KeyValueEditor({ idPrefix, set, suggestions, onChange, onRemove }: Props) {
   const setRow = (index: number, key: keyof KeyValueRow, value: string) =>
     onChange({ ...set, rows: set.rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)) });
 
+  // One list per set, shared by every name input — the idPrefix keeps it unique.
+  const listId = suggestions?.length ? `${idPrefix}-names` : undefined;
+
   return (
     <div className="mset">
+      {listId && (
+        <datalist id={listId}>
+          {suggestions?.map((name) => <option key={name} value={name} />)}
+        </datalist>
+      )}
       <div className="mset-head">
         <div className="field">
           <label className="lab" htmlFor={`${idPrefix}-label`}>
@@ -52,6 +62,7 @@ export default function KeyValueEditor({ idPrefix, set, onChange, onRemove }: Pr
             className="inp"
             aria-label={`Measurement ${i + 1} name`}
             placeholder="SH"
+            list={listId}
             value={row.name}
             onChange={(e) => setRow(i, 'name', e.target.value)}
           />

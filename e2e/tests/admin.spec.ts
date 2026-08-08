@@ -50,11 +50,19 @@ test('orders: the paid order appears and can advance to In the Atelier', async (
   await expect(row).toHaveCount(1);
   await expect(row.getByText('Paid', { exact: true })).toBeVisible();
 
-  // Expand the row and use the constrained status select.
+  // The row opens the order's own page; status advances with the one-tap button.
   await row.click();
-  // exact: true — the status-filter chip group is also labelled "Filter by status".
-  await page.getByLabel('Status', { exact: true }).selectOption({ label: 'In the Atelier' });
-  await expect(row.getByText('In the Atelier')).toBeVisible();
+  await expect(page.getByRole('heading', { name: order.orderNumber })).toBeVisible();
+  // The commit is deferred behind a 5s Undo window — wait for the PATCH to flush.
+  const patched = page.waitForResponse(
+    (r) => r.url().includes('/api/admin/orders/') && r.request().method() === 'PATCH',
+  );
+  await page.getByRole('button', { name: 'Move to In the Atelier' }).click();
+  await expect(page.getByText('In the Atelier').first()).toBeVisible(); // optimistic UI
+  await patched;
+  await page.goto(`${ADMIN_URL}/orders`);
+  const updated = page.getByRole('row').filter({ hasText: order.orderNumber });
+  await expect(updated.getByText('In the Atelier')).toBeVisible();
 });
 
 test('payments: the captured payment for the order is listed', async ({ page }) => {

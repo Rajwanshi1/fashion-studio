@@ -5,6 +5,7 @@ import type { Payment } from '../lib/types';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import StatusBadge from '../components/StatusBadge';
+import { Skeleton } from '../components/ui';
 
 const columns: Column<Payment>[] = [
   { key: 'id', label: 'Payment', render: (p) => <span className="dim">{p.id}</span> },
@@ -47,7 +48,7 @@ export default function Payments() {
       </div>
 
       {error && <p className="state-note">{error}</p>}
-      {!payments && !error && <p className="state-note">Loading payments…</p>}
+      {!payments && !error && <Skeleton variant="rows" />}
       {payments && (
         <DataTable
           columns={columns}

@@ -36,6 +36,9 @@ describe('Dashboard', () => {
 
     renderApp('/');
 
+    // stats + rows skeletons stand in until the summary lands
+    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(2);
+
     expect(await screen.findByText('Active Orders')).toBeInTheDocument();
     expect(screen.getByText('12')).toBeInTheDocument();
     expect(screen.getByText('Revenue')).toBeInTheDocument();
@@ -52,5 +55,7 @@ describe('Dashboard', () => {
     expect(screen.getByText('TA-2026-04817')).toBeInTheDocument();
     expect(screen.getByText('Meera Kapoor')).toBeInTheDocument();
     expect(screen.getByText('Paid')).toBeInTheDocument();
+    // A real link — right-click/middle-click affordances matter for list navigation.
+    expect(screen.getByRole('link', { name: 'View All Orders' })).toHaveAttribute('href', '/orders');
   });
 });

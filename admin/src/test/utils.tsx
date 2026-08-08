@@ -19,9 +19,10 @@ export function seedAdminAuth() {
   localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(ADMIN_AUTH));
 }
 
-export function renderApp(path: string) {
+/** `state` seeds the history entry, e.g. the order a list row hands to its detail page. */
+export function renderApp(path: string, state?: unknown) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter initialEntries={[state === undefined ? path : { pathname: path, state }]}>
       <App />
     </MemoryRouter>,
   );

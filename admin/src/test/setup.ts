@@ -15,6 +15,21 @@ if (!Blob.prototype.arrayBuffer) {
   };
 }
 
+// jsdom has no matchMedia — stub it so useMediaQuery defaults to desktop in tests.
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  window.matchMedia = (query: string): MediaQueryList =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+}
+
 afterEach(() => {
   cleanup();
   localStorage.clear();

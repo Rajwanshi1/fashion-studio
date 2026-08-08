@@ -93,9 +93,42 @@ describe('Products', () => {
     expect(screen.getByText('Emerald Court Gown')).toBeInTheDocument();
   });
 
-  it('selects pieces and bulk-deletes them, reporting archive fallbacks', async () => {
+  it('filters rows by the list search across name, collection and category', async () => {
     seedAdminAuth();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { calls } = mockFetch((url) => {
+      if (url.endsWith('/api/admin/products')) return { json: [P1, P2] };
+      return undefined;
+    });
+
+    renderApp('/products');
+    await screen.findByText('Emerald Court Gown');
+
+    const search = screen.getByLabelText('Search pieces…');
+    await userEvent.type(search, 'rang');
+    expect(screen.queryByText('Emerald Court Gown')).not.toBeInTheDocument();
+    expect(screen.getByText('Rang Mehfil Lehenga')).toBeInTheDocument();
+
+    // category name
+    await userEvent.clear(search);
+    await userEvent.type(search, 'gowns');
+    expect(screen.getByText('Emerald Court Gown')).toBeInTheDocument();
+    expect(screen.queryByText('Rang Mehfil Lehenga')).not.toBeInTheDocument();
+
+    // collection
+    await userEvent.clear(search);
+    await userEvent.type(search, 'festive');
+    expect(screen.queryByText('Emerald Court Gown')).not.toBeInTheDocument();
+    expect(screen.getByText('Rang Mehfil Lehenga')).toBeInTheDocument();
+
+    await userEvent.clear(search);
+    expect(screen.getByText('Emerald Court Gown')).toBeInTheDocument();
+
+    // filtering never goes back to the API
+    expect(calls.filter((c) => c.url.endsWith('/api/admin/products'))).toHaveLength(1);
+  });
+
+  it('selects pieces and bulk-deletes them behind a confirm sheet', async () => {
+    seedAdminAuth();
     const { calls } = mockFetch((url, init) => {
       if (url.endsWith('/api/admin/products/bulk-delete') && init?.method === 'POST') {
         return {
@@ -116,10 +149,16 @@ describe('Products', () => {
 
     // Selecting rows swaps the header action to Delete.
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all pieces' }));
-    const deleteBtn = screen.getByRole('button', { name: 'Delete selected (2)' });
-    await userEvent.click(deleteBtn);
+    await userEvent.click(screen.getByRole('button', { name: 'Delete selected (2)' }));
 
-    expect(confirmSpy).toHaveBeenCalledOnce();
+    // Nothing is sent until the sheet is confirmed.
+    const sheet = await screen.findByRole('dialog', { name: 'Delete 2 pieces?' });
+    expect(within(sheet).getByText(/Emerald Court Gown, Rang Mehfil Lehenga/)).toBeInTheDocument();
+    expect(within(sheet).getByText(/archived instead of deleted/)).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
+
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Delete' }));
+
     const post = calls.find((c) => c.method === 'POST');
     expect(post?.url).toMatch(/\/api\/admin\/products\/bulk-delete$/);
     expect(post?.body).toEqual({ ids: ['p1', 'p2'] });
@@ -129,8 +168,28 @@ describe('Products', () => {
     expect(screen.queryByText('Emerald Court Gown')).not.toBeInTheDocument();
     expect(screen.queryByText('Rang Mehfil Lehenga')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New Piece' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
 
-    confirmSpy.mockRestore();
+  it('backing out of the confirm sheet deletes nothing', async () => {
+    seedAdminAuth();
+    const { calls } = mockFetch((url) => {
+      if (url.endsWith('/api/admin/products')) return { json: [P1, P2] };
+      return undefined;
+    });
+
+    renderApp('/products');
+    await screen.findByText('Emerald Court Gown');
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Emerald Court Gown' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete selected (1)' }));
+
+    const sheet = await screen.findByRole('dialog', { name: 'Delete 1 piece?' });
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
+    expect(screen.getByText('Emerald Court Gown')).toBeInTheDocument();
   });
 
   it('row checkboxes do not open the editor', async () => {

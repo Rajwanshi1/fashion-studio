@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { uploadProductImage } from '../lib/uploads';
 import type { AdminProduct, Category, Variant } from '../lib/types';
 import { useToast } from '../components/Toast';
+import { Field, Input, SegmentedControl, Stepper } from '../components/ui';
 
 const NEW_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'Custom'];
 
@@ -21,6 +22,67 @@ function deriveSlug(name: string, color: string): string {
 }
 
 const OCCASION_SUGGESTIONS = ['Wedding', 'Reception', 'Festive', 'Cocktail'];
+
+const FLAG_OPTIONS: { value: FormState['flag']; label: string }[] = [
+  { value: '', label: 'None' },
+  { value: 'bestseller', label: 'Bestseller' },
+  { value: 'new', label: 'New' },
+];
+
+/**
+ * How a dupatta/jacket sits in the set. The saved field is still a single rupee
+ * string — 'none' is blank, 'free' is '0', 'priced' is the amount — but the mode
+ * has to be held separately: a priced add-on with no amount typed yet is also
+ * blank, and must fail validation rather than save as "not in the set".
+ */
+type AddonMode = 'none' | 'free' | 'priced';
+
+const ADDON_OPTIONS: { value: AddonMode; label: string }[] = [
+  { value: 'none', label: 'Not in set' },
+  { value: 'free', label: 'Included free' },
+  { value: 'priced', label: 'Priced' },
+];
+
+const addonModeOf = (rupees: string): AddonMode =>
+  rupees.trim() === '' ? 'none' : Number(rupees) === 0 ? 'free' : 'priced';
+
+function AddonField({
+  id,
+  title,
+  mode,
+  rupees,
+  onMode,
+  onRupees,
+}: {
+  id: string;
+  title: string;
+  mode: AddonMode;
+  rupees: string;
+  onMode: (mode: AddonMode) => void;
+  onRupees: (rupees: string) => void;
+}) {
+  return (
+    <div className="addon-field">
+      <span className="lab">{title}</span>
+      <SegmentedControl label={`${title} in the set`} options={ADDON_OPTIONS} value={mode} onChange={onMode} />
+      {mode === 'priced' && (
+        <Field id={id} label={`${title} price (₹)`}>
+          {(a11y) => (
+            <Input
+              {...a11y}
+              type="number"
+              min="0"
+              step="1"
+              inputMode="decimal"
+              value={rupees}
+              onChange={(e) => onRupees(e.target.value)}
+            />
+          )}
+        </Field>
+      )}
+    </div>
+  );
+}
 
 interface FormState {
   name: string;
@@ -72,6 +134,8 @@ export default function ProductEdit() {
   const [slugTouched, setSlugTouched] = useState(false);
   const [variants, setVariants] = useState<Variant[]>([]);
   const [stocks, setStocks] = useState<Record<string, string>>({});
+  const [dupattaMode, setDupattaMode] = useState<AddonMode>('none');
+  const [jacketMode, setJacketMode] = useState<AddonMode>('none');
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -93,6 +157,8 @@ export default function ProductEdit() {
     if (isNew) {
       setForm(EMPTY_FORM);
       setSlugTouched(false);
+      setDupattaMode('none');
+      setJacketMode('none');
       setVariants([]);
       setStocks(Object.fromEntries(NEW_SIZES.map((s) => [s, '0'])));
       setLoading(false);
@@ -109,6 +175,10 @@ export default function ProductEdit() {
           setLoading(false);
           return;
         }
+        const dupattaRupees = product.dupattaPrice == null ? '' : String(product.dupattaPrice / 100);
+        const jacketRupees = product.jacketPrice == null ? '' : String(product.jacketPrice / 100);
+        setDupattaMode(addonModeOf(dupattaRupees));
+        setJacketMode(addonModeOf(jacketRupees));
         setForm({
           name: product.name,
           slug: product.slug,
@@ -124,8 +194,8 @@ export default function ProductEdit() {
           craft: product.craft,
           fabric: product.fabric,
           occasion: product.occasion,
-          dupattaRupees: product.dupattaPrice == null ? '' : String(product.dupattaPrice / 100),
-          jacketRupees: product.jacketPrice == null ? '' : String(product.jacketPrice / 100),
+          dupattaRupees,
+          jacketRupees,
         });
         // Keep auto-deriving only while the stored slug still matches the
         // derivation — a hand-authored slug must survive name/colour edits.
@@ -173,6 +243,20 @@ export default function ProductEdit() {
     return Number.isFinite(paise) && paise >= 0 ? paise : undefined;
   };
 
+  /** "Priced" with nothing typed is incomplete, not "not in the set". */
+  const addonValue = (mode: AddonMode, rupees: string): number | null | undefined =>
+    mode === 'priced' && rupees.trim() === '' ? undefined : addonPaise(rupees);
+
+  /** Switching mode rewrites the saved string: blank, '0', or an amount to type. */
+  const setAddonMode = (
+    key: 'dupattaRupees' | 'jacketRupees',
+    setMode: (mode: AddonMode) => void,
+    mode: AddonMode,
+  ) => {
+    setMode(mode);
+    set(key, mode === 'free' ? '0' : '');
+  };
+
   const onPhotoPicked = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ''; // allow re-selecting the same file (retake)
@@ -205,10 +289,10 @@ export default function ProductEdit() {
       setError('Please enter a valid price in rupees');
       return;
     }
-    const dupattaPrice = addonPaise(form.dupattaRupees);
-    const jacketPrice = addonPaise(form.jacketRupees);
+    const dupattaPrice = addonValue(dupattaMode, form.dupattaRupees);
+    const jacketPrice = addonValue(jacketMode, form.jacketRupees);
     if (dupattaPrice === undefined || jacketPrice === undefined) {
-      setError('Set-includes prices must be 0 or more — leave blank when the set has no such piece');
+      setError('Enter a price of 0 or more for anything marked Priced in the set');
       return;
     }
 
@@ -249,12 +333,15 @@ export default function ProductEdit() {
         const changed = variants.filter(
           (v) => Math.round(Number(stocks[v.id]) || 0) !== v.stock,
         );
-        for (const v of changed) {
-          await api(`/api/admin/variants/${v.id}`, {
-            method: 'PATCH',
-            body: { stock: Math.max(0, Math.round(Number(stocks[v.id]) || 0)) },
-          });
-        }
+        // Variants are independent resources — no reason to queue them.
+        await Promise.all(
+          changed.map((v) =>
+            api(`/api/admin/variants/${v.id}`, {
+              method: 'PATCH',
+              body: { stock: Math.max(0, Math.round(Number(stocks[v.id]) || 0)) },
+            }),
+          ),
+        );
       }
       toast(isNew ? 'Piece added to the collection' : 'Piece saved');
       navigate('/products');
@@ -344,7 +431,7 @@ export default function ProductEdit() {
               type="number"
               min="0"
               step="1"
-              inputMode="numeric"
+              inputMode="decimal"
               value={form.priceRupees}
               onChange={(e) => set('priceRupees', e.target.value)}
               required
@@ -389,19 +476,13 @@ export default function ProductEdit() {
             />
           </div>
           <div className="field">
-            <label className="lab" htmlFor="p-flag">
-              Flag
-            </label>
-            <select
-              id="p-flag"
-              className="inp"
+            <span className="lab">Flag</span>
+            <SegmentedControl
+              label="Flag"
+              options={FLAG_OPTIONS}
               value={form.flag}
-              onChange={(e) => set('flag', e.target.value as FormState['flag'])}
-            >
-              <option value="">None</option>
-              <option value="bestseller">Bestseller</option>
-              <option value="new">New</option>
-            </select>
+              onChange={(flag) => set('flag', flag)}
+            />
           </div>
         </div>
 
@@ -467,36 +548,22 @@ export default function ProductEdit() {
 
         <p className="section-label">Set includes</p>
         <div className="grid2">
-          <div className="field">
-            <label className="lab" htmlFor="p-dupatta">
-              Dupatta price (₹ — blank if no dupatta, 0 if included free)
-            </label>
-            <input
-              id="p-dupatta"
-              className="inp"
-              type="number"
-              min="0"
-              step="1"
-              inputMode="numeric"
-              value={form.dupattaRupees}
-              onChange={(e) => set('dupattaRupees', e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label className="lab" htmlFor="p-jacket">
-              Jacket price (₹ — blank if no jacket, 0 if included free)
-            </label>
-            <input
-              id="p-jacket"
-              className="inp"
-              type="number"
-              min="0"
-              step="1"
-              inputMode="numeric"
-              value={form.jacketRupees}
-              onChange={(e) => set('jacketRupees', e.target.value)}
-            />
-          </div>
+          <AddonField
+            id="p-dupatta"
+            title="Dupatta"
+            mode={dupattaMode}
+            rupees={form.dupattaRupees}
+            onMode={(mode) => setAddonMode('dupattaRupees', setDupattaMode, mode)}
+            onRupees={(rupees) => set('dupattaRupees', rupees)}
+          />
+          <AddonField
+            id="p-jacket"
+            title="Jacket"
+            mode={jacketMode}
+            rupees={form.jacketRupees}
+            onMode={(mode) => setAddonMode('jacketRupees', setJacketMode, mode)}
+            onRupees={(rupees) => set('jacketRupees', rupees)}
+          />
         </div>
 
         <p className="section-label">Photo</p>
@@ -557,15 +624,12 @@ export default function ProductEdit() {
               <label className="lab" htmlFor={`stock-${key}`}>
                 {label}
               </label>
-              <input
+              <Stepper
                 id={`stock-${key}`}
-                className="inp"
-                type="number"
-                min="0"
-                step="1"
-                inputMode="numeric"
+                label={`${label} stock`}
+                min={0}
                 value={stocks[key] ?? '0'}
-                onChange={(e) => setStocks((s) => ({ ...s, [key]: e.target.value }))}
+                onChange={(stock) => setStocks((s) => ({ ...s, [key]: stock }))}
               />
             </div>
           ))}

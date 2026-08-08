@@ -1,17 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { API_URL, api, storedToken } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatDate } from '../lib/format';
+import { useListSearch } from '../lib/pageChrome';
 import type { AdminUser, Role } from '../lib/types';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
+import ListSearch from '../components/shell/ListSearch';
+import { Skeleton } from '../components/ui';
 import { useToast } from '../components/Toast';
 
+const SEARCH_PLACEHOLDER = 'Search customers…';
+
 const fullName = (u: AdminUser) => `${u.firstName} ${u.lastName}`.trim();
+
+/**
+ * Name, email or phone. Phones match on digits only, so a typed '98765' finds
+ * '+91 98765…' however the number happens to be punctuated.
+ */
+function matchesQuery(u: AdminUser, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  if (fullName(u).toLowerCase().includes(needle)) return true;
+  if (u.email?.toLowerCase().includes(needle)) return true;
+  const digits = needle.replace(/\D/g, '');
+  return digits.length > 0 && (u.phone ?? '').replace(/\D/g, '').includes(digits);
+}
 
 export default function Users() {
   const { user: me } = useAuth();
   const toast = useToast();
+  const [query] = useListSearch(SEARCH_PLACEHOLDER);
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,6 +78,11 @@ export default function Users() {
       toast(err instanceof Error ? err.message : 'Unable to export contacts', { tone: 'error' });
     }
   };
+
+  const rows = useMemo(
+    () => (users ?? []).filter((u) => matchesQuery(u, query)),
+    [users, query],
+  );
 
   const columns: Column<AdminUser>[] = [
     {
@@ -117,22 +141,29 @@ export default function Users() {
 
   return (
     <>
-      <div className="page-head-admin">
-        <span className="eyebrow">The House · Access</span>
-        <h1>Users</h1>
-        <button type="button" className="ulink vcf-export" onClick={() => void exportContacts()}>
-          Export contacts (.vcf)
-        </button>
+      <div className="head-row">
+        <div className="page-head-admin">
+          <span className="eyebrow">The House · Customers</span>
+          <h1>Customers</h1>
+        </div>
+        <div className="head-tools">
+          <ListSearch placeholder={SEARCH_PLACEHOLDER} />
+          <button type="button" className="ulink vcf-export" onClick={() => void exportContacts()}>
+            Export contacts (.vcf)
+          </button>
+        </div>
       </div>
 
       {error && <p className="state-note">{error}</p>}
-      {!users && !error && <p className="state-note">Loading users…</p>}
+      {!users && !error && <Skeleton variant="rows" />}
       {users && (
         <DataTable
           columns={columns}
-          rows={users}
+          rows={rows}
           rowKey={(u) => u.id}
-          empty="No users registered yet."
+          empty={
+            query.trim() ? 'No customers match that search.' : 'No customers registered yet.'
+          }
         />
       )}
     </>

@@ -64,17 +64,17 @@ test('bill intake: photo upload → parse falls back (503) → manual review →
   await page.locator('#oi-phone').fill(phone);
   await page.locator('#oi-first').fill('Scan');
   await page.locator('#oi-last').fill('Fallback');
-  await page.getByRole('group', { name: 'Bill type' }).getByRole('button', { name: 'Cash Memo' }).click();
+  await page.getByRole('radiogroup', { name: 'Bill type' }).getByRole('radio', { name: 'Cash Memo' }).click();
   await page.locator('#oi-desc-0').fill('Hand-embroidered dupatta');
   await page.locator('#oi-qty-0').fill('1');
   await page.locator('#oi-unit-0').fill('12000');
   await page.locator('#oi-total').fill('12000');
 
-  // The uploaded photo is reviewable — sticky peek on phones, side rail ≥1100px.
-  const peekToggle = page.getByRole('button', { name: 'View photos (1)' });
+  // The uploaded photo is reviewable — sticky-bar toggle on phones, side rail ≥1100px.
+  const peekToggle = page.getByRole('button', { name: 'Photos (1)' });
   if (await peekToggle.isVisible()) {
     await peekToggle.click();
-    await expect(page.locator('.peek-body img')).toBeVisible();
+    await expect(page.locator('.peek-strip img')).toBeVisible();
   } else {
     await expect(page.locator('.photo-rail img')).toBeVisible();
   }
@@ -88,15 +88,12 @@ test('bill intake: photo upload → parse falls back (503) → manual review →
   await expect(page.getByRole('button', { name: 'Scan next bill' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'View orders' })).toBeVisible();
 
-  // "Open order" deep-links into the order book with the detail row expanded.
+  // "Open order" deep-links to the order's own page.
   await page.getByRole('button', { name: 'Open order' }).click();
-  await expect(page.getByRole('heading', { name: 'Orders' })).toBeVisible();
-  await expect(page.locator('tr.detail')).toBeVisible();
-  await expect(page.locator('tr.detail')).toContainText('Items');
-  const row = page.getByRole('row').filter({ hasText: orderNumber }).first();
-  await expect(row).toBeVisible();
-  await expect(row).toContainText('Scan Fallback');
-  await expect(row.getByText('Cash Memo')).toBeVisible();
+  await expect(page.getByRole('heading', { name: orderNumber })).toBeVisible();
+  await expect(page.getByText('Scan Fallback')).toBeVisible();
+  await expect(page.getByText('Cash Memo')).toBeVisible();
+  await expect(page.getByText('Hand-embroidered dupatta')).toBeVisible();
 });
 
 test('bill intake: manual escape hatch skips photos entirely @mobile', async ({ page, request }) => {

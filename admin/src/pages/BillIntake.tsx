@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import type { MeasurementSetState } from '../components/KeyValueEditor';
 import ShotTile, { ZoomableShot } from '../components/ShotTile';
 import { useToast } from '../components/Toast';
+import { Button } from '../components/ui';
 import { formatDate, formatINR } from '../lib/format';
 import type { Order } from '../lib/types';
 import type { BillDraft, MeasurementDraft } from '../lib/uploads';
@@ -310,7 +311,8 @@ export default function BillIntake() {
             onChange={(e) => addFiles('measurement', e)}
           />
 
-          <header className="step-head">
+          {/* A div, not a <header>: the phone app bar must be the page's only banner landmark. */}
+          <div className="step-head">
             <h2 className="step-title" tabIndex={-1} ref={stepTitleRef}>
               Photograph the bill
             </h2>
@@ -318,7 +320,7 @@ export default function BillIntake() {
               Lay the bill flat in good light. Add every measurement page — they are read into the
               order automatically.
             </p>
-          </header>
+          </div>
 
           <section className="capture-sec">
             <h3 className="fset-legend">Bill</h3>
@@ -412,12 +414,12 @@ export default function BillIntake() {
 
       {step === 'capture' && parse.at !== 'idle' && (
         <div className="form-card parse-panel">
-          <header className="step-head">
+          <div className="step-head">
             <h2 className="step-title" tabIndex={-1} ref={stepTitleRef}>
               Reading the bill
             </h2>
             <p className="hint">Usually takes 10–20 seconds. Keep this page open.</p>
-          </header>
+          </div>
           <ul className="parse-list" role="status" aria-live="polite">
             {ready
               .filter((s) => parse.docs[s.documentId!])
@@ -458,11 +460,11 @@ export default function BillIntake() {
       {step === 'review' && (
         <div className="review-grid">
           <div className="review-main">
-            <header className="step-head">
+            <div className="step-head">
               <h2 className="step-title" tabIndex={-1} ref={stepTitleRef}>
                 Review &amp; record
               </h2>
-            </header>
+            </div>
             {parseNote && (
               <div className="parse-note" role="note">
                 <strong>Check against the photo:</strong> {parseNote}
@@ -482,26 +484,23 @@ export default function BillIntake() {
                 setOrder(created);
                 setStep('done');
               }}
-            />
-            {ready.length > 0 && (
-              <div className="peek">
-                <button
-                  type="button"
-                  className="btn-outline"
-                  aria-expanded={showPhotos}
-                  onClick={() => setShowPhotos((v) => !v)}
-                >
-                  {showPhotos ? 'Hide photos' : `View photos (${ready.length})`}
-                </button>
-                {showPhotos && (
-                  <div className="peek-body">
-                    {ready.map((s) => (
-                      <ZoomableShot key={s.id} src={s.previewUrl!} alt={photoAlt(s)} />
-                    ))}
+              stickyExtra={
+                ready.length > 0 ? (
+                  <div className="peek-extra">
+                    {showPhotos && (
+                      <div className="peek-strip">
+                        {ready.map((s) => (
+                          <ZoomableShot key={s.id} src={s.previewUrl!} alt={photoAlt(s)} />
+                        ))}
+                      </div>
+                    )}
+                    <Button aria-expanded={showPhotos} onClick={() => setShowPhotos((v) => !v)}>
+                      {showPhotos ? 'Hide photos' : `Photos (${ready.length})`}
+                    </Button>
                   </div>
-                )}
-              </div>
-            )}
+                ) : undefined
+              }
+            />
           </div>
           {ready.length > 0 && (
             <aside className="photo-rail" aria-label="Bill photos">
@@ -549,7 +548,7 @@ export default function BillIntake() {
                 Send WhatsApp confirmation
               </a>
             )}
-            <button type="button" className="btn-buy fit" onClick={() => navigate(`/orders?focus=${order.id}`)}>
+            <button type="button" className="btn-buy fit" onClick={() => navigate(`/orders/${order.id}`)}>
               Open order
             </button>
             <button type="button" className="btn-outline fit" onClick={reset}>

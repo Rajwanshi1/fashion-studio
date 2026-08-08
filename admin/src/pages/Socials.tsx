@@ -5,6 +5,7 @@ import { formatDate } from '../lib/format';
 import type { LinkClickStat, SocialStat } from '../lib/types';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
+import { Button, Skeleton } from '../components/ui';
 import { useToast } from '../components/Toast';
 
 /**
@@ -287,9 +288,9 @@ export default function Socials() {
               >
                 Transparent PNG
               </a>
-              <button type="button" className="btn-outline fit" onClick={() => void copyUrl()}>
+              <Button variant="outline" fit onClick={() => void copyUrl()}>
                 Copy URL
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -297,7 +298,7 @@ export default function Socials() {
 
       <p className="section-label">Scans by source</p>
       {error && <p className="state-note">{error}</p>}
-      {!stats && !error && <p className="state-note">Loading scans…</p>}
+      {!stats && !error && <Skeleton variant="rows" />}
       {stats && (
         <DataTable
           columns={columns}
@@ -308,7 +309,7 @@ export default function Socials() {
       )}
 
       <p className="section-label">Clicks by link</p>
-      {!clicks && !error && <p className="state-note">Loading clicks…</p>}
+      {!clicks && !error && <Skeleton variant="rows" />}
       {clicks && (
         <DataTable
           columns={clickColumns}

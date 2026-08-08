@@ -1,9 +1,10 @@
-import { Fragment, useState } from 'react';
 import type { ReactNode } from 'react';
 
 export interface Column<T> {
   key: string;
   label: ReactNode;
+  /** Mobile card label — required when `label` isn't a plain string (e.g. a JSX checkbox). */
+  dataLabel?: string;
   align?: 'right';
   render: (row: T) => ReactNode;
 }
@@ -14,32 +15,9 @@ interface Props<T> {
   rowKey: (row: T) => string;
   empty: string;
   onRowClick?: (row: T) => void;
-  /** When provided, clicking a row toggles an expanded detail row beneath it. */
-  renderExpanded?: (row: T) => ReactNode;
-  /** Seed the expanded row — deep links like /orders?focus=<id> land with it open. */
-  initialExpandedKey?: string;
 }
 
-export default function DataTable<T>({
-  columns,
-  rows,
-  rowKey,
-  empty,
-  onRowClick,
-  renderExpanded,
-  initialExpandedKey,
-}: Props<T>) {
-  const [expandedKey, setExpandedKey] = useState<string | null>(initialExpandedKey ?? null);
-  const clickable = Boolean(onRowClick || renderExpanded);
-
-  const handleRow = (row: T) => {
-    if (renderExpanded) {
-      const key = rowKey(row);
-      setExpandedKey((cur) => (cur === key ? null : key));
-    }
-    onRowClick?.(row);
-  };
-
+export default function DataTable<T>({ columns, rows, rowKey, empty, onRowClick }: Props<T>) {
   return (
     <div className="table-wrap">
       <table className="data">
@@ -60,32 +38,23 @@ export default function DataTable<T>({
               </td>
             </tr>
           )}
-          {rows.map((row) => {
-            const key = rowKey(row);
-            return (
-              <Fragment key={key}>
-                <tr
-                  className={clickable ? 'rowlink' : undefined}
-                  onClick={clickable ? () => handleRow(row) : undefined}
+          {rows.map((row) => (
+            <tr
+              key={rowKey(row)}
+              className={onRowClick ? 'rowlink' : undefined}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+            >
+              {columns.map((col) => (
+                <td
+                  key={col.key}
+                  className={col.align === 'right' ? 'num' : undefined}
+                  data-label={col.dataLabel ?? (typeof col.label === 'string' ? col.label : '')}
                 >
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={col.align === 'right' ? 'num' : undefined}
-                      data-label={col.label}
-                    >
-                      {col.render(row)}
-                    </td>
-                  ))}
-                </tr>
-                {renderExpanded && expandedKey === key && (
-                  <tr className="detail">
-                    <td colSpan={columns.length}>{renderExpanded(row)}</td>
-                  </tr>
-                )}
-              </Fragment>
-            );
-          })}
+                  {col.render(row)}
+                </td>
+              ))}
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

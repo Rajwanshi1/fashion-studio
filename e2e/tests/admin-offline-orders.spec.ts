@@ -19,8 +19,8 @@ test('offline order: intake → appears in Orders → record payment → advance
   await page.locator('#oi-first').fill('Meera');
   await page.locator('#oi-last').fill('Shah');
 
-  await page.getByRole('group', { name: 'Order channel' }).getByRole('button', { name: 'In Store' }).click();
-  await page.getByRole('group', { name: 'Bill type' }).getByRole('button', { name: 'Cash Memo' }).click();
+  await page.getByRole('radiogroup', { name: 'Channel' }).getByRole('radio', { name: 'In Store' }).click();
+  await page.getByRole('radiogroup', { name: 'Bill type' }).getByRole('radio', { name: 'Cash Memo' }).click();
 
   // One freeform line; stated bill total wins; half paid in cash as advance.
   await page.locator('#oi-desc-0').fill('Sage lehenga with hand-embroidered dupatta');
@@ -28,29 +28,33 @@ test('offline order: intake → appears in Orders → record payment → advance
   await page.locator('#oi-unit-0').fill('45000');
   await page.locator('#oi-total').fill('45000');
   await page.locator('#oi-advance').fill('20000');
-  await page.getByRole('group', { name: 'Advance mode' }).getByRole('button', { name: 'Cash' }).click();
+  await page.getByRole('radiogroup', { name: 'Advance mode' }).getByRole('radio', { name: 'Cash' }).click();
   await page.getByRole('group', { name: 'Quick due date' }).getByRole('button', { name: '+14 days' }).click();
 
   await page.getByRole('button', { name: 'Record Order' }).click();
   await expect(page).toHaveURL(/\/orders/);
 
-  // The new order shows up in production with its cash-memo badge and open balance.
-  const row = page
-    .getByRole('row')
+  // The new order is in the book — open its page (table row on desktop, card on phones).
+  const entry = page
+    .locator('tr.rowlink, .lcard')
     .filter({ hasText: 'Meera Shah' })
     .filter({ hasText: 'In the Atelier' })
     .first();
-  await expect(row).toBeVisible();
-  await expect(row.getByText('Cash Memo')).toBeVisible();
-  await expect(row).toContainText('25,000'); // balance = 45,000 − 20,000
+  await entry.click();
+  await expect(page.getByRole('heading', { name: /TA-2026-\d+/ })).toBeVisible();
+  await expect(page.getByText('Cash Memo')).toBeVisible();
+  await expect(page.getByText('₹25,000').first()).toBeVisible(); // balance = 45,000 − 20,000
 
-  // Expand → record the remaining ₹25,000 in cash → balance clears.
-  await row.click();
-  await page.locator('input[id^="pay-"]').first().fill('25000');
+  // Record the remaining ₹25,000 in cash → balance clears and the pay form retires.
+  await page.getByLabel('Amount (₹)').fill('25000');
   await page.getByRole('button', { name: 'Record payment' }).click();
-  await expect(row).not.toContainText('25,000');
+  await expect(page.getByRole('button', { name: 'Record payment' })).toBeHidden();
 
-  // Advance the offline machine one step: In the Atelier → Quality Check.
-  await page.locator('select[id^="status-"]').first().selectOption({ label: 'Quality Check' });
-  await expect(row.getByText('Quality Check')).toBeVisible();
+  // Advance one step with the one-tap button — the PATCH flushes after the Undo window.
+  const patched = page.waitForResponse(
+    (r) => r.url().includes('/api/admin/orders/') && r.request().method() === 'PATCH',
+  );
+  await page.getByRole('button', { name: 'Move to Quality Check' }).click();
+  await expect(page.getByText('Quality Check').first()).toBeVisible();
+  await patched;
 });

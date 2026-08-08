@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 import { api } from '../lib/api';
 import { bucketDeliveries, relativeDue, type DeliveryBuckets } from '../lib/deliveries';
 import { formatDate, formatINR } from '../lib/format';
-import type { Order, OrderStatus } from '../lib/types';
+import { useDeferredStatus } from '../lib/useDeferredStatus';
+import type { Order, OrderStatus, ReceiptMode } from '../lib/types';
 import { BILL_TYPE_LABELS, CHANNEL_LABELS, ORDER_STATUS_LABELS, transitionsFor } from '../lib/types';
 import { STATUS_MESSAGES, waLink } from '../lib/whatsapp';
 import StatCard from '../components/StatCard';
 import StatusBadge from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
+import { Button, Field, Input, SegmentedControl, Sheet } from '../components/ui';
 
 interface DeliveriesResponse {
   orders: Order[];
@@ -22,6 +25,13 @@ const BUCKET_META: { key: keyof DeliveryBuckets; title: string; open: boolean; o
   { key: 'later', title: 'Later', open: false },
 ];
 
+const MODE_OPTIONS: { value: ReceiptMode; label: string }[] = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'online', label: 'Online' },
+];
+
+const customerName = (order: Order) => `${order.firstName} ${order.lastName}`.trim() || order.phone;
+
 /** The next production step (never cancellation — that stays on the Orders page). */
 function nextStatus(order: Order): OrderStatus | null {
   return transitionsFor(order).find((s) => s !== 'cancelled') ?? null;
@@ -31,12 +41,14 @@ function DeliveryCard({
   order,
   today,
   onAdvance,
+  onPay,
 }: {
   order: Order;
   today: string;
   onAdvance: (order: Order, next: OrderStatus) => void;
+  onPay: (order: Order) => void;
 }) {
-  const name = `${order.firstName} ${order.lastName}`.trim() || order.phone;
+  const name = customerName(order);
   const address = [order.addressLine1, order.city, order.pincode].filter(Boolean).join(', ');
   const message = STATUS_MESSAGES[order.status]?.(order);
   const next = nextStatus(order);
@@ -88,6 +100,16 @@ function DeliveryCard({
             WhatsApp
           </a>
         )}
+        {order.balance > 0 && (
+          <button
+            type="button"
+            className="dl-act"
+            aria-label={`Record payment for ${order.orderNumber}`}
+            onClick={() => onPay(order)}
+          >
+            ₹ Payment
+          </button>
+        )}
         {next && (
           <button type="button" className="dl-act" onClick={() => onAdvance(order, next)}>
             → {ORDER_STATUS_LABELS[next]}
@@ -102,6 +124,10 @@ export default function Deliveries() {
   const toast = useToast();
   const [data, setData] = useState<DeliveriesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [payOrder, setPayOrder] = useState<Order | null>(null);
+  const [amount, setAmount] = useState('');
+  const [mode, setMode] = useState<ReceiptMode>('cash');
+  const [payBusy, setPayBusy] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
@@ -114,18 +140,62 @@ export default function Deliveries() {
     };
   }, []);
 
-  const advance = async (order: Order, next: OrderStatus) => {
+  const setStatus = (orderId: string, status: OrderStatus) =>
+    setData((cur) =>
+      cur
+        ? { ...cur, orders: cur.orders.map((o) => (o.id === orderId ? { ...o, status } : o)) }
+        : cur,
+    );
+
+  // The card moves buckets (or leaves the board) the moment it is tapped; the
+  // PATCH waits out the undo window, and Undo puts the card back.
+  const { advance } = useDeferredStatus({ onApply: setStatus, onRevert: setStatus });
+
+  const openPayment = (order: Order) => {
+    setPayOrder(order);
+    setAmount(String(order.balance / 100));
+    setMode('cash');
+  };
+
+  // Stable identity: the sheet re-arms its focus trap whenever onClose changes,
+  // which would pull focus out of the amount field on every keystroke.
+  const closePayment = useCallback(() => setPayOrder(null), []);
+
+  const recordPayment = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!payOrder) return;
+    const paise = Math.round(Number(amount) * 100);
+    if (!Number.isFinite(paise) || paise <= 0) {
+      toast('Enter the received amount in rupees', { tone: 'error' });
+      return;
+    }
+    setPayBusy(true);
     try {
-      const updated = await api<Order>(`/api/admin/orders/${order.id}`, {
-        method: 'PATCH',
-        body: { status: next },
+      const updated = await api<Order>(`/api/admin/orders/${payOrder.id}/receipts`, {
+        method: 'POST',
+        body: { amount: paise, mode },
       });
-      setData((cur) =>
-        cur ? { ...cur, orders: cur.orders.map((o) => (o.id === updated.id ? updated : o)) } : cur,
-      );
-      toast(`${order.orderNumber} → ${ORDER_STATUS_LABELS[next]}`);
+      setData((cur) => {
+        if (!cur) return cur;
+        const before = cur.orders.find((o) => o.id === updated.id);
+        // Keep the money tiles honest without a refetch: what left the balance
+        // was collected, in the mode just recorded.
+        const collected = before ? Math.max(0, before.balance - updated.balance) : 0;
+        return {
+          orders: cur.orders.map((o) => (o.id === updated.id ? updated : o)),
+          totals: {
+            pendingToCollect: cur.totals.pendingToCollect - collected,
+            collectedCash: cur.totals.collectedCash + (mode === 'cash' ? paise : 0),
+            collectedOnline: cur.totals.collectedOnline + (mode === 'online' ? paise : 0),
+          },
+        };
+      });
+      setPayOrder(null);
+      toast(`Payment of ${formatINR(paise)} recorded`);
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Unable to update the order', { tone: 'error' });
+      toast(err instanceof Error ? err.message : 'Unable to record the payment', { tone: 'error' });
+    } finally {
+      setPayBusy(false);
     }
   };
 
@@ -166,13 +236,58 @@ export default function Deliveries() {
                 </summary>
                 {orders.length === 0 && <p className="dl-empty">Nothing here — lovely.</p>}
                 {orders.map((o) => (
-                  <DeliveryCard key={o.id} order={o} today={today} onAdvance={advance} />
+                  <DeliveryCard
+                    key={o.id}
+                    order={o}
+                    today={today}
+                    onAdvance={advance}
+                    onPay={openPayment}
+                  />
                 ))}
               </details>
             );
           })}
         </>
       )}
+
+      <Sheet
+        open={payOrder !== null}
+        onClose={closePayment}
+        title={payOrder ? `Payment · ${customerName(payOrder)}` : 'Payment'}
+      >
+        {payOrder && (
+          <form onSubmit={(e) => void recordPayment(e)}>
+            <p className="x">
+              {payOrder.orderNumber} · {formatINR(payOrder.balance)} to collect
+            </p>
+            <Field id="dl-amount" label="Amount (₹)">
+              {(a11y) => (
+                <Input
+                  {...a11y}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
+              )}
+            </Field>
+            <div className="field">
+              <span className="lab">Mode</span>
+              <SegmentedControl
+                label="Payment mode"
+                options={MODE_OPTIONS}
+                value={mode}
+                onChange={setMode}
+              />
+            </div>
+            <Button type="submit" variant="gold" fit busy={payBusy}>
+              Record payment
+            </Button>
+          </form>
+        )}
+      </Sheet>
     </>
   );
 }
