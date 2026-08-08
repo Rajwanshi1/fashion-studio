@@ -553,7 +553,7 @@ export function OrderIntakeForm({
             <Field id={`oi-qty-${i}`} label="Qty" error={errors[`oi-qty-${i}`]}>
               {(a11y) => (
                 <Stepper
-                  id={a11y.id}
+                  {...a11y}
                   value={row.qty}
                   min={1}
                   label="quantity"

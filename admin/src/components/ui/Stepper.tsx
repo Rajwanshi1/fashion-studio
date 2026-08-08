@@ -7,10 +7,13 @@ interface StepperProps {
   max?: number;
   /** Names the −/+ buttons for assistive tech, e.g. "quantity". */
   label: string;
+  /** Passed through by Field's render prop so errors reach the input. */
+  'aria-invalid'?: boolean;
+  'aria-describedby'?: string;
 }
 
 /** −/+ integer input — counts (qty, stock) never need the keyboard at all. */
-export default function Stepper({ id, value, onChange, min = 0, max, label }: StepperProps) {
+export default function Stepper({ id, value, onChange, min = 0, max, label, ...aria }: StepperProps) {
   const num = Math.round(Number(value) || 0);
   const clamp = (n: number) => Math.min(max ?? Infinity, Math.max(min, n));
   const stepBy = (d: number) => onChange(String(clamp(num + d)));
@@ -31,6 +34,7 @@ export default function Stepper({ id, value, onChange, min = 0, max, label }: St
         className="inp step-inp"
         inputMode="numeric"
         pattern="[0-9]*"
+        {...aria}
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, ''))}
         onBlur={() => onChange(String(clamp(num)))}

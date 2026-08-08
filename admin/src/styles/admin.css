@@ -191,7 +191,6 @@ table.data { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .data tbody tr.rowlink { cursor: pointer; transition: background var(--dur) var(--ease); }
 .data tbody tr.rowlink:hover { background: var(--celadon-50); }
 .data td.empty { text-align: center; color: var(--fg-muted); padding: 2.6rem 1rem; font-size: var(--t-sm); }
-.data tr.detail > td { background: var(--celadon-50); padding: 1.4rem 1.1rem; }
 
 /* ---- Status badges (mirrors storefront .badge) ---- */
 .badge {
@@ -675,7 +674,6 @@ select.inp {
     overflow-y: auto;
     padding-right: 2px;
   }
-  .review-grid .peek { display: none; }
 }
 
 /* A photo that zooms to a full-screen overlay */
@@ -715,26 +713,6 @@ select.inp {
   aspect-ratio: auto;
   object-fit: contain;
 }
-
-/* Sticky photo peek under the review form (phones). */
-.peek {
-  position: sticky;
-  bottom: 0;
-  background: var(--paper);
-  border-top: 1px solid var(--hairline);
-  padding: 0.7rem 0;
-}
-.peek .btn-outline { width: 100%; }
-.peek-body {
-  display: flex;
-  gap: 0.8rem;
-  overflow-x: auto;
-  padding-top: 0.8rem;
-  scroll-snap-type: x mandatory;
-}
-.peek-body .photo-zoom { flex: 0 0 auto; width: auto; max-width: 85vw; margin-bottom: 0; scroll-snap-align: center; }
-.peek-body .photo-zoom.zoomed { max-width: none; }
-.peek-body img { max-height: 55vh; width: auto; }
 
 .done-card h2 { font-family: var(--serif-display); font-size: var(--t-h2); margin: 0.4rem 0; }
 .done-card h2:focus { outline: none; }
@@ -891,8 +869,5 @@ select.inp {
   }
   .data td.empty { display: block; text-align: center; }
   .data td.empty::before { content: none; }
-  .data tr.detail { padding: 0; }
-  .data tr.detail > td { display: block; text-align: left; }
-  .data tr.detail > td::before { content: none; }
 }
 

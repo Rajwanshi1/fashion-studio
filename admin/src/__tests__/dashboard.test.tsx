@@ -55,6 +55,7 @@ describe('Dashboard', () => {
     expect(screen.getByText('TA-2026-04817')).toBeInTheDocument();
     expect(screen.getByText('Meera Kapoor')).toBeInTheDocument();
     expect(screen.getByText('Paid')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'View All Orders' })).toBeInTheDocument();
+    // A real link — right-click/middle-click affordances matter for list navigation.
+    expect(screen.getByRole('link', { name: 'View All Orders' })).toHaveAttribute('href', '/orders');
   });
 });

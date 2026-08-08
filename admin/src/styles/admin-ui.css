@@ -69,6 +69,7 @@ span.lab {
 /* ---- List head tools (search + filters) ---- */
 .head-tools { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
 .head-tools .btn-outline { min-height: var(--tap); }
+.head-tools .vcf-export { margin-top: 0; }
 
 /* Filter sheet: group captions sit tighter than page section labels. */
 .sheet .filter-label { margin: 1.2rem 0 0.6rem; }
