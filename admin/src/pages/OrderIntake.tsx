@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -99,8 +99,17 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const errRef = useRef<HTMLDivElement>(null);
+
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  // Bring the submit error into view and announce it — it renders next to the actions.
+  useEffect(() => {
+    if (!error) return;
+    errRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    errRef.current?.focus();
+  }, [error]);
 
   // Debounced customer match on the phone the admin is typing.
   useEffect(() => {
@@ -133,6 +142,17 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
   const totalPaise = form.totalRupees.trim() === '' ? subtotalPaise : toPaise(form.totalRupees);
   const advancePaise = form.advanceRupees.trim() === '' ? 0 : toPaise(form.advanceRupees);
   const balancePaise = totalPaise - advancePaise;
+
+  // Cross-check the entered total against what the items (and GST) add up to.
+  const enteredTotalPaise = form.totalRupees.trim() === '' ? null : toPaise(form.totalRupees);
+  const gstPaise =
+    form.billType === 'gst_invoice' && form.gstRupees.trim() !== '' ? toPaise(form.gstRupees) : 0;
+  const totalsMismatch =
+    enteredTotalPaise != null &&
+    Number.isFinite(enteredTotalPaise) &&
+    subtotalPaise > 0 &&
+    enteredTotalPaise !== subtotalPaise &&
+    enteredTotalPaise !== subtotalPaise + gstPaise;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -234,13 +254,8 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
 
   return (
     <form className="form-card" onSubmit={onSubmit} noValidate>
-        {error && (
-          <div className="form-err" role="alert">
-            {error}
-          </div>
-        )}
-
-        <p className="section-label">Customer</p>
+      <fieldset className="fset">
+        <legend>Customer</legend>
         <div className="field">
           <label className="lab" htmlFor="oi-phone">
             Phone
@@ -326,7 +341,29 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
                 onChange={(e) => set('email', e.target.value)}
               />
             </div>
+            <div className="field">
+              <label className="lab" htmlFor="oi-addr1">
+                Address (optional)
+              </label>
+              <input
+                id="oi-addr1"
+                className="inp"
+                value={form.addressLine1}
+                onChange={(e) => set('addressLine1', e.target.value)}
+              />
+            </div>
             <div className="grid2">
+              <div className="field">
+                <label className="lab" htmlFor="oi-addr2">
+                  Address Line 2 (optional)
+                </label>
+                <input
+                  id="oi-addr2"
+                  className="inp"
+                  value={form.addressLine2}
+                  onChange={(e) => set('addressLine2', e.target.value)}
+                />
+              </div>
               <div className="field">
                 <label className="lab" htmlFor="oi-city">
                   City (optional)
@@ -336,6 +373,19 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
                   className="inp"
                   value={form.city}
                   onChange={(e) => set('city', e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid2">
+              <div className="field">
+                <label className="lab" htmlFor="oi-state">
+                  State (optional)
+                </label>
+                <input
+                  id="oi-state"
+                  className="inp"
+                  value={form.stateName}
+                  onChange={(e) => set('stateName', e.target.value)}
                 />
               </div>
               <div className="field">
@@ -352,28 +402,34 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
             </div>
           </>
         )}
+      </fieldset>
 
-        <p className="section-label">Channel</p>
+      <fieldset className="fset">
+        <legend>Channel</legend>
         <div className="chips" role="group" aria-label="Order channel">
           {OFFLINE_CHANNELS.map((ch) => (
             <button
               key={ch}
               type="button"
               className={form.channel === ch ? 'chip on' : 'chip'}
+              aria-pressed={form.channel === ch}
               onClick={() => set('channel', ch)}
             >
               {CHANNEL_LABELS[ch]}
             </button>
           ))}
         </div>
+      </fieldset>
 
-        <p className="section-label">Bill</p>
+      <fieldset className="fset">
+        <legend>Bill</legend>
         <div className="chips" role="group" aria-label="Bill type">
           {(['gst_invoice', 'cash_memo'] as const).map((bt) => (
             <button
               key={bt}
               type="button"
               className={form.billType === bt ? 'chip on' : 'chip'}
+              aria-pressed={form.billType === bt}
               onClick={() => set('billType', bt)}
             >
               {BILL_TYPE_LABELS[bt]}
@@ -409,11 +465,13 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
             </div>
           )}
         </div>
+      </fieldset>
 
-        <p className="section-label">Items</p>
+      <fieldset className="fset">
+        <legend>Items</legend>
         {items.map((row, i) => (
           <div className="item-row" key={i}>
-            <div className="field">
+            <div className="field f-desc">
               <label className="lab" htmlFor={`oi-desc-${i}`}>
                 Description
               </label>
@@ -456,7 +514,7 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
             {items.length > 1 && (
               <button
                 type="button"
-                className="btn-outline fit"
+                className="icon-btn"
                 aria-label={`Remove item ${i + 1}`}
                 onClick={() => setItems((rows) => rows.filter((_, x) => x !== i))}
               >
@@ -472,8 +530,10 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
         >
           + Add Item
         </button>
+      </fieldset>
 
-        <p className="section-label">Measurements</p>
+      <fieldset className="fset">
+        <legend>Measurements</legend>
         {msets.map((set, i) => (
           <KeyValueEditor
             key={i}
@@ -490,8 +550,10 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
         >
           + Add Measurement Set
         </button>
+      </fieldset>
 
-        <p className="section-label">Totals</p>
+      <fieldset className="fset">
+        <legend>Totals</legend>
         <p className="x">Items sum to {formatINR(subtotalPaise)}</p>
         <div className="grid2">
           <div className="field">
@@ -524,12 +586,19 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
             />
           </div>
         </div>
+        {totalsMismatch && (
+          <p className="parse-note" role="note">
+            Bill total is {formatINR(enteredTotalPaise)} but items{gstPaise > 0 ? ' + GST' : ''} sum
+            to {formatINR(subtotalPaise + gstPaise)} — check item prices or GST.
+          </p>
+        )}
         <div className="chips" role="group" aria-label="Advance mode">
           {(['cash', 'online'] as const).map((mode) => (
             <button
               key={mode}
               type="button"
               className={form.advanceMode === mode ? 'chip on' : 'chip'}
+              aria-pressed={form.advanceMode === mode}
               onClick={() => set('advanceMode', mode)}
             >
               {mode === 'cash' ? 'Cash' : 'Online'}
@@ -539,8 +608,10 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
         <p className="x">
           Balance: <strong>{formatINR(Number.isFinite(balancePaise) ? balancePaise : 0)}</strong>
         </p>
+      </fieldset>
 
-        <p className="section-label">Delivery</p>
+      <fieldset className="fset">
+        <legend>Delivery</legend>
         <div className="field">
           <label className="lab" htmlFor="oi-due">
             Delivery Due Date
@@ -565,7 +636,6 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
             </button>
           ))}
         </div>
-
         <div className="field">
           <label className="lab" htmlFor="oi-notes">
             Notes
@@ -577,12 +647,15 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
             onChange={(e) => set('notes', e.target.value)}
           />
         </div>
+      </fieldset>
 
-        <p className="section-label">Order status</p>
+      <fieldset className="fset">
+        <legend>Order status</legend>
         <div className="chips" role="group" aria-label="Initial status">
           <button
             type="button"
             className={form.initialStatus === 'in_atelier' ? 'chip on' : 'chip'}
+            aria-pressed={form.initialStatus === 'in_atelier'}
             onClick={() => set('initialStatus', 'in_atelier')}
           >
             In production
@@ -590,20 +663,28 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
           <button
             type="button"
             className={form.initialStatus === 'delivered' ? 'chip on' : 'chip'}
+            aria-pressed={form.initialStatus === 'delivered'}
             onClick={() => set('initialStatus', 'delivered')}
           >
             Delivered
           </button>
         </div>
+      </fieldset>
 
-        <div className="form-actions">
-          <button className="btn-buy gold fit" type="submit" disabled={busy}>
-            {busy ? 'Recording…' : 'Record Order'}
-          </button>
-          <button className="btn-outline fit" type="button" onClick={() => navigate('/orders')}>
-            Cancel
-          </button>
+      {error && (
+        <div className="form-err" role="alert" tabIndex={-1} ref={errRef}>
+          {error}
         </div>
+      )}
+
+      <div className="form-actions">
+        <button className="btn-buy gold fit" type="submit" disabled={busy}>
+          {busy ? 'Recording…' : 'Record Order'}
+        </button>
+        <button className="btn-outline fit" type="button" onClick={() => navigate('/orders')}>
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }

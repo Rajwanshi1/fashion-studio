@@ -88,7 +88,7 @@ export default function Products() {
       if (archived) parts.push(`${archived} archived (has orders)`);
       toast(parts.length ? parts.join(' · ') : 'Nothing to delete');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Unable to delete');
+      toast(err instanceof Error ? err.message : 'Unable to delete', { tone: 'error' });
     } finally {
       setDeleting(false);
     }

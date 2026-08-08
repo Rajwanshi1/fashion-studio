@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDate, formatINR } from '../lib/format';
 import type { BillType, DocumentSummary, Order, OrderChannel, OrderStatus, ReceiptMode } from '../lib/types';
@@ -445,6 +446,9 @@ export default function Orders() {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
+  // Deep link from the scan-bill done screen: /orders?focus=<id> opens that order's detail.
+  const [searchParams] = useSearchParams();
+  const focusId = searchParams.get('focus') ?? undefined;
 
   useEffect(() => {
     let live = true;
@@ -547,6 +551,7 @@ export default function Orders() {
           rows={orders}
           rowKey={(o) => o.id}
           empty="No orders in this state."
+          initialExpandedKey={focusId}
           renderExpanded={(order) => (
             <ExpandedOrder order={order} onUpdated={replaceOrder} onError={setError} />
           )}

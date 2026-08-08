@@ -16,6 +16,8 @@ interface Props<T> {
   onRowClick?: (row: T) => void;
   /** When provided, clicking a row toggles an expanded detail row beneath it. */
   renderExpanded?: (row: T) => ReactNode;
+  /** Seed the expanded row — deep links like /orders?focus=<id> land with it open. */
+  initialExpandedKey?: string;
 }
 
 export default function DataTable<T>({
@@ -25,8 +27,9 @@ export default function DataTable<T>({
   empty,
   onRowClick,
   renderExpanded,
+  initialExpandedKey,
 }: Props<T>) {
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [expandedKey, setExpandedKey] = useState<string | null>(initialExpandedKey ?? null);
   const clickable = Boolean(onRowClick || renderExpanded);
 
   const handleRow = (row: T) => {
