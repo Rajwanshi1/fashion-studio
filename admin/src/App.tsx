@@ -9,6 +9,7 @@ import Deliveries from './pages/Deliveries';
 import Products from './pages/Products';
 import ProductEdit from './pages/ProductEdit';
 import Orders from './pages/Orders';
+import OrderDetail from './pages/OrderDetail';
 import OrderIntake from './pages/OrderIntake';
 import Payments from './pages/Payments';
 import Users from './pages/Users';
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="/products/:id" element={<ProductEdit />} />
               <Route path="/orders" element={<Orders />} />
               <Route path="/orders/new" element={<OrderIntake />} />
+              <Route path="/orders/:id" element={<OrderDetail />} />
               <Route path="/payments" element={<Payments />} />
               <Route path="/users" element={<Users />} />
               <Route path="/socials" element={<Socials />} />

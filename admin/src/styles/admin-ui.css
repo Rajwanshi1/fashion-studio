@@ -47,6 +47,41 @@
   min-height: var(--tap);
 }
 
+/* Non-label field captions — a SegmentedControl labels itself, so its caption
+   is a span rather than a <label> pointing at nothing. */
+span.lab {
+  display: block;
+  font-size: 0.66rem;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 0.5rem;
+}
+
+/* ---- Order detail page ---- */
+.odetail-sub { margin-top: 1.8rem; }
+.odetail .ototal { font-family: var(--serif-display); font-size: 0.95rem; }
+.odetail-status { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.9rem; }
+.odetail-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; margin-top: 0.9rem; }
+.odetail-acts .btn-outline,
+.odetail-acts .btn-buy { min-height: var(--tap); }
+
+/* ---- List head tools (search + filters) ---- */
+.head-tools { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+.head-tools .btn-outline { min-height: var(--tap); }
+
+/* Filter sheet: group captions sit tighter than page section labels. */
+.sheet .filter-label { margin: 1.2rem 0 0.6rem; }
+.sheet .filter-label:first-child { margin-top: 0.2rem; }
+.sheet .chips .chip { min-height: var(--tap); }
+.sheet-actions { display: flex; gap: 0.7rem; flex-wrap: wrap; }
+
+/* Inline toast action ("Undo") — gold on the ink toast. An undo offer must stay
+   reachable, so the toast is lifted above sheets rather than left at z-index 200. */
+.toast { z-index: var(--z-toast); }
+.toast-action { color: var(--gold-soft); border-bottom-color: var(--gold-soft); margin-left: 0.3rem; }
+.toast-action:hover { color: var(--gold-pale); }
+
 /* ---- Field errors / hints (Field component) ---- */
 .field.invalid .inp { border-color: var(--danger); }
 .field-err { margin: 0.4rem 0 0; font-size: 0.74rem; color: var(--danger); }

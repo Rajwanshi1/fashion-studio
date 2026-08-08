@@ -549,7 +549,7 @@ export default function BillIntake() {
                 Send WhatsApp confirmation
               </a>
             )}
-            <button type="button" className="btn-buy fit" onClick={() => navigate(`/orders?focus=${order.id}`)}>
+            <button type="button" className="btn-buy fit" onClick={() => navigate(`/orders/${order.id}`)}>
               Open order
             </button>
             <button type="button" className="btn-outline fit" onClick={reset}>
