@@ -236,6 +236,52 @@ span.lab {
 }
 button.stickybar-err { cursor: pointer; }
 
+/* Inside a form card the bar spans the full card, so nothing scrolls visibly past its sides. */
+.form-card > .stickybar {
+  margin-inline: calc(-1 * clamp(1.4rem, 3vw, 2.2rem));
+  padding-inline: clamp(1.4rem, 3vw, 2.2rem);
+}
+
+/* Running total + balance in the order form's sticky bar; the actions sit right of it. */
+.sticky-tot { display: flex; flex-direction: column; gap: 0.1rem; margin-right: auto; }
+.sticky-tot strong { font-family: var(--serif-display); font-weight: 400; font-size: 0.95rem; }
+
+/* ---- Order intake: item rows carry a stepper in the qty column (~132px) ----
+   Redeclared (not inherited) because admin.css's own .item-row media rule would
+   otherwise lose to the base rule below on source order alone. */
+.item-row { grid-template-columns: minmax(0, 1fr) 132px 120px 44px; }
+@media (max-width: 640px) {
+  .item-row { grid-template-columns: 132px minmax(0, 1fr) 44px; }
+  .item-row .f-desc { grid-column: 1 / -1; }
+}
+
+/* ---- Bill review: the photo strip rides inside the form's sticky bar ----
+   One sticky region on phones, so the strip and the submit button travel together.
+   `.peek-extra` claims a full row of the wrapping flex bar, above the actions. */
+.peek-extra { flex: 0 0 100%; display: flex; flex-direction: column; gap: 0.7rem; }
+.peek-strip {
+  display: flex;
+  gap: 0.8rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+}
+.peek-strip .photo-zoom {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 85vw;
+  margin-bottom: 0;
+  scroll-snap-align: center;
+}
+.peek-strip .photo-zoom.zoomed { max-width: none; }
+.peek-strip img { max-height: 45vh; width: auto; }
+/* The sticky bar owns a stacking context (z-index), so a zoomed photo inside it
+   can't escape on its own — lift the whole bar while one is open. */
+.stickybar:has(.photo-zoom.zoomed) { z-index: var(--z-sheet); }
+/* Wide screens keep the side rail and never show the strip — as before. */
+@media (min-width: 1100px) {
+  .peek-extra { display: none; }
+}
+
 /* ---- Sidebar groups + capture actions (desktop) ---- */
 .side-cap { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 0.4rem; }
 .side-cap a {

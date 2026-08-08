@@ -131,8 +131,44 @@ describe('BillIntake', () => {
     expect(screen.getByLabelText('Delivery Due Date')).toHaveValue('2026-08-15');
     // confidence notes surface as the gold banner
     expect(screen.getByText(/Phone digits unclear/)).toBeInTheDocument();
-    // photos peek is available against the uploaded bill
-    expect(screen.getByRole('button', { name: 'View photos (1)' })).toBeInTheDocument();
+    // photos toggle rides in the form's sticky bar, beside Record Order
+    expect(screen.getByRole('button', { name: 'Photos (1)' })).toBeInTheDocument();
+  });
+
+  it('the sticky Photos toggle shows and hides the thumbnail strip', async () => {
+    mockWizardFetch();
+    renderApp('/intake');
+    await screen.findByRole('heading', { name: 'Scan Bill' });
+
+    await uploadBill();
+    await userEvent.click(screen.getByRole('button', { name: 'Parse bill' }));
+    await screen.findByRole('button', { name: 'Record Order' });
+
+    // only the wide-screen photo rail is mounted while the strip is collapsed
+    const toggle = screen.getByRole('button', { name: 'Photos (1)' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getAllByAltText('Bill photo')).toHaveLength(1);
+
+    await userEvent.click(toggle);
+    expect(screen.getAllByAltText('Bill photo')).toHaveLength(2); // rail + sticky strip
+    const open = screen.getByRole('button', { name: 'Hide photos' });
+    expect(open).toHaveAttribute('aria-expanded', 'true');
+    // the strip lives inside the same sticky region as the submit button
+    expect(open.closest('.stickybar')).not.toBeNull();
+
+    await userEvent.click(open);
+    expect(screen.getAllByAltText('Bill photo')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Photos (1)' })).toBeInTheDocument();
+  });
+
+  it('leaves the step heads out of the banner landmark', async () => {
+    mockWizardFetch();
+    renderApp('/intake');
+    await screen.findByRole('heading', { name: 'Scan Bill' });
+
+    // the phone app bar is the only banner — step heads are plain divs
+    expect(screen.queryAllByRole('banner')).toHaveLength(0);
+    expect(document.querySelectorAll('.step-head')).toHaveLength(1);
   });
 
   it('a 503 parse offers an explicit manual path, keeping the photos attached', async () => {
@@ -221,7 +257,7 @@ describe('BillIntake', () => {
 
     expect(await screen.findByRole('button', { name: 'Record Order' })).toBeInTheDocument();
     expect(screen.getByText(/One measurement page/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'View photos (2)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Photos (2)' })).toBeInTheDocument();
   });
 
   it('measurement sets: add/remove rows and sets, POSTed as measurementSets', async () => {
