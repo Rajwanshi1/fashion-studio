@@ -421,10 +421,14 @@ select.inp {
 .odetail address { font-style: normal; font-size: 0.82rem; color: var(--ink-soft); line-height: 1.7; }
 .odetail .final { font-size: 0.78rem; color: var(--fg-muted); }
 
-/* ---- Variants stock editor ---- */
-.variants-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.8rem; }
-@media (max-width: 880px) { .variants-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 480px) { .variants-grid { grid-template-columns: repeat(2, 1fr); } }
+/* ---- Variants stock editor ----
+   Each cell holds a stepper (two 44px taps either side of the count), so the
+   columns are sized to that rather than to a fixed count per breakpoint. */
+.variants-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.8rem; }
+
+/* Set-includes tri-state: the ₹ field only appears for "Priced". */
+.addon-field { margin-bottom: 1rem; }
+.addon-field .field { margin: 0.7rem 0 0; }
 
 .form-actions { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-top: 1.8rem; }
 

@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatINR } from '../lib/format';
+import { useListSearch } from '../lib/pageChrome';
 import type { AdminProduct } from '../lib/types';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
+import ListSearch from '../components/shell/ListSearch';
 import { useToast } from '../components/Toast';
+import { Button, Sheet } from '../components/ui';
 
 const totalStock = (p: AdminProduct) => p.variants.reduce((sum, v) => sum + v.stock, 0);
 
@@ -13,13 +16,24 @@ interface BulkDeleteResponse {
   results: { id: string; outcome: 'deleted' | 'archived' | 'not_found' }[];
 }
 
+/** Case-insensitive match on the piece name, its collection or its category. */
+function matchesQuery(product: AdminProduct, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return [product.name, product.collection, product.categoryName].some((field) =>
+    (field ?? '').toLowerCase().includes(needle),
+  );
+}
+
 export default function Products() {
   const navigate = useNavigate();
   const toast = useToast();
+  const [query] = useListSearch('Search pieces…');
   const [products, setProducts] = useState<AdminProduct[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collectionFilter, setCollectionFilter] = useState('all');
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -39,10 +53,12 @@ export default function Products() {
 
   const visible = useMemo(
     () =>
-      collectionFilter === 'all'
-        ? products ?? []
-        : (products ?? []).filter((p) => p.collection === collectionFilter),
-    [products, collectionFilter],
+      (products ?? []).filter(
+        (p) =>
+          (collectionFilter === 'all' || p.collection === collectionFilter) &&
+          matchesQuery(p, query),
+      ),
+    [products, collectionFilter, query],
   );
 
   const allVisibleSelected = visible.length > 0 && visible.every((p) => selected.has(p.id));
@@ -65,13 +81,12 @@ export default function Products() {
       return new Set([...prev, ...visible.map((p) => p.id)]);
     });
 
+  const selectedProducts = (products ?? []).filter((p) => selected.has(p.id));
+  const noun = selected.size === 1 ? 'piece' : 'pieces';
+
   const deleteSelected = async () => {
     const ids = [...selected];
     if (ids.length === 0 || deleting) return;
-    const noun = ids.length === 1 ? 'piece' : 'pieces';
-    if (!window.confirm(`Delete ${ids.length} ${noun}? Pieces with past orders are archived instead of deleted.`)) {
-      return;
-    }
     setDeleting(true);
     try {
       const { results } = await api<BulkDeleteResponse>('/api/admin/products/bulk-delete', {
@@ -83,6 +98,7 @@ export default function Products() {
       const gone = new Set(results.filter((r) => r.outcome !== 'not_found').map((r) => r.id));
       setProducts((prev) => (prev ? prev.filter((p) => !gone.has(p.id)) : prev));
       setSelected(new Set());
+      setConfirmOpen(false);
       const parts = [];
       if (deleted) parts.push(`${deleted} deleted`);
       if (archived) parts.push(`${archived} archived (has orders)`);
@@ -97,6 +113,7 @@ export default function Products() {
   const columns: Column<AdminProduct>[] = [
     {
       key: 'select',
+      dataLabel: 'Select',
       label: (
         <input
           type="checkbox"
@@ -155,15 +172,18 @@ export default function Products() {
           <span className="eyebrow">Inventory</span>
           <h1>Products</h1>
         </div>
-        {selected.size > 0 ? (
-          <button className="btn-outline fit" type="button" disabled={deleting} onClick={() => void deleteSelected()}>
-            {deleting ? 'Deleting…' : `Delete selected (${selected.size})`}
-          </button>
-        ) : (
-          <button className="btn-buy gold fit" type="button" onClick={() => navigate('/products/new')}>
-            New Piece
-          </button>
-        )}
+        <div className="head-tools">
+          <ListSearch placeholder="Search pieces…" />
+          {selected.size > 0 ? (
+            <Button fit disabled={deleting} onClick={() => setConfirmOpen(true)}>
+              {`Delete selected (${selected.size})`}
+            </Button>
+          ) : (
+            <Button variant="gold" fit onClick={() => navigate('/products/new')}>
+              New Piece
+            </Button>
+          )}
+        </div>
       </div>
 
       {collections.length > 0 && (
@@ -199,6 +219,29 @@ export default function Products() {
           onRowClick={(p) => navigate(`/products/${p.id}`)}
         />
       )}
+
+      <Sheet
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title={`Delete ${selected.size} ${noun}?`}
+        footer={
+          <div className="sheet-actions">
+            <Button variant="gold" busy={deleting} onClick={() => void deleteSelected()}>
+              {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+            <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
+          </div>
+        }
+      >
+        <p className="x">
+          {selectedProducts
+            .slice(0, 3)
+            .map((p) => p.name)
+            .join(', ')}
+          {selectedProducts.length > 3 && ` and ${selectedProducts.length - 3} more`}
+        </p>
+        <p className="x">Pieces with past orders are archived instead of deleted.</p>
+      </Sheet>
     </>
   );
 }
