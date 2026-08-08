@@ -18,6 +18,12 @@ export default function Sheet({ open, onClose, title, children, footer }: SheetP
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
+  // The trap must arm exactly once per open. Depending on `onClose` directly would
+  // re-run the effect whenever a parent passes a fresh arrow, yanking focus from
+  // whatever the user is typing in — so the latest callback lives in a ref.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -30,7 +36,7 @@ export default function Sheet({ open, onClose, title, children, footer }: SheetP
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab' || !panel) return;
@@ -55,7 +61,7 @@ export default function Sheet({ open, onClose, title, children, footer }: SheetP
       document.body.style.overflow = prevOverflow;
       previouslyFocused?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return createPortal(
