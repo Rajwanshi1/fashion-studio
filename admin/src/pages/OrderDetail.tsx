@@ -270,11 +270,15 @@ function OrderDetailView({ order, onOrder, onError, toast }: ViewProps) {
             <div>Total</div>
             <div>{formatINR(order.total)}</div>
           </div>
-          {order.billNumber && (
+          {(order.billNumber || order.billType || order.gstAmount != null) && (
             <p className="x">
-              Bill {order.billNumber}
-              {order.billType ? ` · ${BILL_TYPE_LABELS[order.billType]}` : ''}
-              {order.gstAmount != null ? ` · GST ${formatINR(order.gstAmount)}` : ''}
+              {[
+                order.billNumber ? `Bill ${order.billNumber}` : null,
+                order.billType ? BILL_TYPE_LABELS[order.billType] : null,
+                order.gstAmount != null ? `GST ${formatINR(order.gstAmount)}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
           )}
           {order.notes && <p className="x">Notes: {order.notes}</p>}

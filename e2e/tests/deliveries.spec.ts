@@ -32,11 +32,14 @@ test('deliveries board: an offline order lands in Next 7 days with its balance @
 
   await adminLogin(page);
   await page.goto(`${ADMIN_URL}/deliveries`);
-  await expect(page.getByText('To collect')).toBeVisible();
+  // exact — every card's balance line also says "to collect".
+  await expect(page.getByText('To collect', { exact: true })).toBeVisible();
 
   const bucket = page.locator('details.dl-bucket').filter({ hasText: 'Next 7 days' });
-  await expect(bucket.getByText(order.orderNumber)).toBeVisible();
-  await expect(bucket.getByText('₹25,000')).toBeVisible(); // 40,000 − 15,000 advance
+  // Scope to this run's card — earlier runs leave sibling cards with the same balance.
+  const card = bucket.locator('.dl-card').filter({ hasText: order.orderNumber });
+  await expect(card).toBeVisible();
+  await expect(card.getByText('₹25,000')).toBeVisible(); // 40,000 − 15,000 advance
 });
 
 test('customers.vcf export answers with vCards for phone customers', async ({ request }) => {
