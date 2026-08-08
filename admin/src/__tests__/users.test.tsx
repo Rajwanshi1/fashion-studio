@@ -35,8 +35,8 @@ const GUEST: AdminUser = {
   ordersCount: 1,
 };
 
-describe('Users', () => {
-  it('renders the users table from the API', async () => {
+describe('Customers', () => {
+  it('renders the customers table from the API', async () => {
     seedAdminAuth();
     mockFetch((url, init) => {
       if (url.endsWith('/api/admin/users') && (init?.method ?? 'GET') === 'GET') {
@@ -47,9 +47,13 @@ describe('Users', () => {
 
     renderApp('/users');
 
-    expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument();
-    expect(screen.getByText('The House · Access')).toBeInTheDocument();
+    // a skeleton stands in until the list lands
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+
+    expect(await screen.findByRole('heading', { name: 'Customers' })).toBeInTheDocument();
+    expect(screen.getByText('The House · Customers')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Customers' })).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
 
     // names — em-dash when the user has no name
     expect(screen.getByText('Meera Kapoor')).toBeInTheDocument();
@@ -69,6 +73,43 @@ describe('Users', () => {
     // orders count + joined date
     expect(screen.getByText('3', { selector: 'td' })).toBeInTheDocument();
     expect(screen.getByText('20 Jun 2026')).toBeInTheDocument();
+  });
+
+  it('filters the loaded list by name, email or phone digits', async () => {
+    seedAdminAuth();
+    mockFetch((url, init) => {
+      if (url.endsWith('/api/admin/users') && (init?.method ?? 'GET') === 'GET') {
+        return { json: [GUEST, CUSTOMER, ME] };
+      }
+      return undefined;
+    });
+
+    renderApp('/users');
+    await screen.findByText('Meera Kapoor');
+
+    const search = screen.getByRole('searchbox', { name: 'Search customers…' });
+
+    // name, case-insensitively
+    await userEvent.type(search, 'MEERA');
+    expect(screen.getByText('Meera Kapoor')).toBeInTheDocument();
+    expect(screen.queryByText('guest@example.in')).not.toBeInTheDocument();
+
+    // email
+    await userEvent.clear(search);
+    await userEvent.type(search, 'guest@');
+    expect(screen.getByText('guest@example.in')).toBeInTheDocument();
+    expect(screen.queryByText('Meera Kapoor')).not.toBeInTheDocument();
+
+    // phone, however the typed number is punctuated
+    await userEvent.clear(search);
+    await userEvent.type(search, '+91 98765');
+    expect(screen.getByText('+919876543210')).toBeInTheDocument();
+    expect(screen.queryByText('guest@example.in')).not.toBeInTheDocument();
+
+    // nothing matches → the search-specific empty message, not the no-customers one
+    await userEvent.clear(search);
+    await userEvent.type(search, 'zzz');
+    expect(screen.getByText('No customers match that search.')).toBeInTheDocument();
   });
 
   it('PATCHes the role change and shows the success toast', async () => {

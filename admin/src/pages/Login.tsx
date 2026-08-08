@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import BrandLogo from '../components/BrandLogo';
+import { Button } from '../components/ui';
 
 export default function Login() {
   const { token, login } = useAuth();
@@ -73,9 +74,9 @@ export default function Login() {
               required
             />
           </div>
-          <button className="btn-buy" type="submit" disabled={busy}>
+          <Button variant="gold" type="submit" busy={busy}>
             {busy ? 'Signing In…' : 'Sign In'}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDate, formatINR } from '../lib/format';
 import type { AdminSummary, LowStockItem, Order } from '../lib/types';
@@ -7,6 +7,7 @@ import StatCard from '../components/StatCard';
 import StatusBadge from '../components/StatusBadge';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
+import { Button, Skeleton } from '../components/ui';
 
 const lowStockColumns: Column<LowStockItem>[] = [
   { key: 'product', label: 'Piece', render: (r) => <span className="nm">{r.productName}</span> },
@@ -27,6 +28,7 @@ const recentOrderColumns: Column<Order>[] = [
 ];
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +50,12 @@ export default function Dashboard() {
       </div>
 
       {error && <p className="state-note">{error}</p>}
-      {!summary && !error && <p className="state-note">Loading the atelier ledger…</p>}
+      {!summary && !error && (
+        <>
+          <Skeleton variant="stats" count={4} />
+          <Skeleton variant="rows" />
+        </>
+      )}
 
       {summary && (
         <>
@@ -82,11 +89,11 @@ export default function Dashboard() {
             rowKey={(o) => o.id}
             empty="No orders yet."
           />
-          <p className="state-note">
-            <Link to="/orders" className="btn-line btn">
+          <div className="form-actions">
+            <Button variant="outline" fit onClick={() => navigate('/orders')}>
               View All Orders
-            </Link>
-          </p>
+            </Button>
+          </div>
         </>
       )}
     </>

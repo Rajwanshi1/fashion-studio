@@ -7,6 +7,7 @@ import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import FunnelChart from '../components/FunnelChart';
 import TrendLine from '../components/TrendLine';
+import { Skeleton } from '../components/ui';
 
 type Days = 7 | 30 | 90;
 const DAY_OPTIONS: Days[] = [7, 30, 90];
@@ -101,7 +102,12 @@ export default function Analytics() {
       </div>
 
       {error && <p className="state-note">{error}</p>}
-      {!summary && !error && <p className="state-note">Loading analytics…</p>}
+      {!summary && !error && (
+        <>
+          <Skeleton variant="stats" count={4} />
+          <Skeleton variant="rows" />
+        </>
+      )}
 
       {summary && (
         <>
