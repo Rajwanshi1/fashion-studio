@@ -36,9 +36,19 @@ interface Look {
 
 type FormState = Record<string, unknown>;
 
-/** Mirrors the backend's `str`/`copy` caps so a long paste can't 400. */
+/** Mirrors the backend's `str`/`copy`/`url` caps so a long paste can't 400. */
 const TEXT_MAX = 300;
 const COPY_MAX = 1000;
+const URL_MAX = 500;
+
+/**
+ * The schemas type every `…Url` / `…Href` field as `url` (500) and everything
+ * else as `str` (300) — the names carry the distinction, so the field configs
+ * don't have to.
+ */
+function maxLengthFor(name: string): number {
+  return /(Url|Href)$/.test(name) ? URL_MAX : TEXT_MAX;
+}
 
 /** Fixed counts the schemas insist on. */
 const TRUST_COUNT = 3;
@@ -237,6 +247,7 @@ function TextField({
   hint,
   value,
   multiline,
+  maxLength,
   onChange,
 }: {
   id: string;
@@ -244,6 +255,7 @@ function TextField({
   hint?: string;
   value: string;
   multiline?: boolean;
+  maxLength?: number;
   onChange: (value: string) => void;
 }) {
   return (
@@ -257,7 +269,7 @@ function TextField({
         <input
           id={id}
           className="inp"
-          maxLength={TEXT_MAX}
+          maxLength={maxLength ?? TEXT_MAX}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -270,16 +282,22 @@ function TextField({
 /**
  * A photo tile plus a hidden file input. No product to name the object after,
  * so `uploadProductImage` presigns a plain uuid key.
+ *
+ * The upload is reported up through `onUploading` as well as kept locally: the
+ * page has to hold Save until every tile has finished, or a phone-sized
+ * picker→Save gesture would PUT the old URL and drop the photo on the floor.
  */
 function ImageField({
   label,
   hint,
   value,
+  onUploading,
   onChange,
 }: {
   label: string;
   hint?: string;
   value: string | null;
+  onUploading: (uploading: boolean) => void;
   onChange: (value: string | null) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -294,13 +312,16 @@ function ImageField({
     e.target.value = ''; // allow re-picking the same file (retake)
     if (!file) return;
     setBusy(true);
+    onUploading(true);
     try {
       const { publicUrl } = await uploadProductImage(file);
       onChange(publicUrl);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Photo upload failed', { tone: 'error' });
+    } finally {
+      setBusy(false);
+      onUploading(false);
     }
-    setBusy(false);
   };
 
   return (
@@ -465,11 +486,13 @@ function LooksField({
   label,
   hint,
   looks,
+  onUploading,
   onChange,
 }: {
   label: string;
   hint?: string;
   looks: Look[];
+  onUploading: (uploading: boolean) => void;
   onChange: (looks: Look[]) => void;
 }) {
   const update = (index: number, patch: Partial<Look>) =>
@@ -488,6 +511,7 @@ function LooksField({
           <ImageField
             label={`Look ${i + 1} photo`}
             value={look.imageUrl}
+            onUploading={onUploading}
             onChange={(imageUrl) => update(i, { imageUrl })}
           />
           <TextField
@@ -512,6 +536,7 @@ function LooksField({
           <TextField
             id={`look-${i}-href`}
             label={`Look ${i + 1} link`}
+            maxLength={URL_MAX}
             value={look.ctaHref}
             onChange={(ctaHref) => update(i, { ctaHref })}
           />
@@ -532,6 +557,8 @@ export default function SiteSectionEdit() {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Photo uploads still in flight, across every image field on the page. */
+  const [uploads, setUploads] = useState(0);
 
   useEffect(() => {
     if (!config) return;
@@ -557,8 +584,17 @@ export default function SiteSectionEdit() {
   const setField = (name: string, value: unknown) =>
     setForm((f) => (f ? { ...f, [name]: value } : f));
 
+  const onUploading = (uploading: boolean) =>
+    setUploads((n) => Math.max(0, n + (uploading ? 1 : -1)));
+
   const onSave = async () => {
     if (!form) return;
+    // Belt and braces — the Save button is disabled while a photo uploads, but
+    // saving now would PUT the pre-upload URL and lose the photo.
+    if (uploads > 0) {
+      toast('Let the photo finish uploading first', { tone: 'error' });
+      return;
+    }
     const body = payload(config, form);
     // An empty list means "use the default" to the storefront, so saving one
     // would look successful and change nothing on the site.
@@ -604,6 +640,7 @@ export default function SiteSectionEdit() {
             label={field.label}
             hint={field.hint}
             value={imgOf(state, field.name)}
+            onUploading={onUploading}
             onChange={(value) => setField(field.name, value)}
           />
         );
@@ -636,6 +673,7 @@ export default function SiteSectionEdit() {
             label={field.label}
             hint={field.hint}
             looks={looksOf(state, field.name)}
+            onUploading={onUploading}
             onChange={(looks) => setField(field.name, looks)}
           />
         );
@@ -647,6 +685,7 @@ export default function SiteSectionEdit() {
             label={field.label}
             hint={field.hint}
             multiline={field.type === 'textarea'}
+            maxLength={maxLengthFor(field.name)}
             value={strOf(state, field.name)}
             onChange={(value) => setField(field.name, value)}
           />
@@ -722,8 +761,8 @@ export default function SiteSectionEdit() {
             >
               Cancel
             </button>
-            <button className="btn-buy gold" type="submit" disabled={busy}>
-              {busy ? 'Saving…' : 'Save'}
+            <button className="btn-buy gold" type="submit" disabled={busy || uploads > 0}>
+              {uploads > 0 ? 'Uploading photo…' : busy ? 'Saving…' : 'Save'}
             </button>
           </div>
         </form>

@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mockFetch, renderApp, seedAdminAuth } from '../test/utils';
 import { uploadProductImage } from '../lib/uploads';
@@ -128,6 +128,32 @@ describe('site section editor', () => {
     expect(screen.queryByRole('button', { name: 'Add line' })).not.toBeInTheDocument();
   });
 
+  it('caps the cover sub-lines at four, not the usual eight', async () => {
+    seedAdminAuth();
+    stubContent({});
+
+    renderApp('/site/lookbookCover');
+
+    expect(await screen.findByLabelText('Sub-line 1')).toHaveValue('Volume 01');
+    await userEvent.click(screen.getByRole('button', { name: 'Add sub-line' }));
+
+    expect(screen.getByLabelText('Sub-line 4')).toBeInTheDocument();
+    // this list's own cap — marquee and ticker stop at eight
+    expect(screen.queryByRole('button', { name: 'Add sub-line' })).not.toBeInTheDocument();
+  });
+
+  it('caps each field where its schema does', async () => {
+    seedAdminAuth();
+    stubContent({});
+
+    renderApp('/site/featured');
+
+    expect(await screen.findByLabelText('Title')).toHaveAttribute('maxlength', '300');
+    expect(screen.getByLabelText('Copy')).toHaveAttribute('maxlength', '1000');
+    // …Url / …Href fields are `url` in the schemas — 500, not `str`'s 300
+    expect(screen.getByLabelText('Link target')).toHaveAttribute('maxlength', '500');
+  });
+
   it('refuses to save a list section with nothing left in it', async () => {
     seedAdminAuth();
     const { calls } = stubContent({});
@@ -164,6 +190,53 @@ describe('site section editor', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     const put = calls.find((c) => c.method === 'PUT');
     expect((put?.body as { imageUrl: string }).imageUrl).toBe(UPLOADED);
+  });
+
+  it('holds Save until an in-flight upload lands', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({ hero: { imageUrl: 'https://cdn.example/old.jpg' } });
+    let land: (result: { publicUrl: string; pose: string | null }) => void = () => {};
+    vi.mocked(uploadProductImage).mockImplementationOnce(
+      () => new Promise((resolve) => (land = resolve)),
+    );
+
+    renderApp('/site/hero');
+    await screen.findByLabelText('Headline');
+
+    const file = new File([new Uint8Array([1])], 'hero.jpg', { type: 'image/jpeg' });
+    await userEvent.upload(screen.getByLabelText('Photo file'), file);
+
+    // picker → save bar is the natural phone gesture; saving now would PUT the
+    // pre-upload URL and lose the photo
+    const save = screen.getByRole('button', { name: 'Uploading photo…' });
+    expect(save).toBeDisabled();
+    await userEvent.click(save);
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false);
+
+    await act(async () => {
+      land({ publicUrl: UPLOADED, pose: null });
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const put = calls.find((c) => c.method === 'PUT');
+    expect((put?.body as { imageUrl: string }).imageUrl).toBe(UPLOADED);
+  });
+
+  it('keeps the old photo and toasts when an upload fails', async () => {
+    seedAdminAuth();
+    stubContent({ hero: { imageUrl: 'https://cdn.example/old.jpg' } });
+    vi.mocked(uploadProductImage).mockRejectedValueOnce(new Error('Photo upload failed (503)'));
+
+    renderApp('/site/hero');
+    await screen.findByAltText('Photo');
+
+    const file = new File([new Uint8Array([1])], 'hero.jpg', { type: 'image/jpeg' });
+    await userEvent.upload(screen.getByLabelText('Photo file'), file);
+
+    expect(await screen.findByText('Photo upload failed (503)')).toBeInTheDocument();
+    expect(screen.getByAltText('Photo')).toHaveAttribute('src', 'https://cdn.example/old.jpg');
+    // the bar is live again — a failed upload must not wedge the page
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
   });
 
   it('clears the section image with Remove photo', async () => {
