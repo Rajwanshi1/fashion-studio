@@ -386,6 +386,16 @@ Resources:
           ContentSecurityPolicy:
             Override: true
             ContentSecurityPolicy: "default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src https:; frame-src https://accounts.google.com; object-src 'none'; base-uri 'self'"
+  # script-src carries 'wasm-unsafe-eval' because the bill/measurement photo intake
+  # decodes HEIC with libheif compiled to wasm (admin/src/lib/image.ts). Chromium and
+  # Firefox cannot read HEIC natively, so a gallery-picked iPhone photo falls through to
+  # that decoder, and Chrome refuses to compile ANY WebAssembly unless script-src allows
+  # it — the upload failed in prod with "Compiling or instantiating WebAssembly module
+  # violates the following Content Security policy directive". Nothing reproduces this
+  # locally: vite serves no CSP, and the admin unit tests mock the wasm module.
+  # 'wasm-unsafe-eval' permits wasm compilation ONLY — unlike 'unsafe-eval' it leaves
+  # eval() and new Function() blocked — so keep the narrow keyword. The storefront
+  # policy above deliberately does NOT get it; only admin ships libheif.
   AdminHeadersPolicy:
     Type: AWS::CloudFront::ResponseHeadersPolicy
     Properties:
@@ -398,7 +408,7 @@ Resources:
           ReferrerPolicy: { ReferrerPolicy: strict-origin-when-cross-origin, Override: true }
           ContentSecurityPolicy:
             Override: true
-            ContentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src https:; object-src 'none'; base-uri 'self'"
+            ContentSecurityPolicy: "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src https:; object-src 'none'; base-uri 'self'"
         CustomHeadersConfig:
           Items:
             - { Header: X-Robots-Tag, Value: noindex, Override: true }
