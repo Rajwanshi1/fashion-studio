@@ -44,6 +44,12 @@ describe('API', () => {
     return res.json() as Promise<{ token: string; user: { id: string; email: string } }>;
   }
 
+  /** The admin catalogue keyed by id — how bulk edits are checked after the fact. */
+  async function adminProductsById(): Promise<Record<string, any>> {
+    const list = await (await app.request('/api/admin/products', bearer(adminToken))).json();
+    return Object.fromEntries(list.map((p: any) => [p.id, p]));
+  }
+
   async function placeOrder(items: { variantId: string; quantity: number }[], token?: string) {
     const res = await app.request('/api/orders', post({ customer: CUSTOMER, deliveryMethod: 'standard', items }, token));
     expect(res.status).toBe(201);
@@ -856,6 +862,129 @@ describe('API', () => {
       expect((await app.request('/api/admin/products/bulk-delete', withMethod('POST', { ids: ['x'] }))).status).toBe(401);
       // Empty list is a validation error.
       expect((await app.request('/api/admin/products/bulk-delete', withMethod('POST', { ids: [] }, adminToken))).status).toBe(400);
+    });
+
+    it('bulk-puts pieces on sale at a percentage off each piece\'s own price', async () => {
+      const res = await app.request(
+        '/api/admin/products/bulk-update',
+        withMethod('POST', {
+          ids: [seeded.sage.id, seeded.moss.id, 'ghost'],
+          action: { type: 'sale', discountPct: 20 },
+        }, adminToken),
+      );
+      expect(res.status).toBe(200);
+      expect((await res.json()).results).toEqual(
+        expect.arrayContaining([
+          { id: seeded.sage.id, outcome: 'updated' },
+          { id: seeded.moss.id, outcome: 'updated' },
+          { id: 'ghost', outcome: 'not_found' },
+        ]),
+      );
+
+      // 20% off ₹1,84,000 and off ₹96,000 — one percentage, two different prices.
+      const byId = await adminProductsById();
+      expect(byId[seeded.sage.id]).toMatchObject({ flag: 'sale', salePrice: 14720000 });
+      expect(byId[seeded.moss.id]).toMatchObject({ flag: 'sale', salePrice: 7680000 });
+      // The list price is never overwritten, so the discount stays reversible.
+      expect(byId[seeded.sage.id].price).toBe(18400000);
+    });
+
+    it('rounds a bulk sale to whole rupees and skips pieces it cannot discount', async () => {
+      const make = async (name: string, price: number) =>
+        (await (await app.request(
+          '/api/admin/products',
+          withMethod('POST', { categoryId: seeded.gowns.id, name, price, color: 'Test' }, adminToken),
+        )).json()).id as string;
+      const odd = await make('Odd Money Gown', 33333); // ₹333.33
+      const penny = await make('Penny Swatch', 100); // ₹1
+
+      const res = await app.request(
+        '/api/admin/products/bulk-update',
+        withMethod('POST', { ids: [odd, penny], action: { type: 'sale', discountPct: 10 } }, adminToken),
+      );
+      expect((await res.json()).results).toEqual(
+        expect.arrayContaining([
+          { id: odd, outcome: 'updated' },
+          // ₹1 less 10% rounds straight back to ₹1 — not a discount, so it's left alone.
+          { id: penny, outcome: 'skipped' },
+        ]),
+      );
+
+      const byId = await adminProductsById();
+      expect(byId[odd].salePrice).toBe(30000); // ₹299.997 → ₹300
+      expect(byId[penny]).toMatchObject({ flag: null, salePrice: null });
+    });
+
+    it('ends a bulk sale only on pieces that are actually on sale', async () => {
+      await app.request(
+        '/api/admin/products/bulk-update',
+        withMethod('POST', { ids: [seeded.sage.id], action: { type: 'sale', discountPct: 25 } }, adminToken),
+      );
+
+      const res = await app.request(
+        '/api/admin/products/bulk-update',
+        withMethod('POST', { ids: [seeded.sage.id, seeded.moss.id], action: { type: 'end_sale' } }, adminToken),
+      );
+      expect((await res.json()).results).toEqual(
+        expect.arrayContaining([
+          { id: seeded.sage.id, outcome: 'updated' },
+          // Flagged 'new', never on sale — ending a sale must not strip that.
+          { id: seeded.moss.id, outcome: 'skipped' },
+        ]),
+      );
+
+      const byId = await adminProductsById();
+      expect(byId[seeded.sage.id]).toMatchObject({ flag: null, salePrice: null });
+      expect(byId[seeded.moss.id]).toMatchObject({ flag: 'new' });
+    });
+
+    it('bulk-hides pieces from the storefront and shows them again', async () => {
+      const setVisible = (active: boolean) =>
+        app.request(
+          '/api/admin/products/bulk-update',
+          withMethod('POST', { ids: [seeded.sage.id], action: { type: 'visibility', active } }, adminToken),
+        );
+
+      await setVisible(false);
+      expect((await app.request('/api/products/sage-sequin-jacket-lehenga')).status).toBe(404);
+
+      await setVisible(true);
+      expect((await app.request('/api/products/sage-sequin-jacket-lehenga')).status).toBe(200);
+    });
+
+    it('clears a stale sale price when a bulk flag change takes a piece off sale', async () => {
+      const bulk = (action: unknown) =>
+        app.request(
+          '/api/admin/products/bulk-update',
+          withMethod('POST', { ids: [seeded.sage.id], action }, adminToken),
+        );
+      await bulk({ type: 'sale', discountPct: 20 });
+      await bulk({ type: 'flag', flag: 'bestseller' });
+
+      // Checkout charges the effective price, so a leftover sale_price would
+      // keep discounting a piece that no longer advertises a sale.
+      expect((await adminProductsById())[seeded.sage.id]).toMatchObject({
+        flag: 'bestseller',
+        salePrice: null,
+      });
+    });
+
+    it('guards and validates bulk-update', async () => {
+      const anon = await app.request(
+        '/api/admin/products/bulk-update',
+        withMethod('POST', { ids: ['x'], action: { type: 'end_sale' } }),
+      );
+      expect(anon.status).toBe(401);
+
+      const bad = (body: unknown) =>
+        app.request('/api/admin/products/bulk-update', withMethod('POST', body, adminToken));
+      const ids = [seeded.sage.id];
+      expect((await bad({ ids, action: { type: 'sale', discountPct: 0 } })).status).toBe(400);
+      expect((await bad({ ids, action: { type: 'sale', discountPct: 96 } })).status).toBe(400);
+      // 'sale' is not a settable flag — it needs a percentage, so it has its own action.
+      expect((await bad({ ids, action: { type: 'flag', flag: 'sale' } })).status).toBe(400);
+      expect((await bad({ ids, action: { type: 'nonsense' } })).status).toBe(400);
+      expect((await bad({ ids: [], action: { type: 'end_sale' } })).status).toBe(400);
     });
 
     it('frees an archived product\'s slug for re-use', async () => {

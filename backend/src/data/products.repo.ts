@@ -107,6 +107,21 @@ export interface BulkDeleteResult {
   archived: string[];
 }
 
+/** A merchandising edit applied to a whole selection at once. */
+export type BulkProductAction =
+  /** Discount off each piece's own list price — never off a price already discounted. */
+  | { type: 'sale'; discountPct: number }
+  | { type: 'end_sale' }
+  | { type: 'visibility'; active: boolean }
+  | { type: 'flag'; flag: 'new' | 'bestseller' | null };
+
+/** `skipped` = the piece exists but the action did not apply to it (see bulkUpdate). */
+export interface BulkUpdateResult {
+  updated: string[];
+  skipped: string[];
+  notFound: string[];
+}
+
 export interface ProductsRepo {
   listCategories(): Promise<Category[]>;
   listProducts(filter: ProductFilter): Promise<{ items: ProductSummary[]; total: number }>;
@@ -122,6 +137,7 @@ export interface ProductsRepo {
   listAllProducts(): Promise<AdminProduct[]>;
   listCollections(): Promise<string[]>;
   bulkDelete(ids: string[]): Promise<BulkDeleteResult>;
+  bulkUpdate(ids: string[], action: BulkProductAction): Promise<BulkUpdateResult>;
 }
 
 export interface WishlistRepo {
@@ -203,6 +219,52 @@ function mapDetail(row: any, variants: Variant[], images: ProductImage[]): Admin
     createdAt: row.created_at.toISOString(),
     costPrice: row.cost_price ?? null,
   };
+}
+
+/**
+ * A bulk discount in SQL. `price` is paise, so `/ 10000` takes the discounted
+ * amount down to rupees and `* 100` returns it to paise — i.e. the sale price
+ * is rounded to the nearest whole rupee. $1 is the id array, $2 the percentage.
+ */
+const BULK_SALE_PRICE = `(round(price * (100 - $2)::numeric / 10000) * 100)::int`;
+
+/**
+ * The single statement a bulk action runs. Every branch is scoped to live
+ * products and returns the ids it actually touched, so the caller can tell an
+ * applied edit from a skipped one without a second read.
+ */
+function bulkUpdateSql(action: BulkProductAction, ids: string[]): [string, unknown[]] {
+  const scope = 'WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL';
+  switch (action.type) {
+    case 'sale':
+      // The guard is the same invariant the create/update routes enforce
+      // (0 < sale_price < price). A piece too cheap for the discount to move it
+      // a whole rupee is skipped rather than failing the whole batch.
+      return [
+        `UPDATE products SET flag = 'sale', sale_price = ${BULK_SALE_PRICE}
+         ${scope} AND ${BULK_SALE_PRICE} BETWEEN 1 AND price - 1
+         RETURNING id`,
+        [ids, action.discountPct],
+      ];
+    case 'end_sale':
+      // Scoped to pieces actually on sale, so ending a sale can never strip a
+      // 'bestseller' off an unrelated piece caught in the same selection.
+      return [
+        `UPDATE products SET flag = NULL, sale_price = NULL
+         ${scope} AND flag = 'sale'
+         RETURNING id`,
+        [ids],
+      ];
+    case 'visibility':
+      return [`UPDATE products SET active = $2 ${scope} RETURNING id`, [ids, action.active]];
+    case 'flag':
+      // Leaving the sale clears the discount — getVariantsForUpdate charges the
+      // effective price, so a stale sale_price is a money bug, not cosmetics.
+      return [
+        `UPDATE products SET flag = $2, sale_price = NULL ${scope} RETURNING id`,
+        [ids, action.flag],
+      ];
+  }
 }
 
 /** Maps a unique-violation on products.slug to a friendly 409. */
@@ -560,6 +622,29 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         return {
           deleted: deletedRows.map((r) => r.id as string),
           archived: archivedRows.map((r) => r.id as string),
+        };
+      });
+    },
+
+    async bulkUpdate(ids, action) {
+      const valid = ids.filter((id) => UUID_RE.test(id));
+      if (valid.length === 0) return { updated: [], skipped: [], notFound: ids };
+      return withTransaction(pool, async (client) => {
+        // Which ids exist at all, read first so a piece the action declined to
+        // touch ('skipped') is never confused with one that isn't there.
+        const { rows: liveRows } = await client.query(
+          'SELECT id FROM products WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL',
+          [valid],
+        );
+        const live = new Set(liveRows.map((r) => r.id as string));
+        const [sql, params] = bulkUpdateSql(action, valid);
+        const { rows } = await client.query(sql, params);
+        const updated = rows.map((r) => r.id as string);
+        const touched = new Set(updated);
+        return {
+          updated,
+          skipped: [...live].filter((id) => !touched.has(id)),
+          notFound: ids.filter((id) => !live.has(id)),
         };
       });
     },

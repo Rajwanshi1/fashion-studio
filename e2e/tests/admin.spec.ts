@@ -109,3 +109,45 @@ test('products: 13+ pieces listed; S-size stock edit persists and is restored', 
   await page.goto(editUrl);
   await expect(page.getByLabel('S', { exact: true })).toHaveValue(original);
 });
+
+test('products: bulk sale discounts a piece from its own price, then ends the sale', async ({
+  page,
+  request,
+}) => {
+  const token = await adminToken(request);
+  // A piece no other spec touches. Unflagged on purpose: ending a sale clears
+  // the flag outright, so only an unflagged piece is left exactly as found.
+  const piece = (await adminProducts(request, token)).find(
+    (p) => p.name !== FERN_GOWN && p.slug !== ORDER_SLUG && p.flag === null && p.active,
+  );
+  if (!piece) throw new Error('no eligible unflagged piece to put on sale');
+  const expectedSale = Math.round((piece.price * 80) / 10000) * 100;
+
+  // Every bulk action confirms first.
+  page.on('dialog', (dialog) => void dialog.accept());
+
+  await adminLogin(page);
+  await page.goto(`${ADMIN_URL}/products`);
+  await expect(page.getByRole('heading', { name: 'Products' })).toBeVisible();
+
+  const row = page.locator('table.data tbody tr').filter({ hasText: piece.name }).first();
+  await row.getByRole('checkbox', { name: `Select ${piece.name}` }).check();
+  await page.getByLabel('Discount %').fill('20');
+  await page.getByRole('button', { name: 'Put on sale' }).click();
+
+  // The page reloads from the API, so this asserts what was actually saved.
+  await expect(row).toContainText('−20%');
+  const sold = (await adminProducts(request, token)).find((p) => p.id === piece.id);
+  expect(sold?.flag).toBe('sale');
+  expect(sold?.salePrice).toBe(expectedSale);
+  // The list price survives, which is what makes the discount reversible.
+  expect(sold?.price).toBe(piece.price);
+
+  await row.getByRole('checkbox', { name: `Select ${piece.name}` }).check();
+  await page.getByRole('button', { name: 'End sale' }).click();
+  await expect(row).not.toContainText('−20%');
+
+  const restored = (await adminProducts(request, token)).find((p) => p.id === piece.id);
+  expect(restored?.salePrice).toBeNull();
+  expect(restored?.price).toBe(piece.price);
+});

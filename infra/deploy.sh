@@ -163,7 +163,15 @@ cmd_spas() {
 
   # Admin's QR generator always emits production URLs (hardcoded in
   # admin/src/pages/Socials.tsx) — printed QRs must survive any environment.
-  (cd admin && rm -rf dist && VITE_API_URL="$api_url" npm run build)
+  # VITE_SHOP_URL is per-environment though: the product table links each piece
+  # to the storefront this deploy just published, not to production.
+  local shop_url
+  if [ -n "$DOMAIN_NAME" ]; then
+    shop_url="https://$DOMAIN_NAME"
+  else
+    shop_url="https://$sf_domain"
+  fi
+  (cd admin && rm -rf dist && VITE_API_URL="$api_url" VITE_SHOP_URL="$shop_url" npm run build)
   aws s3 sync admin/dist "s3://$admin_bucket" --delete --region "$PRIMARY_REGION"
   aws cloudfront create-invalidation --distribution-id "$admin_dist" --paths '/*' > /dev/null
   echo "published admin -> $admin_bucket"

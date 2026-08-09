@@ -4,6 +4,8 @@
 #   Source: </^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>
 #   Target: /index.html   Type: 200 (Rewrite)
 # Set env var VITE_API_URL to the deployed backend URL before building.
+# The admin app also reads VITE_SHOP_URL (the storefront origin) so its product
+# table can link each piece to its live page; it falls back to localhost:5173.
 # The admin QR generator's base URL is hardcoded to production
 # (admin/src/pages/Socials.tsx) — no env var needed for it.
 # The socials app is meant for the socials.<domain>.com subdomain (custom domain in Amplify).

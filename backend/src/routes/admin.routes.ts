@@ -160,6 +160,18 @@ const bulkDeleteSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(200),
 });
 
+// One merchandising edit applied to a whole selection. 'sale' takes a
+// percentage, not a price: every piece is discounted off its own list price.
+const bulkUpdateSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(200),
+  action: z.discriminatedUnion('type', [
+    z.object({ type: z.literal('sale'), discountPct: z.number().int().min(1).max(95) }),
+    z.object({ type: z.literal('end_sale') }),
+    z.object({ type: z.literal('visibility'), active: z.boolean() }),
+    z.object({ type: z.literal('flag'), flag: z.enum(['new', 'bestseller']).nullable() }),
+  ]),
+});
+
 const createProductSchema = productBaseSchema
   .superRefine((v, ctx) => {
     if (v.flag === 'sale') {
@@ -339,6 +351,21 @@ export function adminRoutes(deps: AdminDeps) {
       ...deleted.map((id) => ({ id, outcome: 'deleted' as const })),
       ...archived.map((id) => ({ id, outcome: 'archived' as const })),
       ...ids.filter((id) => !resolved.has(id)).map((id) => ({ id, outcome: 'not_found' as const })),
+    ];
+    return c.json({ results });
+  });
+
+  // Same per-id result shape as bulk-delete, so the admin handles both alike.
+  // 'skipped' means the piece exists but the action didn't apply — in practice
+  // a discount that wouldn't leave a valid sale price, or an end-sale on a
+  // piece that was never on sale.
+  r.post('/products/bulk-update', zValidator('json', bulkUpdateSchema, zodHook), async (c) => {
+    const { ids, action } = c.req.valid('json');
+    const { updated, skipped, notFound } = await deps.products.bulkUpdate(ids, action);
+    const results = [
+      ...updated.map((id) => ({ id, outcome: 'updated' as const })),
+      ...skipped.map((id) => ({ id, outcome: 'skipped' as const })),
+      ...notFound.map((id) => ({ id, outcome: 'not_found' as const })),
     ];
     return c.json({ results });
   });
