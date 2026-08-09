@@ -192,4 +192,45 @@ describe('Orders', () => {
     // refreshed order lands in the table — balance cleared
     expect(await screen.findByText('—', { selector: 'td.num' })).toBeInTheDocument();
   });
+
+  it('sends the invoice on WhatsApp from the expanded row and shows the sent state', async () => {
+    seedAdminAuth();
+    const order = makeOrder({ status: 'in_atelier', channel: 'in_store', billType: 'cash_memo' });
+    const sentAt = '2026-08-10T10:00:00.000Z';
+    const { calls } = mockFetch((url, init) => {
+      if (url.endsWith('/api/admin/orders') && (init?.method ?? 'GET') === 'GET') {
+        return { json: [order] };
+      }
+      if (url.endsWith('/api/admin/orders/o1/invoice/send') && init?.method === 'POST') {
+        return { json: { ...order, invoiceSentAt: sentAt } };
+      }
+      return undefined;
+    });
+
+    renderApp('/orders');
+    await userEvent.click(await screen.findByText('TA-2026-04817'));
+
+    expect(screen.getByRole('button', { name: 'Invoice PDF' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Send invoice on WhatsApp' }));
+
+    // the returned order replaces the row: re-send label + sent note
+    expect(await screen.findByRole('button', { name: 'Re-send invoice on WhatsApp' })).toBeInTheDocument();
+    expect(screen.getByText(/Invoice sent/, { selector: 'p' })).toBeInTheDocument();
+    expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/orders/o1/invoice/send'))).toBe(true);
+  });
+
+  it('disables the invoice send for orders without a phone', async () => {
+    seedAdminAuth();
+    mockFetch((url, init) => {
+      if (url.endsWith('/api/admin/orders') && (init?.method ?? 'GET') === 'GET') {
+        return { json: [makeOrder({ phone: '' })] };
+      }
+      return undefined;
+    });
+
+    renderApp('/orders');
+    await userEvent.click(await screen.findByText('TA-2026-04817'));
+
+    expect(screen.getByRole('button', { name: 'Send invoice on WhatsApp' })).toBeDisabled();
+  });
 });

@@ -73,6 +73,52 @@ describe('loadConfig', () => {
         loadConfig({ NODE_ENV: 'production', JWT_SECRET: VALID_SECRET, PAYMENT_PROVIDER: 'razorpay' })
       ).toThrow(/PAYMENT_PROVIDER/);
     });
+
+    it('defaults whatsappProvider to disabled (fail-closed)', () => {
+      const config = loadConfig({ NODE_ENV: 'production', JWT_SECRET: VALID_SECRET });
+      expect(config.whatsappProvider).toBe('disabled');
+    });
+
+    it('throws for WHATSAPP_PROVIDER=console without the ALLOW_CONSOLE_WHATSAPP escape hatch', () => {
+      expect(() =>
+        loadConfig({ NODE_ENV: 'production', JWT_SECRET: VALID_SECRET, WHATSAPP_PROVIDER: 'console' })
+      ).toThrow(/WHATSAPP_PROVIDER=console is not allowed/);
+    });
+
+    it('loads WHATSAPP_PROVIDER=console with ALLOW_CONSOLE_WHATSAPP=true (staging)', () => {
+      const config = loadConfig({
+        NODE_ENV: 'production',
+        JWT_SECRET: VALID_SECRET,
+        WHATSAPP_PROVIDER: 'console',
+        ALLOW_CONSOLE_WHATSAPP: 'true',
+      });
+      expect(config.whatsappProvider).toBe('console');
+    });
+
+    it('throws for WHATSAPP_PROVIDER=meta without credentials', () => {
+      expect(() =>
+        loadConfig({ NODE_ENV: 'production', JWT_SECRET: VALID_SECRET, WHATSAPP_PROVIDER: 'meta' })
+      ).toThrow(/WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID/);
+    });
+
+    it('loads WHATSAPP_PROVIDER=meta with credentials', () => {
+      const config = loadConfig({
+        NODE_ENV: 'production',
+        JWT_SECRET: VALID_SECRET,
+        WHATSAPP_PROVIDER: 'meta',
+        WHATSAPP_ACCESS_TOKEN: ' token ',
+        WHATSAPP_PHONE_NUMBER_ID: ' 1234567890 ',
+      });
+      expect(config.whatsappProvider).toBe('meta');
+      expect(config.whatsappAccessToken).toBe('token');
+      expect(config.whatsappPhoneNumberId).toBe('1234567890');
+    });
+
+    it('throws on an unknown WHATSAPP_PROVIDER value', () => {
+      expect(() =>
+        loadConfig({ NODE_ENV: 'production', JWT_SECRET: VALID_SECRET, WHATSAPP_PROVIDER: 'twilio' })
+      ).toThrow(/WHATSAPP_PROVIDER/);
+    });
   });
 
   describe('development', () => {
@@ -94,6 +140,10 @@ describe('loadConfig', () => {
 
     it('honours PAYMENT_PROVIDER=disabled', () => {
       expect(loadConfig({ PAYMENT_PROVIDER: 'disabled' }).paymentProvider).toBe('disabled');
+    });
+
+    it('defaults whatsappProvider to console', () => {
+      expect(loadConfig({}).whatsappProvider).toBe('console');
     });
   });
 });

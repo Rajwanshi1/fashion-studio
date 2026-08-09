@@ -24,6 +24,7 @@ import { createGoogleVerifier } from './services/google.verifier';
 import { LocalObjectStore, S3ObjectStore } from './services/objectstore';
 import { MockRazorpayProvider } from './services/payments.service';
 import { ConsoleSmsProvider, Msg91SmsProvider } from './services/sms.provider';
+import { ConsoleWhatsAppProvider, MetaWhatsAppProvider } from './services/whatsapp.provider';
 
 async function main() {
   const config = loadConfig();
@@ -93,6 +94,12 @@ async function main() {
           ? new ConsoleSmsProvider()
           : null,
     otpDevCode: config.otpDevCode,
+    whatsappProvider:
+      config.whatsappProvider === 'meta'
+        ? new MetaWhatsAppProvider(config.whatsappAccessToken!, config.whatsappPhoneNumberId!)
+        : config.whatsappProvider === 'console'
+          ? new ConsoleWhatsAppProvider()
+          : null,
     jwtSecret: config.jwtSecret,
     corsOrigins: config.corsOrigins,
     runInTransaction: makeTxRunner(pool),
@@ -111,6 +118,9 @@ async function main() {
   if (config.smsProvider === 'msg91') console.log('auth: phone OTP via MSG91');
   else if (config.smsProvider === 'console') console.warn('auth: phone OTP codes printed to console — dev only');
   else console.log('auth: phone OTP masked — set SMS_PROVIDER to enable');
+  if (config.whatsappProvider === 'meta') console.log('whatsapp: invoice sends via the Meta Cloud API');
+  else if (config.whatsappProvider === 'console') console.warn('whatsapp: invoice sends printed to console — dev only');
+  else console.log('whatsapp: invoice sends masked — set WHATSAPP_PROVIDER to enable');
   if (config.s3UploadsBucket) {
     console.log(`uploads: S3 bucket ${config.s3UploadsBucket} — product images (public products/) + documents (private)`);
   } else {

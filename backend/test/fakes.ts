@@ -53,6 +53,7 @@ import type { GoogleTokenClaims, VerifyGoogleToken } from '../src/services/auth.
 import type { ObjectStore } from '../src/services/objectstore';
 import type { PaymentProvider } from '../src/services/payments.service';
 import type { SmsProvider } from '../src/services/sms.provider';
+import type { InvoiceVars, WhatsAppProvider } from '../src/services/whatsapp.provider';
 import {
   Category,
   DomainError,
@@ -225,6 +226,16 @@ export class FakeSmsProvider implements SmsProvider {
   async sendOtp(phone: string, code: string): Promise<void> {
     if (this.failWith) throw this.failWith;
     this.sent.push({ phone, code });
+  }
+}
+
+export class FakeWhatsAppProvider implements WhatsAppProvider {
+  sent: { phone: string; filename: string; vars: InvoiceVars; bytes: number }[] = [];
+  failWith: Error | null = null;
+
+  async sendInvoice(phone: string, pdf: Buffer, filename: string, vars: InvoiceVars): Promise<void> {
+    if (this.failWith) throw this.failWith;
+    this.sent.push({ phone, filename, vars, bytes: pdf.length });
   }
 }
 
@@ -621,6 +632,7 @@ export class FakeOrdersRepo implements OrdersRepo {
       carrier: null,
       awb: null,
       notes: '',
+      invoiceSentAt: null,
       advancePaid: 0,
       balance: order.total,
       receipts: [],
@@ -734,6 +746,13 @@ export class FakeOrdersRepo implements OrdersRepo {
     if (patch.carrier !== undefined) o.carrier = patch.carrier;
     if (patch.awb !== undefined) o.awb = patch.awb;
     if (patch.notes !== undefined) o.notes = patch.notes;
+    return structuredClone(o);
+  }
+
+  async markInvoiceSent(id: string): Promise<Order | null> {
+    const o = this.orders.find((x) => x.id === id);
+    if (!o) return null;
+    o.invoiceSentAt = new Date(Date.UTC(2026, 5, 3) + ++this.clock * 60_000).toISOString();
     return structuredClone(o);
   }
 

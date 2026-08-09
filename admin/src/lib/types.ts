@@ -173,6 +173,8 @@ export interface Order {
   /** AWB / consignment number; null until dispatched. */
   awb: string | null;
   notes: string;
+  /** When the PDF invoice was last WhatsApped to the customer; null = never. */
+  invoiceSentAt: string | null;
   /** SUM of receipts, paise. */
   advancePaid: number;
   /** total − advancePaid, paise. */

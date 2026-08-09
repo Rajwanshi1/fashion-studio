@@ -15,6 +15,10 @@ export interface Config {
   msg91TemplateId: string | null;
   /** Fixed OTP for dev/e2e. Only honored alongside the console provider. */
   otpDevCode: string | null;
+  /** 'disabled' keeps WhatsApp invoice sends masked (send endpoint answers 503). */
+  whatsappProvider: 'meta' | 'console' | 'disabled';
+  whatsappAccessToken: string | null;
+  whatsappPhoneNumberId: string | null;
   /** Null keeps document parsing masked (parse endpoint answers 503). */
   anthropicApiKey: string | null;
   /** Null means no S3 — the dev LocalObjectStore serves uploads instead. */
@@ -48,6 +52,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error('SMS_PROVIDER=msg91 requires MSG91_AUTH_KEY and MSG91_TEMPLATE_ID');
   }
 
+  // Fail-closed: an unset WHATSAPP_PROVIDER means disabled in production.
+  const whatsappProvider = env.WHATSAPP_PROVIDER ?? (nodeEnv === 'production' ? 'disabled' : 'console');
+  if (whatsappProvider !== 'meta' && whatsappProvider !== 'console' && whatsappProvider !== 'disabled') {
+    throw new Error(`WHATSAPP_PROVIDER must be 'meta', 'console' or 'disabled', got '${whatsappProvider}'`);
+  }
+  if (whatsappProvider === 'meta' && (!env.WHATSAPP_ACCESS_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID)) {
+    throw new Error('WHATSAPP_PROVIDER=meta requires WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID');
+  }
+
   if (nodeEnv === 'production') {
     if (!env.JWT_SECRET || env.JWT_SECRET === DEV_JWT_SECRET || env.JWT_SECRET.length < 32) {
       throw new Error(
@@ -78,6 +91,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
           'Use msg91, or set ALLOW_CONSOLE_OTP=true only on staging.'
       );
     }
+    if (whatsappProvider === 'console' && env.ALLOW_CONSOLE_WHATSAPP !== 'true') {
+      throw new Error(
+        'WHATSAPP_PROVIDER=console is not allowed in production (it stamps invoices as sent ' +
+          'without delivering them). Use meta, or set ALLOW_CONSOLE_WHATSAPP=true only on staging.'
+      );
+    }
   }
 
   const port = parseInt(env.PORT ?? '3001', 10);
@@ -98,6 +117,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     msg91AuthKey: env.MSG91_AUTH_KEY?.trim() || null,
     msg91TemplateId: env.MSG91_TEMPLATE_ID?.trim() || null,
     otpDevCode: env.OTP_DEV_CODE?.trim() || null,
+    whatsappProvider,
+    whatsappAccessToken: env.WHATSAPP_ACCESS_TOKEN?.trim() || null,
+    whatsappPhoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID?.trim() || null,
     // No fail-closed guard needed: a missing key just masks the parser (503),
     // uploads themselves keep working.
     anthropicApiKey: env.ANTHROPIC_API_KEY?.trim() || null,
