@@ -306,12 +306,15 @@ export class FakeProductsRepo implements ProductsRepo {
     if (filter.collection) rows = rows.filter((p) => p.collection === filter.collection);
     if (filter.colorFamily) rows = rows.filter((p) => p.colorFamily === filter.colorFamily);
     if (filter.search) {
-      const q = filter.search.toLowerCase();
-      rows = rows.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.description.toLowerCase().includes(q) ||
-          p.color.toLowerCase().includes(q),
+      // Tokenized multi-column match — identical semantics to the SQL repo:
+      // every token must hit one of the descriptive columns (category included).
+      const tokens = filter.search.toLowerCase().split(/\s+/).filter(Boolean);
+      rows = rows.filter((p) =>
+        tokens.every((t) =>
+          [p.name, p.description, p.color, p.craft, p.fabric, p.occasion, p.categoryName].some(
+            (field) => field.toLowerCase().includes(t),
+          ),
+        ),
       );
     }
     const flagRank = (p: AdminProduct) => (p.flag === 'bestseller' ? 0 : p.flag === 'new' ? 1 : 2);

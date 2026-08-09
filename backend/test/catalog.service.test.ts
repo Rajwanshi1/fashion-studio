@@ -65,6 +65,29 @@ describe('CatalogService', () => {
     expect((await catalog.listProducts({ search: '  ' })).total).toBe(3); // blank search ignored
   });
 
+  it('ANDs search tokens across name, craft, fabric, occasion and category', async () => {
+    // Two tokens, no single column holds both: "sage" (name) + "lehenga"
+    // (name/category) must not also drag in every other Lehenga Sets piece.
+    expect((await catalog.listProducts({ search: 'sage lehenga' })).items.map((p) => p.slug)).toEqual([
+      'sage-sequin-jacket-lehenga',
+    ]);
+    // Craft and fabric hits — neither word appears in name/description/color.
+    await products.updateProduct(seeded.plain.id, { craft: 'Aari' });
+    await products.updateProduct(seeded.moss.id, { fabric: 'Organza' });
+    expect((await catalog.listProducts({ search: 'aari' })).items.map((p) => p.slug)).toEqual([
+      'celadon-tissue-draped-lehenga',
+    ]);
+    expect((await catalog.listProducts({ search: 'organza' })).items.map((p) => p.slug)).toEqual([
+      'moss-tissue-draped-gown',
+    ]);
+    // Category-name hit: "gowns" only exists on the category, never the piece.
+    expect((await catalog.listProducts({ search: 'gowns' })).items.map((p) => p.slug)).toEqual([
+      'moss-tissue-draped-gown',
+    ]);
+    // A token that hits nothing empties the result despite the other matching.
+    expect((await catalog.listProducts({ search: 'sage kaftan' })).total).toBe(0);
+  });
+
   it('sorts by price ascending and descending', async () => {
     const asc = await catalog.listProducts({ sort: 'price_asc' });
     expect(asc.items.map((p) => p.price)).toEqual([9600000, 16800000, 18400000]);
