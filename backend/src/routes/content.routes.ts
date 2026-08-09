@@ -6,9 +6,25 @@ import { z } from 'zod';
 import { AuthEnv, requireAdmin, requireAuth } from '../middleware/auth';
 import type { ContentRepo } from '../data/content.repo';
 
+/**
+ * Prod sits behind a WAF that rejects request bodies over 8KB with an opaque
+ * edge 403 — no API error body, nothing in the app logs. The per-field max()es
+ * below are code-point counts, so a Devanagari or emoji save can be 2-3x its
+ * character length in bytes and a full 7-look lookbook can clear 8KB even when
+ * every field is legal. Budget the encoded section well under the cap so an
+ * over-long save fails here, readably, instead of there.
+ */
+const MAX_SECTION_BYTES = 6 * 1024;
+
 const str = z.string().max(300);
 const copy = z.string().max(1000);
-const url = z.string().max(500);
+// Links land in href/src on the public storefront; only an admin writes them,
+// but keep `javascript:` and friends out. '' is legal — the admin form submits
+// blanks for socials the studio has not set.
+const url = z
+  .string()
+  .max(500)
+  .refine((v) => v === '' || /^(https?:\/\/|\/|mailto:|tel:)/i.test(v), 'Must be a link (https://…, /path, mailto: or tel:)');
 const image = url.nullable();
 
 const look = z.object({ imageUrl: image, lookNo: str, title: str, copy, ctaHref: url }).partial().strict();
@@ -54,6 +70,9 @@ export function contentRoutes(content: ContentRepo, jwtSecret: string) {
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
       return c.json({ error: `${issue.path.join('.') || key}: ${issue.message}` }, 400);
+    }
+    if (Buffer.byteLength(JSON.stringify(parsed.data)) > MAX_SECTION_BYTES) {
+      return c.json({ error: 'Section too large — shorten the copy' }, 400);
     }
     await content.upsert(key, parsed.data);
     return c.body(null, 204);
