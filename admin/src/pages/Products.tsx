@@ -6,6 +6,7 @@ import { productUrl } from '../lib/shop';
 import type { AdminProduct } from '../lib/types';
 import type { ProductFilters } from '../lib/productFilter';
 import { EMPTY_FILTERS, applyProductFilters } from '../lib/productFilter';
+import ConfirmModal from '../components/ConfirmModal';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import ProductBulkBar from '../components/ProductBulkBar';
@@ -33,6 +34,11 @@ interface BulkUpdateResponse {
 
 const pieces = (n: number) => (n === 1 ? 'piece' : 'pieces');
 
+/** A bulk action waiting on the operator's confirmation in the modal. */
+type PendingBulk =
+  | { kind: 'delete' }
+  | { kind: 'update'; action: BulkAction; title: string; confirmLabel: string; doneVerb: string };
+
 /** The gallery to preview in the table: real photos, else the legacy single image. */
 function thumbnails(p: AdminProduct): string[] {
   const gallery = p.images?.length ? p.images.map((i) => i.url) : p.imageUrl ? [p.imageUrl] : [];
@@ -48,6 +54,7 @@ export default function Products() {
   const [collectionFilter, setCollectionFilter] = useState('all');
   const [filters, setFilters] = useState<ProductFilters>(EMPTY_FILTERS);
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<PendingBulk | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -94,12 +101,9 @@ export default function Products() {
       return new Set([...prev, ...visible.map((p) => p.id)]);
     });
 
-  const deleteSelected = async () => {
+  const performDelete = async () => {
     const ids = [...selected];
     if (ids.length === 0 || busy) return;
-    if (!window.confirm(`Delete ${ids.length} ${pieces(ids.length)}? Pieces with past orders are archived instead of deleted.`)) {
-      return;
-    }
     setBusy(true);
     try {
       const { results } = await api<BulkDeleteResponse>('/api/admin/products/bulk-delete', {
@@ -127,10 +131,9 @@ export default function Products() {
    * prices from each piece's own price, so the list is refetched rather than
    * patched — the table can only be trusted if it shows what was actually saved.
    */
-  const applyBulk = async (action: BulkAction, confirmText: string, doneVerb: string) => {
+  const performBulk = async (action: BulkAction, doneVerb: string) => {
     const ids = [...selected];
     if (ids.length === 0 || busy) return;
-    if (!window.confirm(confirmText)) return;
     setBusy(true);
     try {
       const { results } = await api<BulkUpdateResponse>('/api/admin/products/bulk-update', {
@@ -153,33 +156,43 @@ export default function Products() {
 
   const n = selected.size;
 
+  const ask = (action: BulkAction, title: string, confirmLabel: string, doneVerb: string) => {
+    if (n === 0 || busy) return;
+    setPending({ kind: 'update', action, title, confirmLabel, doneVerb });
+  };
+
   const putOnSale = (discountPct: number) =>
-    applyBulk(
+    ask(
       { type: 'sale', discountPct },
       `Put ${n} ${pieces(n)} on sale at ${discountPct}% off? Each piece is discounted from its own price.`,
+      'Put on sale',
       'on sale',
     );
 
   const endSale = () =>
-    applyBulk({ type: 'end_sale' }, `End the sale on ${n} ${pieces(n)}?`, 'back to full price');
+    ask({ type: 'end_sale' }, `End the sale on ${n} ${pieces(n)}?`, 'End sale', 'back to full price');
 
   const setVisibility = (active: boolean) =>
-    applyBulk(
+    ask(
       { type: 'visibility', active },
       active
         ? `Show ${n} ${pieces(n)} on the storefront?`
         : `Hide ${n} ${pieces(n)} from the storefront?`,
+      active ? 'Show' : 'Hide',
       active ? 'shown' : 'hidden',
     );
 
   const setFlag = (flag: 'new' | 'bestseller' | null) =>
-    applyBulk(
+    ask(
       { type: 'flag', flag },
       flag
         ? `Flag ${n} ${pieces(n)} as ${FLAG_LABELS[flag]}? Any sale price is cleared.`
         : `Clear the flag on ${n} ${pieces(n)}? Any sale price is cleared.`,
+      'Apply flag',
       'flagged',
     );
+
+  const selectedNames = all.filter((p) => selected.has(p.id)).map((p) => p.name);
 
   const columns: Column<AdminProduct>[] = [
     {
@@ -336,7 +349,42 @@ export default function Products() {
           onEndSale={() => void endSale()}
           onVisibility={(active) => void setVisibility(active)}
           onFlag={(flag) => void setFlag(flag)}
-          onDelete={() => void deleteSelected()}
+          onDelete={() => {
+            if (n > 0 && !busy) setPending({ kind: 'delete' });
+          }}
+        />
+      )}
+
+      {pending?.kind === 'delete' && (
+        <ConfirmModal
+          title={`Delete ${n} ${pieces(n)}?`}
+          confirmLabel={`Delete ${n} ${pieces(n)}`}
+          tone="danger"
+          onCancel={() => setPending(null)}
+          onConfirm={() => {
+            setPending(null);
+            void performDelete();
+          }}
+        >
+          <p>Pieces with past orders are archived instead of deleted. This cannot be undone.</p>
+          <ul>
+            {selectedNames.slice(0, 8).map((name, i) => (
+              <li key={`${name}-${i}`}>{name}</li>
+            ))}
+            {selectedNames.length > 8 && <li>…and {selectedNames.length - 8} more</li>}
+          </ul>
+        </ConfirmModal>
+      )}
+      {pending?.kind === 'update' && (
+        <ConfirmModal
+          title={pending.title}
+          confirmLabel={pending.confirmLabel}
+          onCancel={() => setPending(null)}
+          onConfirm={() => {
+            const { action, doneVerb } = pending;
+            setPending(null);
+            void performBulk(action, doneVerb);
+          }}
         />
       )}
 

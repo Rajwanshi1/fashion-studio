@@ -3,17 +3,20 @@ import { API_URL, api, storedToken } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatDate } from '../lib/format';
 import type { AdminUser, Role } from '../lib/types';
+import ConfirmModal from '../components/ConfirmModal';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { useToast } from '../components/Toast';
 
 const fullName = (u: AdminUser) => `${u.firstName} ${u.lastName}`.trim();
+const displayName = (u: AdminUser) => fullName(u) || u.email || u.phone || 'this user';
 
 export default function Users() {
   const { user: me } = useAuth();
   const toast = useToast();
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingRole, setPendingRole] = useState<{ user: AdminUser; next: Role } | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -106,7 +109,7 @@ export default function Users() {
             className="ulink"
             disabled={self}
             title={self ? 'You cannot change your own role' : undefined}
-            onClick={() => void changeRole(u, next)}
+            onClick={() => setPendingRole({ user: u, next })}
           >
             {next === 'admin' ? 'Make admin' : 'Make customer'}
           </button>
@@ -134,6 +137,30 @@ export default function Users() {
           rowKey={(u) => u.id}
           empty="No users registered yet."
         />
+      )}
+
+      {pendingRole && (
+        <ConfirmModal
+          title={
+            pendingRole.next === 'admin'
+              ? `Make ${displayName(pendingRole.user)} an admin?`
+              : `Remove admin access for ${displayName(pendingRole.user)}?`
+          }
+          confirmLabel={pendingRole.next === 'admin' ? 'Make admin' : 'Make customer'}
+          tone={pendingRole.next === 'admin' ? 'danger' : 'default'}
+          onCancel={() => setPendingRole(null)}
+          onConfirm={() => {
+            const { user, next } = pendingRole;
+            setPendingRole(null);
+            void changeRole(user, next);
+          }}
+        >
+          <p>
+            {pendingRole.next === 'admin'
+              ? 'Admins have full access to orders, payments, customer details and the product catalogue.'
+              : 'They will no longer be able to sign in to this portal.'}
+          </p>
+        </ConfirmModal>
       )}
     </>
   );

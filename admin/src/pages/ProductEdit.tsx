@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { uploadProductImage } from '../lib/uploads';
 import type { AdminProduct, Category, ProductImage, Variant } from '../lib/types';
@@ -112,11 +112,21 @@ export default function ProductEdit() {
   const [variants, setVariants] = useState<Variant[]>([]);
   const [stocks, setStocks] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(!isNew);
+  const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState<{ done: number; total: number } | null>(null);
   const [urlDraft, setUrlDraft] = useState('');
   const photoInput = useRef<HTMLInputElement>(null);
+  const errRef = useRef<HTMLDivElement>(null);
+
+  // The form is long and the submit button sits at the bottom — an error that
+  // renders quietly at the top is indistinguishable from a dead button.
+  useEffect(() => {
+    if (!error) return;
+    errRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    errRef.current?.focus();
+  }, [error]);
 
   useEffect(() => {
     let live = true;
@@ -143,7 +153,7 @@ export default function ProductEdit() {
         if (!live) return;
         const product = products.find((p) => p.id === id);
         if (!product) {
-          setError('Piece not found');
+          setNotFound(true);
           setLoading(false);
           return;
         }
@@ -290,7 +300,12 @@ export default function ProductEdit() {
       setError('Please enter a valid price in rupees');
       return;
     }
-    if (saleError) return; // shown inline under the sale fields
+    if (saleError) {
+      // Also shown inline under the sale fields, but surface it at the top too —
+      // a silent return here reads as a broken Save button.
+      setError(saleError);
+      return;
+    }
     const dupattaPrice = addonPaise(form.dupattaRupees);
     const jacketPrice = addonPaise(form.jacketRupees);
     if (dupattaPrice === undefined || jacketPrice === undefined) {
@@ -351,12 +366,35 @@ export default function ProductEdit() {
       toast(isNew ? 'Piece added to the collection' : 'Piece saved');
       navigate('/products');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to save');
+      const message = err instanceof Error ? err.message : 'Unable to save';
+      setError(message);
+      toast(message, { tone: 'error' });
       setBusy(false);
     }
   };
 
   if (loading) return <p className="state-note">Loading piece…</p>;
+
+  // A bad or stale link must not render a live, saveable empty form —
+  // filling it in would write into nothing.
+  if (notFound) {
+    return (
+      <>
+        <div className="page-head-admin">
+          <span className="eyebrow">Inventory</span>
+          <h1>Piece not found</h1>
+        </div>
+        <p className="state-note">
+          No piece exists at this address — it may have been deleted, or the link is stale.
+        </p>
+        <p className="state-note">
+          <Link className="ulink" to="/products">
+            ← Back to Products
+          </Link>
+        </p>
+      </>
+    );
+  }
 
   const stockKeys: { key: string; label: string }[] = isNew
     ? NEW_SIZES.map((s) => ({ key: s, label: s }))
@@ -374,7 +412,7 @@ export default function ProductEdit() {
 
       <form className="form-card" onSubmit={onSubmit} noValidate>
         {error && (
-          <div className="form-err" role="alert">
+          <div className="form-err" role="alert" ref={errRef} tabIndex={-1}>
             {error}
           </div>
         )}

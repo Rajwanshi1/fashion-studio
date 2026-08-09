@@ -14,6 +14,7 @@ import Payments from './pages/Payments';
 import Users from './pages/Users';
 import Socials from './pages/Socials';
 import Analytics from './pages/Analytics';
+import NotFound from './pages/NotFound';
 
 function RequireAuth() {
   const { token } = useAuth();
@@ -46,7 +47,7 @@ export default function App() {
               <Route path="/analytics" element={<Analytics />} />
             </Route>
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </ToastProvider>
     </AuthProvider>

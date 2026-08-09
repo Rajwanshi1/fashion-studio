@@ -241,6 +241,7 @@ export class DomainError extends Error {
       | 'EMPTY_ORDER'
       | 'INVALID_STATUS_TRANSITION'
       | 'OVER_COLLECTION'
+      | 'ORDER_CANCELLED'
       | 'PAYMENT_ALREADY_FINAL'
       | 'NOT_CONFIGURED'
       | 'INVALID_SOURCE'

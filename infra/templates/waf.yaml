@@ -76,7 +76,11 @@ Resources:
             SampledRequestsEnabled: true
             CloudWatchMetricsEnabled: true
             MetricName: !Sub 'fashion-${EnvName}-common'
-        # Restores the 8KB body cap everywhere except the image-naming presign.
+        # Restores a body cap everywhere except the image-naming presign.
+        # 32KB (was 8KB): a product update with a 12-image gallery and long
+        # description legitimately crosses 8KB, and the WAF's bare 403 carries
+        # no CORS headers, so the admin saw it as an opaque network failure.
+        # The app's own bodyLimit still caps JSON at 100KB behind this.
         # Case-sensitive path match on purpose: a request that varies the casing
         # fails the NOT and gets blocked, so the exemption cannot be widened by
         # rewriting the URI.
@@ -89,7 +93,7 @@ Resources:
                 - SizeConstraintStatement:
                     FieldToMatch: { Body: { OversizeHandling: CONTINUE } }
                     ComparisonOperator: GT
-                    Size: 8192
+                    Size: 32768
                     TextTransformations: [{ Priority: 0, Type: NONE }]
                 - NotStatement:
                     Statement:

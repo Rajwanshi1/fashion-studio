@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import {
   ADMIN_URL,
+  API,
   adminLogin,
   adminProducts,
   adminToken,
@@ -110,6 +111,55 @@ test('products: 13+ pieces listed; S-size stock edit persists and is restored', 
   await expect(page.getByLabel('S', { exact: true })).toHaveValue(original);
 });
 
+test('products: price and visibility edits persist (TA-001 regression)', async ({
+  page,
+  request,
+}) => {
+  const token = await adminToken(request);
+  const piece = (await adminProducts(request, token)).find(
+    (p) => p.name !== FERN_GOWN && p.slug !== ORDER_SLUG && p.flag === null && p.active,
+  );
+  if (!piece) throw new Error('no eligible piece for the edit regression');
+
+  await adminLogin(page);
+  await page.goto(`${ADMIN_URL}/products/${piece.id}`);
+  await expect(page.getByRole('heading', { name: 'Edit Piece' })).toBeVisible();
+
+  const price = page.getByLabel('Price (₹ rupees)');
+  const originalRupees = await price.inputValue();
+  const bumped = String(Number(originalRupees) + 7);
+  await price.fill(bumped);
+  await page.getByLabel(/^Active/).uncheck();
+  await page.getByRole('button', { name: 'Save Piece' }).click();
+  await expect(page.getByRole('heading', { name: 'Products' })).toBeVisible({ timeout: 30_000 });
+
+  // Reload the edit page — both changes must have persisted.
+  await page.goto(`${ADMIN_URL}/products/${piece.id}`);
+  await expect(page.getByLabel('Price (₹ rupees)')).toHaveValue(bumped);
+  await expect(page.getByLabel(/^Active/)).not.toBeChecked();
+
+  // Restore via the API so later specs find the piece exactly as it was.
+  const res = await request.put(`${API}/api/admin/products/${piece.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { price: piece.price, active: true },
+  });
+  expect(res.ok(), 'restore should succeed').toBeTruthy();
+});
+
+test('products: an invalid piece URL shows not-found, not a saveable form', async ({ page }) => {
+  await adminLogin(page);
+  await page.goto(`${ADMIN_URL}/products/not-a-real-id-12345`);
+  await expect(page.getByRole('heading', { name: 'Piece not found' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save Piece' })).toHaveCount(0);
+});
+
+test('unknown URLs render a 404 page instead of bouncing to the Dashboard', async ({ page }) => {
+  await adminLogin(page);
+  await page.goto(`${ADMIN_URL}/this-page-does-not-exist`);
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+  await expect(page).toHaveURL(/this-page-does-not-exist/);
+});
+
 test('products: bulk sale discounts a piece from its own price, then ends the sale', async ({
   page,
   request,
@@ -123,9 +173,6 @@ test('products: bulk sale discounts a piece from its own price, then ends the sa
   if (!piece) throw new Error('no eligible unflagged piece to put on sale');
   const expectedSale = Math.round((piece.price * 80) / 10000) * 100;
 
-  // Every bulk action confirms first.
-  page.on('dialog', (dialog) => void dialog.accept());
-
   await adminLogin(page);
   await page.goto(`${ADMIN_URL}/products`);
   await expect(page.getByRole('heading', { name: 'Products' })).toBeVisible();
@@ -134,6 +181,8 @@ test('products: bulk sale discounts a piece from its own price, then ends the sa
   await row.getByRole('checkbox', { name: `Select ${piece.name}` }).check();
   await page.getByLabel('Discount %').fill('20');
   await page.getByRole('button', { name: 'Put on sale' }).click();
+  // Every bulk action confirms first — in an in-app modal, not window.confirm.
+  await page.getByRole('dialog').getByRole('button', { name: 'Put on sale' }).click();
 
   // The page reloads from the API, so this asserts what was actually saved.
   await expect(row).toContainText('−20%');
@@ -145,6 +194,7 @@ test('products: bulk sale discounts a piece from its own price, then ends the sa
 
   await row.getByRole('checkbox', { name: `Select ${piece.name}` }).check();
   await page.getByRole('button', { name: 'End sale' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'End sale' }).click();
   await expect(row).not.toContainText('−20%');
 
   const restored = (await adminProducts(request, token)).find((p) => p.id === piece.id);

@@ -371,6 +371,9 @@ export function createOrdersService(deps: {
     async recordReceipt(orderId, input) {
       const order = await deps.orders.getById(orderId);
       if (!order) throw new DomainError('NOT_FOUND', 'Order not found');
+      if (order.status === 'cancelled') {
+        throw new DomainError('ORDER_CANCELLED', 'This order is cancelled — payments can no longer be recorded against it');
+      }
       if (order.advancePaid + input.amount > order.total) {
         throw new DomainError('OVER_COLLECTION', 'Payment would exceed the order total');
       }

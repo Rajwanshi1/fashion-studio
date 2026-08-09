@@ -71,7 +71,9 @@ const createOfflineOrderSchema = z.object({
         unitPrice: z.number().int().min(0),
       }),
     )
-    .min(1),
+    .min(1)
+    // Keeps the JSON body comfortably under the WAF's edge cap on request size.
+    .max(100),
   gstAmount: z.number().int().min(0).optional(),
   total: z.number().int().min(0),
   advance: z.object({ amount: z.number().int().positive(), mode: z.enum(RECEIPT_MODES) }).optional(),
@@ -134,8 +136,10 @@ const productBaseSchema = z.object({
   // Optional: omitted → derived from name + colour (see the create route).
   slug: z.string().min(1).optional(),
   name: z.string().min(1),
-  description: z.string().optional(),
-  details: z.string().optional(),
+  // Bounded so a product write can never outgrow the WAF's edge cap on
+  // request size (32KB) — 10k chars of prose is far beyond any real listing.
+  description: z.string().max(10_000).optional(),
+  details: z.string().max(10_000).optional(),
   price: z.number().int().min(0),
   color: z.string().optional(),
   flag: flagSchema.optional(),

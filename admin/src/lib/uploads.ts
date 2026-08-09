@@ -108,7 +108,8 @@ export async function uploadDocument(kind: DocumentKind, file: File): Promise<Up
 
 /** 503 while ANTHROPIC_API_KEY is unset — callers fall back to manual entry. */
 export function parseDocument<T>(documentId: string): Promise<T> {
-  return api<T>(`/api/admin/documents/${documentId}/parse`, { method: 'POST' });
+  // OCR runs a model call; give it well beyond the default API timeout.
+  return api<T>(`/api/admin/documents/${documentId}/parse`, { method: 'POST', timeoutMs: 120_000 });
 }
 
 export function documentViewUrl(documentId: string): Promise<{ url: string }> {
@@ -183,9 +184,11 @@ export async function uploadProductImage(
 
   let presign: ProductImagePresign;
   try {
+    // The naming variant carries the whole photo as base64 — allow for a slow uplink.
     presign = await api<ProductImagePresign>('/api/admin/uploads/product-image', {
       method: 'POST',
       body,
+      timeoutMs: 120_000,
     });
   } catch (err) {
     if (!name) throw err;
