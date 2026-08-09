@@ -125,3 +125,6 @@ CI yet. Remaining go-live work: [`PRODUCTION-TODO.md`](PRODUCTION-TODO.md).
 - Verification records: `docs/verification/` (live API, E2E, design QA, staging resources/E2E/security audit)
 - Infra runbook (staging/prod CloudFormation stacks, deploy driver, restore steps): `infra/README.md`
 - Design reference & tokens: `design-reference/`
+- Agent navigation: `CLAUDE.md` (root, auto-loaded) + per-package `CLAUDE.md` maps
+- PR history, one line per merged PR: `TIMELINE.md`
+- Active work at a glance (open PRs, chores): `TODO.md`
