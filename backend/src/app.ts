@@ -22,6 +22,7 @@ import { adminRoutes } from './routes/admin.routes';
 import { analyticsRoutes } from './routes/analytics.routes';
 import { authRoutes } from './routes/auth.routes';
 import { catalogRoutes } from './routes/catalog.routes';
+import { contentRoutes } from './routes/content.routes';
 import { orderRoutes } from './routes/orders.routes';
 import { paymentRoutes } from './routes/payments.routes';
 import { socialsRoutes } from './routes/socials.routes';
@@ -188,6 +189,7 @@ export function createApp(deps: AppDeps) {
   app.route('/api', orderRoutes(orders, jwtSecret));
   app.route('/api/payments', paymentRoutes(payments, jwtSecret));
   app.route('/api/socials', socialsRoutes(socials, jwtSecret));
+  app.route('/api', contentRoutes(repos.content, jwtSecret));
   app.route('/api', analyticsRoutes(analytics, jwtSecret));
   // Dev-only local upload transport — never mounted when S3 is the store.
   if (deps.localUploads) app.route('/api/uploads', uploadsRoutes(deps.localUploads, jwtSecret));
