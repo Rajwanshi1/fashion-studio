@@ -21,7 +21,47 @@ export interface Category {
   productCount?: number;
 }
 
-export type ProductFlag = 'bestseller' | 'new' | null;
+export type ProductFlag = 'bestseller' | 'new' | 'sale' | null;
+
+/** Canonical colour buckets. Order is the swatch-row display order. */
+export const COLOR_FAMILIES = [
+  'red',
+  'pink',
+  'orange-rust',
+  'yellow-gold',
+  'green',
+  'blue',
+  'purple',
+  'white-ivory',
+  'beige-nude',
+  'brown',
+  'black',
+  'multi',
+] as const;
+
+export type ColorFamily = (typeof COLOR_FAMILIES)[number];
+
+/** Swatch row copy + colour. `swatch` is any CSS background value — 'multi' is a gradient. */
+export const COLOR_FAMILY_META: Record<ColorFamily, { label: string; swatch: string }> = {
+  red: { label: 'Red', swatch: '#b3202c' },
+  pink: { label: 'Pink', swatch: '#e8a0b4' },
+  'orange-rust': { label: 'Orange / Rust', swatch: '#c1502e' },
+  'yellow-gold': { label: 'Yellow / Gold', swatch: '#d4a72c' },
+  green: { label: 'Green', swatch: '#4a6741' },
+  blue: { label: 'Blue', swatch: '#2f4d8a' },
+  purple: { label: 'Purple', swatch: '#6d4a8a' },
+  'white-ivory': { label: 'White / Ivory', swatch: '#f4efe6' },
+  'beige-nude': { label: 'Beige / Nude', swatch: '#d9c3a9' },
+  brown: { label: 'Brown', swatch: '#6b4a2f' },
+  black: { label: 'Black', swatch: '#1a1a1a' },
+  multi: { label: 'Multi-color', swatch: 'linear-gradient(135deg,#b3202c,#d4a72c 35%,#4a6741 70%,#2f4d8a)' },
+};
+
+/** One gallery photo. `pose` is a short label ('front', 'drape', …), '' when unknown. */
+export interface ProductImage {
+  url: string;
+  pose: string;
+}
 
 export interface ProductSummary {
   id: string;
@@ -39,6 +79,11 @@ export interface ProductSummary {
   /** Paise; null = no such piece in the set, 0 = included at no extra cost. */
   dupattaPrice: number | null;
   jacketPrice: number | null;
+  /** Canonical colour bucket for the shop filter; null when never resolved. */
+  colorFamily: ColorFamily | null;
+  /** Paise; discounted BASE price, meaningful only when flag === 'sale'.
+   *  Add-ons are never discounted — see displaySalePrice(). */
+  salePrice: number | null;
 }
 
 export interface Variant {
@@ -55,6 +100,8 @@ export interface ProductDetail extends ProductSummary {
   fabric: string;
   active: boolean;
   variants: Variant[];
+  /** Ordered gallery; images[0].url mirrors imageUrl. */
+  images: ProductImage[];
   related?: ProductSummary[];
 }
 

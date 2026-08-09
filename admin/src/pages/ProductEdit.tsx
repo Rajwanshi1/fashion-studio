@@ -3,35 +3,41 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { uploadProductImage } from '../lib/uploads';
-import type { AdminProduct, Category, Variant } from '../lib/types';
+import type { AdminProduct, Category, ProductImage, Variant } from '../lib/types';
 import { useToast } from '../components/Toast';
 
 const NEW_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'Custom'];
 
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-/** The slug auto-derives from name + colour until the admin edits it by hand. */
-function deriveSlug(name: string, color: string): string {
-  return slugify(`${name} ${color}`);
-}
-
 const OCCASION_SUGGESTIONS = ['Wedding', 'Reception', 'Festive', 'Cocktail'];
+
+/** One glyph per seeded category; anything new falls back to the gown. */
+const CATEGORY_ICONS: Record<string, string> = {
+  kaftan: '🧥',
+  anarkali: '👗',
+  suits: '🥻',
+  lehenga: '💃',
+  antifit: '🌿',
+};
+
+const FABRICS = ['Silk', 'Cotton'];
+
+/** Matches the server's images cap (productBaseSchema .max(12)). */
+const MAX_IMAGES = 12;
 
 interface FormState {
   name: string;
-  slug: string;
-  categoryId: string;
+  categorySlug: string;
   description: string;
   details: string;
   priceRupees: string;
   color: string;
-  flag: '' | 'bestseller' | 'new';
-  imageUrl: string;
+  flag: '' | 'bestseller' | 'new' | 'sale';
+  /** Linked pair — the sale price is authoritative, the percentage is derived. */
+  saleRupees: string;
+  discountPct: string;
+  /** Admin-only; never leaves the admin API. */
+  costRupees: string;
+  images: ProductImage[];
   active: boolean;
   collection: string;
   craft: string;
@@ -42,16 +48,25 @@ interface FormState {
   jacketRupees: string;
 }
 
+const FLAG_OPTIONS: [FormState['flag'], string, string][] = [
+  ['', 'None', '—'],
+  ['bestseller', 'Bestseller', '★'],
+  ['new', 'New', '✦'],
+  ['sale', 'Sale', '%'],
+];
+
 const EMPTY_FORM: FormState = {
   name: '',
-  slug: '',
-  categoryId: '',
+  categorySlug: '',
   description: '',
   details: '',
   priceRupees: '',
   color: '',
   flag: '',
-  imageUrl: '',
+  saleRupees: '',
+  discountPct: '',
+  costRupees: '',
+  images: [],
   active: true,
   collection: '',
   craft: '',
@@ -61,6 +76,31 @@ const EMPTY_FORM: FormState = {
   jacketRupees: '',
 };
 
+const SALE_ERROR = 'Sale price must be below the regular price';
+
+/** Percentage → rupees. A blank or unreadable partner leaves the field empty. */
+function saleFromPct(priceRupees: string, pct: string): string {
+  const price = Number(priceRupees);
+  const p = Number(pct);
+  if (priceRupees.trim() === '' || pct.trim() === '') return '';
+  if (!Number.isFinite(price) || !Number.isFinite(p)) return '';
+  return String(Math.round(price * (1 - p / 100)));
+}
+
+/** Rupees → percentage, the derived half of the pair. */
+function pctFromSale(priceRupees: string, saleRupees: string): string {
+  const price = Number(priceRupees);
+  const sale = Number(saleRupees);
+  if (saleRupees.trim() === '' || !Number.isFinite(price) || price <= 0) return '';
+  if (!Number.isFinite(sale)) return '';
+  return String(Math.round((1 - sale / price) * 100));
+}
+
+/** Paise → rupees string for the form; null stays blank. */
+function rupees(paise: number | null): string {
+  return paise == null ? '' : String(paise / 100);
+}
+
 export default function ProductEdit() {
   const { id } = useParams();
   const isNew = !id;
@@ -69,14 +109,13 @@ export default function ProductEdit() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [slugTouched, setSlugTouched] = useState(false);
   const [variants, setVariants] = useState<Variant[]>([]);
   const [stocks, setStocks] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [pendingCategorySlug, setPendingCategorySlug] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<{ done: number; total: number } | null>(null);
+  const [urlDraft, setUrlDraft] = useState('');
   const photoInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -92,7 +131,6 @@ export default function ProductEdit() {
   useEffect(() => {
     if (isNew) {
       setForm(EMPTY_FORM);
-      setSlugTouched(false);
       setVariants([]);
       setStocks(Object.fromEntries(NEW_SIZES.map((s) => [s, '0'])));
       setLoading(false);
@@ -109,31 +147,38 @@ export default function ProductEdit() {
           setLoading(false);
           return;
         }
+        // Pieces saved before galleries existed carry a lone imageUrl — show it
+        // as the first (only) gallery photo so they stay editable.
+        const gallery: ProductImage[] =
+          product.images && product.images.length > 0
+            ? product.images.map((img) => ({ url: img.url, pose: img.pose ?? '' }))
+            : product.imageUrl
+              ? [{ url: product.imageUrl, pose: '' }]
+              : [];
+        const priceRupees = String(product.price / 100);
+        const saleRupees = rupees(product.salePrice);
         setForm({
           name: product.name,
-          slug: product.slug,
-          categoryId: '', // resolved from categorySlug once categories load
+          categorySlug: product.categorySlug,
           description: product.description,
           details: product.details,
-          priceRupees: String(product.price / 100),
+          priceRupees,
           color: product.color,
           flag: product.flag ?? '',
-          imageUrl: product.imageUrl ?? '',
+          saleRupees,
+          discountPct: product.flag === 'sale' ? pctFromSale(priceRupees, saleRupees) : '',
+          costRupees: rupees(product.costPrice),
+          images: gallery,
           active: product.active,
           collection: product.collection,
           craft: product.craft,
           fabric: product.fabric,
           occasion: product.occasion,
-          dupattaRupees: product.dupattaPrice == null ? '' : String(product.dupattaPrice / 100),
-          jacketRupees: product.jacketPrice == null ? '' : String(product.jacketPrice / 100),
+          dupattaRupees: rupees(product.dupattaPrice),
+          jacketRupees: rupees(product.jacketPrice),
         });
-        // Keep auto-deriving only while the stored slug still matches the
-        // derivation — a hand-authored slug must survive name/colour edits.
-        setSlugTouched(product.slug !== deriveSlug(product.name, product.color));
         setVariants(product.variants);
         setStocks(Object.fromEntries(product.variants.map((v) => [v.id, String(v.stock)])));
-        // remember slug for category resolution
-        setPendingCategorySlug(product.categorySlug);
         setLoading(false);
       })
       .catch((err: Error) => {
@@ -146,82 +191,129 @@ export default function ProductEdit() {
     };
   }, [id, isNew]);
 
-  useEffect(() => {
-    if (!pendingCategorySlug || categories.length === 0) return;
-    const match = categories.find((c) => c.slug === pendingCategorySlug);
-    if (match) {
-      setForm((f) => (f.categoryId ? f : { ...f, categoryId: match.id }));
-      setPendingCategorySlug(null);
-    }
-  }, [pendingCategorySlug, categories]);
-
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  const onNameChange = (name: string) => {
-    setForm((f) => ({ ...f, name, slug: slugTouched ? f.slug : deriveSlug(name, f.color) }));
-  };
+  /** The sale price is authoritative: editing the base price re-derives the %. */
+  const onPriceChange = (priceRupees: string) =>
+    setForm((f) => ({
+      ...f,
+      priceRupees,
+      discountPct: f.flag === 'sale' ? pctFromSale(priceRupees, f.saleRupees) : f.discountPct,
+    }));
 
-  const onColorChange = (color: string) => {
-    setForm((f) => ({ ...f, color, slug: slugTouched ? f.slug : deriveSlug(f.name, color) }));
+  const onDiscountChange = (discountPct: string) =>
+    setForm((f) => ({ ...f, discountPct, saleRupees: saleFromPct(f.priceRupees, discountPct) }));
+
+  const onSaleChange = (saleRupees: string) =>
+    setForm((f) => ({ ...f, saleRupees, discountPct: pctFromSale(f.priceRupees, saleRupees) }));
+
+  /** Clicking the live chip clears the choice; a legacy fabric is display-only. */
+  const onFabricChip = (fabric: string) =>
+    setForm((f) => ({ ...f, fabric: f.fabric === fabric ? '' : fabric }));
+
+  const moveImage = (index: number, delta: -1 | 1) =>
+    setForm((f) => {
+      const to = index + delta;
+      if (to < 0 || to >= f.images.length) return f;
+      const images = [...f.images];
+      [images[index], images[to]] = [images[to], images[index]];
+      return { ...f, images };
+    });
+
+  const removeImage = (index: number) =>
+    setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== index) }));
+
+  const addImageUrl = () => {
+    const url = urlDraft.trim();
+    if (!url) return;
+    setForm((f) => ({ ...f, images: [...f.images, { url, pose: '' }] }));
+    setUrlDraft('');
   };
 
   /** '' → null (not in the set); otherwise rupees → paise. NaN/negative → undefined (invalid). */
-  const addonPaise = (rupees: string): number | null | undefined => {
-    if (rupees.trim() === '') return null;
-    const paise = Math.round(Number(rupees) * 100);
+  const addonPaise = (rupeesText: string): number | null | undefined => {
+    if (rupeesText.trim() === '') return null;
+    const paise = Math.round(Number(rupeesText) * 100);
     return Number.isFinite(paise) && paise >= 0 ? paise : undefined;
   };
 
-  const onPhotoPicked = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  /** Uploads run one at a time — the vision naming call is per photo. */
+  const onPhotosPicked = async (e: ChangeEvent<HTMLInputElement>) => {
+    let files = Array.from(e.target.files ?? []);
     e.target.value = ''; // allow re-selecting the same file (retake)
-    if (!file) return;
-    setUploading(true);
-    try {
-      const { publicUrl } = await uploadProductImage(file);
-      set('imageUrl', publicUrl);
-      toast('Photo uploaded');
-    } catch (err) {
-      toast(err instanceof Error ? err.message : 'Photo upload failed', { tone: 'error' });
-    } finally {
-      setUploading(false);
+    if (files.length === 0) return;
+    const room = MAX_IMAGES - form.images.length;
+    if (room <= 0) {
+      toast(`A piece can have at most ${MAX_IMAGES} photos`, { tone: 'error' });
+      return;
     }
+    if (files.length > room) {
+      toast(`A piece can have at most ${MAX_IMAGES} photos — uploading the first ${room}`, { tone: 'error' });
+      files = files.slice(0, room);
+    }
+    setUploading({ done: 0, total: files.length });
+    let added = 0;
+    for (const file of files) {
+      try {
+        const { publicUrl, pose } = await uploadProductImage(file, form.name);
+        setForm((f) => ({ ...f, images: [...f.images, { url: publicUrl, pose: pose ?? '' }] }));
+        added += 1;
+      } catch (err) {
+        toast(err instanceof Error ? err.message : 'Photo upload failed', { tone: 'error' });
+      }
+      setUploading((u) => (u ? { ...u, done: u.done + 1 } : u));
+    }
+    setUploading(null);
+    if (added > 0) toast(added === 1 ? 'Photo uploaded' : `${added} photos uploaded`);
   };
+
+  const pricePaise = Math.round(Number(form.priceRupees) * 100);
+  const salePaise = form.saleRupees.trim() === '' ? NaN : Math.round(Number(form.saleRupees) * 100);
+  const saleError =
+    form.flag === 'sale' && !(Number.isFinite(salePaise) && salePaise > 0 && salePaise < pricePaise)
+      ? SALE_ERROR
+      : null;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    const price = Math.round(Number(form.priceRupees) * 100);
-    if (!form.name.trim() || !form.slug.trim()) {
-      setError('Name and slug are required');
+    if (!form.name.trim()) {
+      setError('Name is required');
       return;
     }
-    if (!form.categoryId) {
+    if (!form.categorySlug) {
       setError('Please choose a category');
       return;
     }
-    if (!Number.isFinite(price) || price < 0 || form.priceRupees.trim() === '') {
+    if (!Number.isFinite(pricePaise) || pricePaise < 0 || form.priceRupees.trim() === '') {
       setError('Please enter a valid price in rupees');
       return;
     }
+    if (saleError) return; // shown inline under the sale fields
     const dupattaPrice = addonPaise(form.dupattaRupees);
     const jacketPrice = addonPaise(form.jacketRupees);
     if (dupattaPrice === undefined || jacketPrice === undefined) {
       setError('Set-includes prices must be 0 or more — leave blank when the set has no such piece');
       return;
     }
+    const costPrice = addonPaise(form.costRupees);
+    if (costPrice === undefined) {
+      setError('Cost price must be 0 or more — leave it blank if you do not track it');
+      return;
+    }
 
     const body = {
       name: form.name.trim(),
-      slug: form.slug.trim(),
-      categoryId: form.categoryId,
+      categorySlug: form.categorySlug,
       description: form.description,
       details: form.details,
-      price,
+      price: pricePaise,
       color: form.color,
       flag: form.flag === '' ? null : form.flag,
-      imageUrl: form.imageUrl.trim() === '' ? null : form.imageUrl.trim(),
+      salePrice: form.flag === 'sale' ? salePaise : null,
+      costPrice,
+      images: form.images.map(({ url, pose }) => ({ url, pose })),
       active: form.active,
       collection: form.collection.trim(),
       craft: form.craft.trim(),
@@ -270,6 +362,9 @@ export default function ProductEdit() {
     ? NEW_SIZES.map((s) => ({ key: s, label: s }))
     : variants.map((v) => ({ key: v.id, label: v.size }));
 
+  const legacyFabric = form.fabric !== '' && !FABRICS.includes(form.fabric) ? form.fabric : null;
+  const lastImage = form.images.length - 1;
+
   return (
     <>
       <div className="page-head-admin">
@@ -293,46 +388,9 @@ export default function ProductEdit() {
               id="p-name"
               className="inp"
               value={form.name}
-              onChange={(e) => onNameChange(e.target.value)}
+              onChange={(e) => set('name', e.target.value)}
               required
             />
-          </div>
-          <div className="field">
-            <label className="lab" htmlFor="p-slug">
-              Slug
-            </label>
-            <input
-              id="p-slug"
-              className="inp"
-              value={form.slug}
-              onChange={(e) => {
-                setSlugTouched(true);
-                set('slug', e.target.value);
-              }}
-              required
-            />
-          </div>
-        </div>
-
-        <div className="grid2">
-          <div className="field">
-            <label className="lab" htmlFor="p-category">
-              Category
-            </label>
-            <select
-              id="p-category"
-              className="inp"
-              value={form.categoryId}
-              onChange={(e) => set('categoryId', e.target.value)}
-              required
-            >
-              <option value="">Select a category…</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
           </div>
           <div className="field">
             <label className="lab" htmlFor="p-price">
@@ -346,9 +404,26 @@ export default function ProductEdit() {
               step="1"
               inputMode="numeric"
               value={form.priceRupees}
-              onChange={(e) => set('priceRupees', e.target.value)}
+              onChange={(e) => onPriceChange(e.target.value)}
               required
             />
+          </div>
+        </div>
+
+        <div className="field">
+          <span className="lab">Category</span>
+          <div className="chips" role="group" aria-label="Category">
+            {categories.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={form.categorySlug === c.slug ? 'chip on' : 'chip'}
+                aria-pressed={form.categorySlug === c.slug}
+                onClick={() => set('categorySlug', c.slug)}
+              >
+                {(CATEGORY_ICONS[c.slug] ?? '👗') + ' ' + c.name}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -385,27 +460,9 @@ export default function ProductEdit() {
               id="p-color"
               className="inp"
               value={form.color}
-              onChange={(e) => onColorChange(e.target.value)}
+              onChange={(e) => set('color', e.target.value)}
             />
           </div>
-          <div className="field">
-            <label className="lab" htmlFor="p-flag">
-              Flag
-            </label>
-            <select
-              id="p-flag"
-              className="inp"
-              value={form.flag}
-              onChange={(e) => set('flag', e.target.value as FormState['flag'])}
-            >
-              <option value="">None</option>
-              <option value="bestseller">Bestseller</option>
-              <option value="new">New</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="grid2">
           <div className="field">
             <label className="lab" htmlFor="p-collection">
               Collection
@@ -416,6 +473,21 @@ export default function ProductEdit() {
               placeholder="e.g. The Verdant Edit"
               value={form.collection}
               onChange={(e) => set('collection', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="grid2">
+          <div className="field">
+            <label className="lab" htmlFor="p-craft">
+              Craft / Work
+            </label>
+            <input
+              id="p-craft"
+              className="inp"
+              placeholder="e.g. Zardozi"
+              value={form.craft}
+              onChange={(e) => set('craft', e.target.value)}
             />
           </div>
           <div className="field">
@@ -438,32 +510,89 @@ export default function ProductEdit() {
           </div>
         </div>
 
-        <div className="grid2">
-          <div className="field">
-            <label className="lab" htmlFor="p-craft">
-              Craft / Work
-            </label>
-            <input
-              id="p-craft"
-              className="inp"
-              placeholder="e.g. Zardozi"
-              value={form.craft}
-              onChange={(e) => set('craft', e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label className="lab" htmlFor="p-fabric">
-              Fabric
-            </label>
-            <input
-              id="p-fabric"
-              className="inp"
-              placeholder="e.g. Tissue"
-              value={form.fabric}
-              onChange={(e) => set('fabric', e.target.value)}
-            />
+        <div className="field">
+          <span className="lab">Fabric</span>
+          <div className="chips" role="group" aria-label="Fabric">
+            {FABRICS.map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={form.fabric === f ? 'chip on' : 'chip'}
+                aria-pressed={form.fabric === f}
+                onClick={() => onFabricChip(f)}
+              >
+                {f}
+              </button>
+            ))}
+            {/* A fabric typed before this became a chip row — shown, not reselectable. */}
+            {legacyFabric && (
+              <button type="button" className="chip on" aria-pressed="true">
+                {legacyFabric}
+              </button>
+            )}
           </div>
         </div>
+
+        <div className="field">
+          <span className="lab">Flag</span>
+          <div className="chips" role="group" aria-label="Flag">
+            {FLAG_OPTIONS.map(([value, label, icon]) => (
+              <button
+                key={value}
+                type="button"
+                className={form.flag === value ? 'chip on' : 'chip'}
+                aria-pressed={form.flag === value}
+                onClick={() => set('flag', value)}
+              >
+                {icon + ' ' + label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {form.flag === 'sale' && (
+          <>
+            <div className="grid2">
+              <div className="field">
+                <label className="lab" htmlFor="p-discount">
+                  Discount (%)
+                </label>
+                <input
+                  id="p-discount"
+                  className="inp"
+                  type="number"
+                  min="0"
+                  max="99"
+                  step="1"
+                  inputMode="numeric"
+                  value={form.discountPct}
+                  onChange={(e) => onDiscountChange(e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label className="lab" htmlFor="p-sale">
+                  Sale price (₹ rupees)
+                </label>
+                <input
+                  id="p-sale"
+                  className="inp"
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
+                  value={form.saleRupees}
+                  onChange={(e) => onSaleChange(e.target.value)}
+                />
+              </div>
+            </div>
+            {saleError && (
+              <div className="form-err" role="alert">
+                {saleError}
+              </div>
+            )}
+            <p className="hint">Dupatta and jacket add-ons are never discounted.</p>
+          </>
+        )}
 
         <p className="section-label">Set includes</p>
         <div className="grid2">
@@ -499,44 +628,112 @@ export default function ProductEdit() {
           </div>
         </div>
 
-        <p className="section-label">Photo</p>
+        <p className="section-label">Internal</p>
+        <div className="field">
+          <label className="lab" htmlFor="p-cost">
+            Cost price (₹ — admin only, never shown in the boutique)
+          </label>
+          <input
+            id="p-cost"
+            className="inp"
+            type="number"
+            min="0"
+            step="1"
+            inputMode="numeric"
+            value={form.costRupees}
+            onChange={(e) => set('costRupees', e.target.value)}
+          />
+        </div>
+
+        <p className="section-label">Photos</p>
         <div className="field">
           <input
             ref={photoInput}
             type="file"
             accept="image/*,.heic,.heif"
+            multiple
             hidden
             aria-label="Product photo file"
-            onChange={(e) => void onPhotoPicked(e)}
+            onChange={(e) => void onPhotosPicked(e)}
           />
           <div className="photo-row">
             <button
               type="button"
               className="btn-outline fit"
-              disabled={uploading}
+              disabled={uploading !== null}
               onClick={() => photoInput.current?.click()}
             >
-              {uploading ? 'Uploading…' : form.imageUrl ? 'Replace photo' : 'Upload photo'}
+              {uploading
+                ? `Uploading ${Math.min(uploading.done + 1, uploading.total)} of ${uploading.total}…`
+                : form.images.length > 0
+                  ? 'Add photos'
+                  : 'Upload photos'}
             </button>
-            {form.imageUrl && (
-              <figure className="thumb">
-                <img src={form.imageUrl} alt="Product photo preview" />
-              </figure>
-            )}
           </div>
+          {form.images.length > 0 && (
+            <div className="thumb-strip">
+              {form.images.map((img, i) => (
+                <figure className="thumb" key={`${img.url}#${i}`}>
+                  <img
+                    src={img.url}
+                    alt={img.pose ? `Product photo ${i + 1} — ${img.pose}` : `Product photo ${i + 1}`}
+                  />
+                  <figcaption>{img.pose || `Photo ${i + 1}`}</figcaption>
+                  <div className="thumb-actions">
+                    <button
+                      type="button"
+                      className="ulink"
+                      aria-label={`Move image ${i + 1} up`}
+                      disabled={i === 0}
+                      onClick={() => moveImage(i, -1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="ulink"
+                      aria-label={`Move image ${i + 1} down`}
+                      disabled={i === lastImage}
+                      onClick={() => moveImage(i, 1)}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="ulink"
+                      aria-label={`Remove image ${i + 1}`}
+                      onClick={() => removeImage(i)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </figure>
+              ))}
+            </div>
+          )}
         </div>
         <div className="field">
           <label className="lab" htmlFor="p-image">
             Image URL (or paste one directly)
           </label>
-          <input
-            id="p-image"
-            className="inp"
-            type="url"
-            placeholder="https://…"
-            value={form.imageUrl}
-            onChange={(e) => set('imageUrl', e.target.value)}
-          />
+          <div className="photo-row">
+            <input
+              id="p-image"
+              className="inp"
+              type="url"
+              placeholder="https://…"
+              value={urlDraft}
+              onChange={(e) => setUrlDraft(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn-outline fit"
+              disabled={urlDraft.trim() === ''}
+              onClick={addImageUrl}
+            >
+              Add photo URL
+            </button>
+          </div>
         </div>
 
         <div className="field">

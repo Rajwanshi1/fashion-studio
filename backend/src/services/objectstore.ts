@@ -42,6 +42,28 @@ export function newStorageKey(kind: string): string {
   return `${kind}/${yyyy}/${mm}/${randomUUID()}.jpg`;
 }
 
+/**
+ * Kebab-cases an AI-suggested file name into something safe for a URL path:
+ * lowercase, `[a-z0-9-]` only, no leading/trailing dash, ≤60 chars. Returns ''
+ * when nothing usable survives — callers fall back to newStorageKey.
+ */
+export function sanitizeFileSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/-+$/g, '');
+}
+
+/** `${kind}/${yyyy}/${mm}/${slug}-${uuid6}.jpg` — the SEO-named sibling of newStorageKey. */
+export function namedStorageKey(kind: string, slug: string): string {
+  const now = new Date();
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  return `${kind}/${yyyy}/${mm}/${slug}-${randomUUID().slice(0, 6)}.jpg`;
+}
+
 export interface S3ObjectStoreOptions {
   region?: string;
   /** Injectable for tests — never hit real AWS from a test. */

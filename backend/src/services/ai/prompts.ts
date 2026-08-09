@@ -12,6 +12,8 @@
 //   - Measurement values are VERBATIM strings ("38½", "15 in") — no unit or
 //     fraction normalization at parse time.
 
+import { COLOR_FAMILIES } from '../../types';
+
 export type ParseKind = 'bill' | 'measurement' | 'shipping_receipt';
 
 export interface KindSpec {
@@ -211,4 +213,98 @@ export const PARSE_SPECS: Record<ParseKind, KindSpec> = {
     model: 'claude-sonnet-5',
     effort: 'low',
   },
+};
+
+// ---------------------------------------------------------------------------
+// Catalog assist (colour mapping + SEO image naming)
+//
+// Deliberately NOT part of PARSE_SPECS: those kinds are keyed to the documents
+// table and its review flow, while these two calls are stateless helpers on the
+// product-save and upload paths. One model and one effort cover both (see
+// catalog-ai-anthropic.ts) — the prompt is the only thing that varies, so the
+// spec carries just the schema and a prompt builder for its one input.
+// ---------------------------------------------------------------------------
+
+export interface CatalogSpec<Input> {
+  /** JSON Schema (2020-12 style plain object) the answer must conform to. */
+  schema: Record<string, unknown>;
+  /** Instruction prompt, built around the one piece of context the call has. */
+  prompt: (input: Input) => string;
+}
+
+/**
+ * Enum with a null member rather than a union-typed parameter: the API counts
+ * `type` arrays and `anyOf` toward its 16-union-parameter limit, but not enums
+ * carrying null (see `emptyableString` above for the 400 that taught us this).
+ */
+const colorFamilySchema: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    family: { enum: [...COLOR_FAMILIES, null] },
+  },
+  required: ['family'],
+};
+
+const colorFamilyPrompt = (colorText: string) => `You are labelling the colour of a dress in an Indian fashion boutique's online catalogue so shoppers can filter the shop by colour. The boutique names colours freely and often fancifully ("Antique Rose Blush", "Monsoon Sky", "Sunset over Jaipur"), so read the name for the shade it suggests.
+
+Colour as written by the boutique: "${colorText}"
+
+Pick the ONE family a shopper filtering the shop would expect this piece to appear under. Family coverage:
+- red — red, maroon, crimson, scarlet, wine, burgundy, cherry
+- pink — pink, rose, blush, fuchsia, magenta
+- orange-rust — orange, rust, terracotta, coral, peach
+- yellow-gold — yellow, gold, mustard, amber, lemon, champagne
+- green — green, sage, moss, olive, emerald, mint, pistachio
+- blue — blue, navy, teal, turquoise, sapphire, indigo
+- purple — purple, lavender, lilac, violet, plum, mauve
+- white-ivory — white, ivory, cream, pearl, off-white
+- beige-nude — beige, nude, sand, tan
+- brown — brown, chocolate, coffee, mocha, copper, bronze
+- black — black, charcoal, onyx, jet
+- multi — ONLY when the text clearly names several distinct colours, or describes a print, ombre or multi-coloured fabric
+
+Rules:
+- Choose the single closest family. A two-word name for one shade ("Antique Gold" -> yellow-gold, "Cherry Pink" -> pink) is NOT multi.
+- Answer null when the text carries no colour information at all, or is too abstract to place with any confidence. Never guess.`;
+
+const imageNameSchema: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    file_slug: {
+      type: 'string',
+      description:
+        'kebab-case SEO file name: colour + garment + pose, lowercase a-z0-9 and hyphens only, at most 6 words, e.g. "cherry-pink-anarkali-front"',
+    },
+    pose: { enum: ['front', 'back', 'side', 'detail', 'drape', 'flat', null] },
+  },
+  required: ['file_slug', 'pose'],
+};
+
+const imageNamePrompt = (productName: string) => `You are naming a photo file for an Indian fashion boutique's online shop. The name becomes the real object key, so it should read well to a search engine and to a person scanning a folder.
+
+This photo is of the product: "${productName}".
+
+Return:
+- file_slug: a kebab-case name for THIS photo — colour + garment + pose, in that order, lowercase a-z and 0-9 and hyphens only, at most 6 words, no file extension. Example: "cherry-pink-anarkali-front". Take the garment type and colour from the product name where the photo agrees with it, and describe what you can actually see otherwise.
+- pose: what the photo shows, exactly one of:
+  - "front" — a model photographed from the front
+  - "back" — a model photographed from behind
+  - "side" — a model photographed from the side or three-quarter
+  - "detail" — a close-up of embroidery, fabric, trim or beadwork
+  - "drape" — a fabric or styling shot: the drape, fall or arrangement of the cloth rather than a full pose
+  - "flat" — a flat-lay, hanger or mannequin shot with no model
+  - null if the photo does not clearly fit any of these.`;
+
+/** Free-text colour -> one of the 12 canonical families. Text only, no image. */
+export const COLOR_FAMILY_SPEC: CatalogSpec<string> = {
+  schema: colorFamilySchema,
+  prompt: colorFamilyPrompt,
+};
+
+/** Product photo -> SEO file slug + pose. Vision: the image block goes first. */
+export const IMAGE_NAME_SPEC: CatalogSpec<string> = {
+  schema: imageNameSchema,
+  prompt: imageNamePrompt,
 };

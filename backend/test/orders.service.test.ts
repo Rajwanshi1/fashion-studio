@@ -210,6 +210,50 @@ describe('OrdersService', () => {
     });
   });
 
+  describe('sale pricing', () => {
+    // The discount lives in the repo's unit_price CASE, so the service prices a
+    // sale piece correctly without knowing sales exist. Add-ons stay full price.
+    it('charges the sale price for the base garment and full price for add-ons', async () => {
+      const sale = await products.createProduct({
+        categoryId: seeded.lehengas.id,
+        slug: 'sale-mirror-set',
+        name: 'Sale Mirror Set',
+        description: 'On sale this season.',
+        details: 'Dry clean only',
+        price: 20000000,
+        salePrice: 15000000,
+        flag: 'sale',
+        color: 'Sage',
+        dupattaPrice: 1200000,
+        jacketPrice: 2400000,
+        variants: [{ size: 'M', stock: 5 }],
+      });
+      const order = await service.createOrder(
+        input({ items: [{ variantId: sale.variants[0].id, quantity: 2 }] }),
+      );
+      expect(order.items[0].unitPrice).toBe(15000000 + 1200000 + 2400000);
+      expect(order.items[0].dupattaPrice).toBe(1200000);
+      expect(order.subtotal).toBe(2 * 18600000);
+    });
+
+    it('ignores a stale salePrice once the piece is off sale', async () => {
+      const off = await products.createProduct({
+        categoryId: seeded.lehengas.id,
+        slug: 'ex-sale-lehenga',
+        name: 'Ex Sale Lehenga',
+        description: 'The sale ended.',
+        details: 'Dry clean only',
+        price: 20000000,
+        salePrice: 15000000,
+        flag: null,
+        color: 'Sage',
+        variants: [{ size: 'M', stock: 5 }],
+      });
+      const order = await service.createOrder(input({ items: [{ variantId: off.variants[0].id, quantity: 1 }] }));
+      expect(order.items[0].unitPrice).toBe(20000000);
+    });
+  });
+
   describe('getOrderForRequester', () => {
     it('returns the order for a matching user', async () => {
       const order = await service.createOrder(input({ userId: 'user-1' }));

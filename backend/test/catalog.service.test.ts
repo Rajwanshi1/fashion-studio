@@ -100,6 +100,32 @@ describe('CatalogService', () => {
     expect(detail.related.map((p) => p.slug)).toEqual(['celadon-tissue-draped-lehenga']);
   });
 
+  it('never exposes the admin-only cost price', async () => {
+    await products.updateProduct(seeded.sage.id, { costPrice: 5200000 });
+    expect((await products.getBySlug('sage-sequin-jacket-lehenga'))!.costPrice).toBe(5200000);
+    const detail = await catalog.getProduct('sage-sequin-jacket-lehenga');
+    expect(detail).not.toHaveProperty('costPrice');
+    expect(detail.price).toBe(18400000);
+  });
+
+  it('filters by colour family', async () => {
+    await products.updateProduct(seeded.moss.id, { colorFamily: 'pink' });
+    const pink = await catalog.listProducts({ color: 'pink' });
+    expect(pink.items.map((p) => p.slug)).toEqual(['moss-tissue-draped-gown']);
+    expect((await catalog.listProducts({ color: 'green' })).total).toBe(2);
+  });
+
+  it('sorts on the sale price when a piece is on sale', async () => {
+    // Sage lists highest at 18400000 but is charged 8000000 — it sorts first.
+    await products.updateProduct(seeded.sage.id, { flag: 'sale', salePrice: 8000000 });
+    const asc = await catalog.listProducts({ sort: 'price_asc' });
+    expect(asc.items.map((p) => p.slug)).toEqual([
+      'sage-sequin-jacket-lehenga',
+      'moss-tissue-draped-gown',
+      'celadon-tissue-draped-lehenga',
+    ]);
+  });
+
   it('throws NOT_FOUND for unknown or inactive products', async () => {
     await expect(catalog.getProduct('missing')).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(catalog.getProduct('archived-lehenga')).rejects.toMatchObject({ code: 'NOT_FOUND' });

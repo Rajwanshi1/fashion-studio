@@ -78,15 +78,18 @@ export const P1: ProductSummary = {
   occasion: 'Wedding',
   dupattaPrice: null,
   jacketPrice: null,
+  colorFamily: 'green',
+  salePrice: null,
 };
 
+/** On sale: base 1,72,000 → 1,29,000. Exercises the card's struck-through price. */
 export const P2: ProductSummary = {
   id: 'p2',
   slug: 'moss-tissue-mirror-lehenga',
   name: 'Moss Tissue Mirror Lehenga',
   price: 17200000,
   color: 'Moss',
-  flag: null,
+  flag: 'sale',
   imageUrl: null,
   categorySlug: 'lehenga',
   categoryName: 'Lehenga',
@@ -94,6 +97,8 @@ export const P2: ProductSummary = {
   occasion: 'Festive',
   dupattaPrice: null,
   jacketPrice: null,
+  colorFamily: 'green',
+  salePrice: 12900000,
 };
 
 export const DETAIL1: ProductDetail = {
@@ -107,6 +112,14 @@ export const DETAIL1: ProductDetail = {
     { id: 'v1', productId: 'p1', size: 'S', stock: 3 },
     { id: 'v2', productId: 'p1', size: 'M', stock: 2 },
     { id: 'v3', productId: 'p1', size: 'L', stock: 0 },
+  ],
+  // Real gallery: imageUrl mirrors images[0].url. The third row has no pose,
+  // so the PDP falls back to its positional 'View 3' label.
+  imageUrl: '/img/sage-front.jpg',
+  images: [
+    { url: '/img/sage-front.jpg', pose: 'front' },
+    { url: '/img/sage-back.jpg', pose: 'back' },
+    { url: '/img/sage-detail.jpg', pose: '' },
   ],
   related: [P2],
 };
@@ -122,6 +135,31 @@ export const DETAIL_SET: ProductDetail = {
   jacketPrice: 2400000,
   variants: [{ id: 'v9', productId: 'p9', size: 'M', stock: 5 }],
   related: [],
+};
+
+/** Pre-gallery piece: no product_images rows, only the denormalized imageUrl. */
+export const DETAIL_LEGACY: ProductDetail = {
+  ...DETAIL1,
+  id: 'p7',
+  slug: 'legacy-single-image',
+  name: 'Legacy Single Image',
+  imageUrl: '/img/legacy.jpg',
+  images: [],
+  variants: [{ id: 'v7', productId: 'p7', size: 'M', stock: 4 }],
+  related: [],
+};
+
+/** On-sale set: the discount applies to the base only, add-ons stay full price. */
+export const DETAIL_SALE: ProductDetail = {
+  ...DETAIL_SET,
+  id: 'p8',
+  slug: 'ivory-sale-set',
+  name: 'Ivory Sale Set',
+  flag: 'sale',
+  price: 15000000,
+  salePrice: 12000000,
+  colorFamily: 'white-ivory',
+  variants: [{ id: 'v8', productId: 'p8', size: 'M', stock: 5 }],
 };
 
 export const ORDER: Order = {

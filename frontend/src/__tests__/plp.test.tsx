@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useLocation } from 'react-router-dom';
+import { AppRoutes, Providers } from '../App';
 import { CATEGORIES, mockFetch, mockFetchDown, P1, P2, renderApp } from './helpers';
 
 // Mocked so the new filter_apply/sort_change instrumentation (wired in this
@@ -17,6 +19,26 @@ import { track } from '../lib/analytics';
 function productsPayload() {
   return { items: [P1, P2], total: 2, page: 1, pages: 1 };
 }
+
+/** renderApp() + a probe so ?color= URL syncing can be asserted directly. */
+function LocationProbe() {
+  const loc = useLocation();
+  return <span data-testid="loc">{loc.search}</span>;
+}
+
+function renderPlp(route: string) {
+  return render(
+    <MemoryRouter initialEntries={[route]}>
+      <Providers>
+        <AppRoutes />
+        <LocationProbe />
+      </Providers>
+    </MemoryRouter>,
+  );
+}
+
+const productUrls = (fetchMock: ReturnType<typeof mockFetch>) =>
+  fetchMock.mock.calls.map((c) => String(c[0])).filter((u) => u.includes('/api/products'));
 
 describe('PLP', () => {
   afterEach(() => {
@@ -54,10 +76,7 @@ describe('PLP', () => {
     // Collection group is rendered from GET /api/collections.
     await user.click(await screen.findByRole('checkbox', { name: 'Festive Edit' }));
     await waitFor(() => {
-      const productCalls = fetchMock.mock.calls
-        .map((c) => String(c[0]))
-        .filter((u) => u.includes('/api/products'));
-      expect(productCalls.some((u) => u.includes('collection=Festive%20Edit'))).toBe(true);
+      expect(productUrls(fetchMock).some((u) => u.includes('collection=Festive%20Edit'))).toBe(true);
     });
 
     // Occasion checkboxes now really filter (P1 = Wedding, P2 = Festive).
@@ -80,10 +99,7 @@ describe('PLP', () => {
     await user.selectOptions(screen.getByLabelText('Sort'), 'price_asc');
 
     await waitFor(() => {
-      const productCalls = fetchMock.mock.calls
-        .map((c) => String(c[0]))
-        .filter((u) => u.includes('/api/products'));
-      expect(productCalls.some((u) => u.includes('sort=price_asc'))).toBe(true);
+      expect(productUrls(fetchMock).some((u) => u.includes('sort=price_asc'))).toBe(true);
     });
 
     expect(track).toHaveBeenCalledWith('sort_change', {
@@ -101,25 +117,103 @@ describe('PLP', () => {
     renderApp('/collection/lehenga');
     await screen.findAllByText('Sage Sequin Jacket Lehenga');
 
-    // Initial render establishes colors/priceMax without firing an event
+    // Initial render establishes color/priceMax without firing an event
     // (skip-initial-render guard).
     expect(track).not.toHaveBeenCalledWith('filter_apply', expect.anything());
 
     vi.useFakeTimers();
-    fireEvent.click(screen.getByRole('button', { name: 'Sage' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Moss' }));
+    // Colour is single-select, so the second swatch replaces the first.
+    fireEvent.click(screen.getByRole('button', { name: 'Green' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Blue' }));
 
     // Still inside the 500ms debounce window — the price-slider-storm case.
-    await vi.advanceTimersByTimeAsync(400);
+    // act() wraps the advance because a colour change also re-runs the fetch.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
     expect(track).not.toHaveBeenCalledWith('filter_apply', expect.anything());
 
-    await vi.advanceTimersByTimeAsync(150);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150);
+    });
 
     const filterCalls = vi.mocked(track).mock.calls.filter(([type]) => type === 'filter_apply');
     expect(filterCalls).toHaveLength(1);
     expect(filterCalls[0][1]).toEqual({
-      props: { category: 'lehenga', colors: ['Sage', 'Moss'], occasions: [], priceMax: 300000, collection: '' },
+      props: { category: 'lehenga', color: 'blue', occasions: [], priceMax: 300000, collection: '' },
     });
+  });
+
+  it('swatches drive a server-side ?color= filter, URL-synced and single-select', async () => {
+    const fetchMock = mockFetch((url) => {
+      if (url.includes('/api/categories')) return CATEGORIES;
+      // total deliberately != items.length: colour is a server filter, so the
+      // API's total is what the count must show.
+      if (url.includes('/api/products')) return { items: [P1, P2], total: 7, page: 1, pages: 1 };
+      return undefined;
+    });
+
+    renderPlp('/collection/lehenga');
+    await screen.findAllByText('Sage Sequin Jacket Lehenga');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Green' }));
+
+    await waitFor(() => {
+      expect(productUrls(fetchMock).some((u) => u.includes('&color=green'))).toBe(true);
+    });
+    expect(screen.getByTestId('loc')).toHaveTextContent('color=green');
+    expect(screen.getByRole('button', { name: 'Green' })).toHaveClass('on');
+    expect(screen.getByText('7 Pieces')).toBeInTheDocument();
+
+    // Clicking the active swatch clears it again.
+    await user.click(screen.getByRole('button', { name: 'Green' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('loc')).not.toHaveTextContent('color=green');
+    });
+    const urls = productUrls(fetchMock);
+    expect(urls[urls.length - 1]).not.toContain('color=');
+  });
+
+  it('hydrates the colour filter from the URL and clears it from the chip row', async () => {
+    const fetchMock = mockFetch((url) => {
+      if (url.includes('/api/categories')) return CATEGORIES;
+      if (url.includes('/api/products')) return productsPayload();
+      return undefined;
+    });
+
+    renderPlp('/collection/lehenga?color=pink');
+    await screen.findAllByText('Sage Sequin Jacket Lehenga');
+
+    expect(productUrls(fetchMock).every((u) => u.includes('&color=pink'))).toBe(true);
+    expect(screen.getByRole('button', { name: 'Pink' })).toHaveClass('on');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Remove Pink' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('loc')).not.toHaveTextContent('color=pink');
+    });
+    expect(screen.getByRole('button', { name: 'Pink' })).not.toHaveClass('on');
+  });
+
+  it('prices a sale card with the pre-sale total struck through', async () => {
+    mockFetch((url) => {
+      if (url.includes('/api/categories')) return CATEGORIES;
+      if (url.includes('/api/products')) return productsPayload();
+      return undefined;
+    });
+
+    renderApp('/collection/lehenga');
+    await screen.findAllByText('Moss Tissue Mirror Lehenga');
+
+    // P2 is on sale: base 1,72,000 → 1,29,000.
+    const struck = screen.getByText('₹1,72,000');
+    expect(struck.tagName).toBe('S');
+    expect(struck).toHaveClass('was');
+    expect(screen.getByText('₹1,29,000')).toBeInTheDocument();
+    expect(screen.getByText('Sale')).toBeInTheDocument();
+    // P1 is not on sale — one price, no strike.
+    expect(screen.getByText('₹1,84,000').tagName).not.toBe('S');
   });
 
   it('shows a graceful error state on API 404s', async () => {

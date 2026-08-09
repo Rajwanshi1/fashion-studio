@@ -1,11 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { displayPrice } from '../lib/format';
+import { displayPrice, displaySalePrice } from '../lib/format';
 import type { ProductSummary } from '../lib/types';
 import { useWishlist } from '../lib/wishlist';
 import ImageSlot from './ImageSlot';
 import Price from './Price';
 
-const FLAG_LABEL: Record<string, string> = { bestseller: 'Bestseller', new: 'New' };
+const FLAG_LABEL: Record<string, string> = { bestseller: 'Bestseller', new: 'New', sale: 'Sale' };
 
 interface ProductCardProps {
   product: ProductSummary;
@@ -20,6 +20,7 @@ export default function ProductCard({ product, fav = true, quick = true }: Produ
   const wishlist = useWishlist();
   const navigate = useNavigate();
   const saved = wishlist.has(product.id);
+  const salePrice = displaySalePrice(product);
 
   return (
     <Link className="pcard" to={`/product/${product.slug}`}>
@@ -56,7 +57,12 @@ export default function ProductCard({ product, fav = true, quick = true }: Produ
         <div className="cat">{product.categoryName}</div>
         <div className="nm">{product.name}</div>
         <div className="pr">
-          <Price paise={displayPrice(product)} />
+          {salePrice != null && (
+            <s className="was">
+              <Price paise={displayPrice(product)} />
+            </s>
+          )}
+          <Price paise={salePrice ?? displayPrice(product)} />
         </div>
       </div>
     </Link>

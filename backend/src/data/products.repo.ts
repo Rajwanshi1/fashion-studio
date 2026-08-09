@@ -2,10 +2,12 @@ import { Pool, PoolClient } from 'pg';
 import { withTransaction } from '../db';
 import {
   Category,
+  ColorFamily,
   DomainError,
   ProductDetail,
   ProductFilter,
   ProductFlag,
+  ProductImage,
   ProductSummary,
   Tx,
   Variant,
@@ -15,6 +17,8 @@ import {
 export interface AdminProduct extends ProductDetail {
   categoryId: string;
   createdAt: string;
+  /** Paise; admin-only — stripped before any storefront response. */
+  costPrice: number | null;
 }
 
 /** Variant joined with product pricing info, read under row lock at order time. */
@@ -39,6 +43,12 @@ export interface CreateCategoryInput {
   position: number;
 }
 
+/** One gallery photo on the way in; `pose` defaults to '' when the AI is unsure. */
+export interface ProductImageInput {
+  url: string;
+  pose?: string;
+}
+
 export interface CreateProductInput {
   categoryId: string;
   slug: string;
@@ -56,12 +66,20 @@ export interface CreateProductInput {
   occasion?: string;
   dupattaPrice?: number | null;
   jacketPrice?: number | null;
+  /** Discounted BASE price; only meaningful alongside flag 'sale'. */
+  salePrice?: number | null;
+  /** Admin-only cost of the piece. */
+  costPrice?: number | null;
+  /** Resolved by the route (keyword map, AI on a miss) — never sent by clients. */
+  colorFamily?: ColorFamily | null;
+  /** Ordered gallery; when present it also sets image_url to images[0].url. */
+  images?: ProductImageInput[];
   variants?: { size: string; stock: number }[];
 }
 
+/** No `slug`: a PUT can never rename a piece, so live /product/:slug links keep working. */
 export interface UpdateProductInput {
   categoryId?: string;
-  slug?: string;
   name?: string;
   description?: string;
   details?: string;
@@ -76,6 +94,11 @@ export interface UpdateProductInput {
   occasion?: string;
   dupattaPrice?: number | null;
   jacketPrice?: number | null;
+  salePrice?: number | null;
+  costPrice?: number | null;
+  colorFamily?: ColorFamily | null;
+  /** Absent leaves the gallery untouched; present replaces it wholesale. */
+  images?: ProductImageInput[];
 }
 
 /** Per-id outcome of a bulk delete: ordered products are archived, the rest removed. */
@@ -113,6 +136,7 @@ const DEFAULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'Custom'];
 const SUMMARY_SELECT = `
   SELECT p.id, p.slug, p.name, p.price, p.color, p.flag, p.image_url,
          p.collection, p.occasion, p.dupatta_price, p.jacket_price,
+         p.sale_price, p.color_family,
          c.slug AS category_slug, c.name AS category_name
   FROM products p JOIN categories c ON c.id = p.category_id`;
 
@@ -120,13 +144,21 @@ const DETAIL_SELECT = `
   SELECT p.*, c.slug AS category_slug, c.name AS category_name
   FROM products p JOIN categories c ON c.id = p.category_id`;
 
-// Price sorts use the full-set price (base + default-included add-ons) so the
-// order matches the price shoppers see on the cards.
+/**
+ * The base price actually charged: the sale price when the piece is on sale,
+ * the list price otherwise. This is the ONE place the discount lives — price
+ * sorts and getVariantsForUpdate (i.e. checkout) both read it, so the shop can
+ * never display a sale price and charge full price.
+ */
+const EFFECTIVE_PRICE = `CASE WHEN p.flag = 'sale' AND p.sale_price IS NOT NULL THEN p.sale_price ELSE p.price END`;
+
+// Price sorts use the full-set price (effective base + default-included add-ons)
+// so the order matches the price shoppers see on the cards.
 const ORDER_BY: Record<string, string> = {
   featured: `(p.flag = 'bestseller') IS TRUE DESC, (p.flag = 'new') IS TRUE DESC, p.created_at ASC`,
   new: 'p.created_at DESC',
-  price_asc: '(p.price + COALESCE(p.dupatta_price, 0) + COALESCE(p.jacket_price, 0)) ASC',
-  price_desc: '(p.price + COALESCE(p.dupatta_price, 0) + COALESCE(p.jacket_price, 0)) DESC',
+  price_asc: `((${EFFECTIVE_PRICE}) + COALESCE(p.dupatta_price, 0) + COALESCE(p.jacket_price, 0)) ASC`,
+  price_desc: `((${EFFECTIVE_PRICE}) + COALESCE(p.dupatta_price, 0) + COALESCE(p.jacket_price, 0)) DESC`,
 };
 
 function mapSummary(row: any): ProductSummary {
@@ -144,6 +176,8 @@ function mapSummary(row: any): ProductSummary {
     occasion: row.occasion ?? '',
     dupattaPrice: row.dupatta_price ?? null,
     jacketPrice: row.jacket_price ?? null,
+    colorFamily: row.color_family ?? null,
+    salePrice: row.sale_price ?? null,
   };
 }
 
@@ -151,7 +185,11 @@ function mapVariant(row: any): Variant {
   return { id: row.id, productId: row.product_id, size: row.size, stock: row.stock };
 }
 
-function mapDetail(row: any, variants: Variant[]): AdminProduct {
+function mapImage(row: any): ProductImage {
+  return { url: row.url, pose: row.pose ?? '' };
+}
+
+function mapDetail(row: any, variants: Variant[], images: ProductImage[]): AdminProduct {
   return {
     ...mapSummary(row),
     description: row.description,
@@ -160,8 +198,10 @@ function mapDetail(row: any, variants: Variant[]): AdminProduct {
     fabric: row.fabric ?? '',
     active: row.active,
     variants,
+    images,
     categoryId: row.category_id,
     createdAt: row.created_at.toISOString(),
+    costPrice: row.cost_price ?? null,
   };
 }
 
@@ -190,12 +230,42 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
     return byProduct;
   }
 
+  /** Galleries for a batch of products, in display order — mirrors loadVariants. */
+  async function loadImages(client: Pool | PoolClient, productIds: string[]): Promise<Map<string, ProductImage[]>> {
+    const byProduct = new Map<string, ProductImage[]>();
+    if (productIds.length === 0) return byProduct;
+    const { rows } = await client.query(
+      `SELECT product_id, url, pose FROM product_images
+       WHERE product_id = ANY($1::uuid[]) ORDER BY position, id`,
+      [productIds],
+    );
+    for (const row of rows) {
+      const list = byProduct.get(row.product_id) ?? [];
+      list.push(mapImage(row));
+      byProduct.set(row.product_id, list);
+    }
+    return byProduct;
+  }
+
+  /** Replaces a product's gallery wholesale; position = array index. */
+  async function replaceImages(client: PoolClient, productId: string, images: ProductImageInput[]): Promise<void> {
+    await client.query('DELETE FROM product_images WHERE product_id = $1', [productId]);
+    for (const [position, image] of images.entries()) {
+      await client.query('INSERT INTO product_images (product_id, url, position, pose) VALUES ($1, $2, $3, $4)', [
+        productId,
+        image.url,
+        position,
+        image.pose ?? '',
+      ]);
+    }
+  }
+
   async function getById(client: Pool | PoolClient, id: string): Promise<AdminProduct | null> {
     if (!UUID_RE.test(id)) return null;
     const { rows } = await client.query(`${DETAIL_SELECT} WHERE p.id = $1`, [id]);
     if (!rows[0]) return null;
-    const variants = await loadVariants(client, [id]);
-    return mapDetail(rows[0], variants.get(id) ?? []);
+    const [variants, images] = await Promise.all([loadVariants(client, [id]), loadImages(client, [id])]);
+    return mapDetail(rows[0], variants.get(id) ?? [], images.get(id) ?? []);
   }
 
   return {
@@ -226,6 +296,10 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         params.push(filter.collection);
         where.push(`p.collection = $${params.length}`);
       }
+      if (filter.colorFamily) {
+        params.push(filter.colorFamily);
+        where.push(`p.color_family = $${params.length}`);
+      }
       if (filter.search) {
         params.push(`%${filter.search}%`);
         const p = `$${params.length}`;
@@ -250,8 +324,9 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
     async getBySlug(slug) {
       const { rows } = await pool.query(`${DETAIL_SELECT} WHERE p.slug = $1 AND p.deleted_at IS NULL`, [slug]);
       if (!rows[0]) return null;
-      const variants = await loadVariants(pool, [rows[0].id]);
-      return mapDetail(rows[0], variants.get(rows[0].id) ?? []);
+      const id = rows[0].id;
+      const [variants, images] = await Promise.all([loadVariants(pool, [id]), loadImages(pool, [id])]);
+      return mapDetail(rows[0], variants.get(id) ?? [], images.get(id) ?? []);
     },
 
     async getRelated(productId, categoryId, limit) {
@@ -268,9 +343,12 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
       const client = tx as PoolClient;
       const ids = variantIds.filter((id) => UUID_RE.test(id));
       if (ids.length === 0) return [];
+      // unit_price is the EFFECTIVE base price: a piece on sale is charged at
+      // its sale price, and every caller (cart, checkout, order snapshot) gets
+      // that number for free.
       const { rows } = await client.query(
         `SELECT v.id, v.product_id, v.size, v.stock,
-                p.name AS product_name, p.color, p.price AS unit_price, p.image_url,
+                p.name AS product_name, p.color, ${EFFECTIVE_PRICE} AS unit_price, p.image_url,
                 p.dupatta_price, p.jacket_price
          FROM product_variants v JOIN products p ON p.id = v.product_id
          WHERE v.id = ANY($1::uuid[]) FOR UPDATE OF v`,
@@ -322,8 +400,9 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         try {
           const { rows } = await client.query(
             `INSERT INTO products (category_id, slug, name, description, details, price, color, flag, image_url, active,
-                                   collection, craft, fabric, occasion, dupatta_price, jacket_price)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id`,
+                                   collection, craft, fabric, occasion, dupatta_price, jacket_price,
+                                   sale_price, cost_price, color_family)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING id`,
             [
               input.categoryId,
               input.slug,
@@ -333,7 +412,9 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
               input.price,
               input.color ?? '',
               input.flag ?? null,
-              input.imageUrl ?? null,
+              // A gallery always owns the primary photo (images[0]); the legacy
+              // single imageUrl only applies when no gallery was sent.
+              input.images ? (input.images[0]?.url ?? null) : (input.imageUrl ?? null),
               input.active ?? true,
               input.collection ?? '',
               input.craft ?? '',
@@ -341,6 +422,9 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
               input.occasion ?? '',
               input.dupattaPrice ?? null,
               input.jacketPrice ?? null,
+              input.salePrice ?? null,
+              input.costPrice ?? null,
+              input.colorFamily ?? null,
             ],
           );
           productId = rows[0].id;
@@ -358,6 +442,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
             v.stock,
           ]);
         }
+        if (input.images) await replaceImages(client, productId, input.images);
         return productId;
       });
       return (await getById(pool, id))!;
@@ -367,7 +452,6 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
       if (!UUID_RE.test(id)) return null;
       const columns: Record<string, string> = {
         categoryId: 'category_id',
-        slug: 'slug',
         name: 'name',
         description: 'description',
         details: 'details',
@@ -382,20 +466,40 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         occasion: 'occasion',
         dupattaPrice: 'dupatta_price',
         jacketPrice: 'jacket_price',
+        salePrice: 'sale_price',
+        costPrice: 'cost_price',
+        colorFamily: 'color_family',
       };
+      // A gallery in the payload also re-points the denormalized primary photo.
+      const patch: UpdateProductInput = input.images
+        ? { ...input, imageUrl: input.images[0]?.url ?? null }
+        : input;
       const sets: string[] = [];
       const params: unknown[] = [id];
       for (const [key, column] of Object.entries(columns)) {
-        const value = (input as Record<string, unknown>)[key];
+        const value = (patch as Record<string, unknown>)[key];
         if (value !== undefined) {
           params.push(value);
           sets.push(`${column} = $${params.length}`);
         }
       }
-      if (sets.length === 0) return getById(pool, id);
+      if (sets.length === 0 && patch.images === undefined) return getById(pool, id);
+      const updateSql = `UPDATE products SET ${sets.join(', ')} WHERE id = $1`;
       let rowCount: number | null;
       try {
-        ({ rowCount } = await pool.query(`UPDATE products SET ${sets.join(', ')} WHERE id = $1`, params));
+        if (patch.images === undefined) {
+          ({ rowCount } = await pool.query(updateSql, params));
+        } else {
+          // Gallery replacement and the row update land together or not at all.
+          rowCount = await withTransaction(pool, async (client) => {
+            const res = sets.length
+              ? await client.query(updateSql, params)
+              : await client.query('SELECT 1 FROM products WHERE id = $1', [id]);
+            if (!res.rowCount) return 0;
+            await replaceImages(client, id, patch.images!);
+            return res.rowCount;
+          });
+        }
       } catch (err: any) {
         rethrowSlugTaken(err);
       }
@@ -416,8 +520,9 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
       const { rows } = await pool.query(
         `${DETAIL_SELECT} WHERE p.deleted_at IS NULL ORDER BY p.created_at ASC, p.slug`,
       );
-      const variants = await loadVariants(pool, rows.map((r) => r.id));
-      return rows.map((row) => mapDetail(row, variants.get(row.id) ?? []));
+      const ids = rows.map((r) => r.id);
+      const [variants, images] = await Promise.all([loadVariants(pool, ids), loadImages(pool, ids)]);
+      return rows.map((row) => mapDetail(row, variants.get(row.id) ?? [], images.get(row.id) ?? []));
     },
 
     async listCollections() {
@@ -467,6 +572,7 @@ export function createWishlistRepo(pool: Pool): WishlistRepo {
       const { rows } = await pool.query(
         `SELECT p.id, p.slug, p.name, p.price, p.color, p.flag, p.image_url,
                 p.collection, p.occasion, p.dupatta_price, p.jacket_price,
+                p.sale_price, p.color_family,
                 c.slug AS category_slug, c.name AS category_name
          FROM wishlists w
          JOIN products p ON p.id = w.product_id

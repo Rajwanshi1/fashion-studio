@@ -256,11 +256,17 @@ function toSummary(p: AdminProduct): ProductSummary {
     occasion: p.occasion,
     dupattaPrice: p.dupattaPrice,
     jacketPrice: p.jacketPrice,
+    colorFamily: p.colorFamily,
+    salePrice: p.salePrice,
   };
 }
 
-/** Full-set price (base + default-included add-ons), mirroring the SQL price sort. */
-const setPrice = (p: AdminProduct) => p.price + (p.dupattaPrice ?? 0) + (p.jacketPrice ?? 0);
+/** Base price actually charged — mirrors the repo's EFFECTIVE_PRICE CASE. */
+const effectivePrice = (p: AdminProduct) =>
+  p.flag === 'sale' && p.salePrice != null ? p.salePrice : p.price;
+
+/** Full-set price (effective base + default-included add-ons), mirroring the SQL price sort. */
+const setPrice = (p: AdminProduct) => effectivePrice(p) + (p.dupattaPrice ?? 0) + (p.jacketPrice ?? 0);
 
 type FakeProduct = AdminProduct & { deletedAt: string | null };
 
@@ -296,6 +302,7 @@ export class FakeProductsRepo implements ProductsRepo {
     let rows = this.products.filter((p) => p.active && !p.deletedAt);
     if (filter.categorySlug) rows = rows.filter((p) => p.categorySlug === filter.categorySlug);
     if (filter.collection) rows = rows.filter((p) => p.collection === filter.collection);
+    if (filter.colorFamily) rows = rows.filter((p) => p.colorFamily === filter.colorFamily);
     if (filter.search) {
       const q = filter.search.toLowerCase();
       rows = rows.filter(
@@ -349,7 +356,8 @@ export class FakeProductsRepo implements ProductsRepo {
             stock: v.stock,
             productName: p.name,
             color: p.color,
-            unitPrice: p.price,
+            // Mirrors the repo's sale CASE: checkout charges the sale price.
+            unitPrice: effectivePrice(p),
             imageUrl: p.imageUrl,
             dupattaPrice: p.dupattaPrice,
             jacketPrice: p.jacketPrice,
@@ -405,7 +413,8 @@ export class FakeProductsRepo implements ProductsRepo {
       price: input.price,
       color: input.color ?? '',
       flag: input.flag ?? null,
-      imageUrl: input.imageUrl ?? null,
+      // A gallery owns the primary photo; imageUrl only applies without one.
+      imageUrl: input.images ? (input.images[0]?.url ?? null) : (input.imageUrl ?? null),
       categorySlug: category.slug,
       categoryName: category.name,
       description: input.description ?? '',
@@ -416,6 +425,10 @@ export class FakeProductsRepo implements ProductsRepo {
       occasion: input.occasion ?? '',
       dupattaPrice: input.dupattaPrice ?? null,
       jacketPrice: input.jacketPrice ?? null,
+      colorFamily: input.colorFamily ?? null,
+      salePrice: input.salePrice ?? null,
+      costPrice: input.costPrice ?? null,
+      images: (input.images ?? []).map((im) => ({ url: im.url, pose: im.pose ?? '' })),
       active: input.active ?? true,
       variants: sizes.map((v) => ({ id: nextId('v'), productId: id, size: v.size, stock: v.stock })),
       categoryId: category.id,
@@ -436,15 +449,18 @@ export class FakeProductsRepo implements ProductsRepo {
       p.categorySlug = category.slug;
       p.categoryName = category.name;
     }
-    if (input.slug !== undefined && this.products.some((x) => x.id !== id && x.slug === input.slug)) {
-      throw new DomainError('SLUG_TAKEN', 'A piece with this slug already exists — choose a different slug');
-    }
     const keys = [
-      'slug', 'name', 'description', 'details', 'price', 'color', 'flag', 'imageUrl', 'active',
+      'name', 'description', 'details', 'price', 'color', 'flag', 'imageUrl', 'active',
       'collection', 'craft', 'fabric', 'occasion', 'dupattaPrice', 'jacketPrice',
+      'salePrice', 'costPrice', 'colorFamily',
     ] as const;
     for (const key of keys) {
       if (input[key] !== undefined) (p as any)[key] = input[key];
+    }
+    // A gallery is replaced wholesale and re-points the primary photo.
+    if (input.images !== undefined) {
+      p.images = input.images.map((im) => ({ url: im.url, pose: im.pose ?? '' }));
+      p.imageUrl = p.images[0]?.url ?? null;
     }
     return structuredClone(p);
   }
@@ -1129,6 +1145,11 @@ export class FakeObjectStore implements ObjectStore {
     return `https://uploads.test/${encodeURIComponent(key)}?signed=1`;
   }
 
+  /** Permanent URL, mirroring the real stores — no signature on it. */
+  publicUrl(key: string): string {
+    return `https://uploads.test/${encodeURIComponent(key)}`;
+  }
+
   /** Test helper mirroring LocalObjectStore.put. */
   put(key: string, bytes: Uint8Array, contentType: string): void {
     this.objects.set(key, { bytes, contentType });
@@ -1197,6 +1218,8 @@ export async function seedCatalog(products: FakeProductsRepo) {
     details: 'Dry clean only',
     price: 18400000,
     color: 'Sage',
+    // Saved rows carry the family the route resolved for their colour.
+    colorFamily: 'green',
     flag: 'bestseller',
     variants: [
       { size: 'M', stock: 3 },
@@ -1211,6 +1234,7 @@ export async function seedCatalog(products: FakeProductsRepo) {
     details: 'Dry clean only',
     price: 9600000,
     color: 'Moss',
+    colorFamily: 'green',
     flag: 'new',
     variants: [{ size: 'S', stock: 1 }],
   });
@@ -1222,6 +1246,7 @@ export async function seedCatalog(products: FakeProductsRepo) {
     details: 'Dry clean only',
     price: 16800000,
     color: 'Celadon',
+    colorFamily: 'green',
     flag: null,
     variants: [{ size: 'L', stock: 5 }],
   });
@@ -1233,6 +1258,7 @@ export async function seedCatalog(products: FakeProductsRepo) {
     details: '',
     price: 9900000,
     color: 'Forest',
+    colorFamily: 'green',
     flag: null,
     active: false,
     variants: [{ size: 'M', stock: 2 }],

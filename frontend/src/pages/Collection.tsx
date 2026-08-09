@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api';
 import { track } from '../lib/analytics';
 import { displayPrice } from '../lib/format';
-import type { Category, ProductSort, ProductsResponse, ProductSummary } from '../lib/types';
+import type { Category, ColorFamily, ProductSort, ProductsResponse, ProductSummary } from '../lib/types';
+import { COLOR_FAMILIES, COLOR_FAMILY_META } from '../lib/types';
 import Shop from '../components/Shop';
 import ProductCard from '../components/ProductCard';
 import ImageSlot from '../components/ImageSlot';
@@ -11,17 +12,6 @@ import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/plp.css';
 
-const COLOR_CLASS: Record<string, string> = {
-  Sage: 'c-sage',
-  Moss: 'c-moss',
-  Pistachio: 'c-pistachio',
-  'Antique Gold': 'c-antique-gold',
-  'Deep Forest': 'c-deep-forest',
-  Eucalyptus: 'c-eucalyptus',
-  Celadon: 'c-celadon',
-  Mint: 'c-mint',
-};
-const COLORS = ['Sage', 'Moss', 'Pistachio', 'Antique Gold', 'Deep Forest', 'Eucalyptus'];
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'Custom'];
 const OCCASIONS = ['Wedding', 'Reception', 'Festive', 'Cocktail'];
 const PRICE_MIN = 50000; // rupees
@@ -43,6 +33,9 @@ export default function Collection() {
   const sort = params.get('sort') ?? 'featured';
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1);
   const collection = params.get('collection') ?? '';
+  // Server-side filter, single-select. The API validates the token against the
+  // 12 colour families, so an arbitrary ?color= simply 400s rather than lying.
+  const color = params.get('color') ?? '';
 
   const [cats, setCats] = useState<Category[]>([]);
   const [collectionNames, setCollectionNames] = useState<string[]>([]);
@@ -51,7 +44,6 @@ export default function Collection() {
   const [error, setError] = useState<string | null>(null);
 
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [colors, setColors] = useState<string[]>([]);
   const [sizes, setSizes] = useState<string[]>([]);
   const [occasions, setOccasions] = useState<string[]>([]);
   const [priceMax, setPriceMax] = useState(PRICE_MAX);
@@ -73,9 +65,10 @@ export default function Collection() {
     setError(null);
     const apiSort: ProductSort = sort === 'bestselling' ? 'featured' : (sort as ProductSort);
     const collectionParam = collection ? `&collection=${encodeURIComponent(collection)}` : '';
+    const colorParam = color ? `&color=${encodeURIComponent(color)}` : '';
     api
       .get<ProductsResponse>(
-        `/api/products?category=${encodeURIComponent(categorySlug)}&sort=${apiSort}&page=${page}&limit=12${collectionParam}`,
+        `/api/products?category=${encodeURIComponent(categorySlug)}&sort=${apiSort}&page=${page}&limit=12${collectionParam}${colorParam}`,
       )
       .then((d) => {
         if (!cancelled) setData(d);
@@ -89,7 +82,7 @@ export default function Collection() {
     return () => {
       cancelled = true;
     };
-  }, [categorySlug, sort, page, collection]);
+  }, [categorySlug, sort, page, collection, color]);
 
   const category = cats.find((c) => c.slug === categorySlug);
   const categoryName =
@@ -101,11 +94,10 @@ export default function Collection() {
 
   const items = useMemo(() => {
     let list = data?.items ?? [];
-    if (colors.length) list = list.filter((p) => colors.includes(p.color));
     if (occasions.length) list = list.filter((p) => occasions.includes(p.occasion));
     if (priceMax < PRICE_MAX) list = list.filter((p) => displayPrice(p) <= priceMax * 100);
     return list;
-  }, [data, colors, occasions, priceMax]);
+  }, [data, occasions, priceMax]);
 
   // Value-based guard (not a one-shot boolean): a plain "have we run before"
   // flag is inverted by StrictMode's mount double-invoke (invocation 1 flips
@@ -115,8 +107,8 @@ export default function Collection() {
   // slug ref is: both StrictMode invocations see the snapshot still matches
   // the initial values and bail, and the snapshot only advances once an
   // event actually fires.
-  const lastFilterRef = useRef<{ colors: string[]; occasions: string[]; priceMax: number; collection: string }>({
-    colors,
+  const lastFilterRef = useRef<{ color: string; occasions: string[]; priceMax: number; collection: string }>({
+    color,
     occasions,
     priceMax,
     collection,
@@ -125,7 +117,7 @@ export default function Collection() {
     const last = lastFilterRef.current;
     const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
     if (
-      sameList(last.colors, colors) &&
+      last.color === color &&
       sameList(last.occasions, occasions) &&
       last.priceMax === priceMax &&
       last.collection === collection
@@ -133,32 +125,37 @@ export default function Collection() {
       return;
     }
     const t = setTimeout(() => {
-      lastFilterRef.current = { colors, occasions, priceMax, collection };
-      track('filter_apply', { props: { category: categorySlug, colors, occasions, priceMax, collection } });
+      lastFilterRef.current = { color, occasions, priceMax, collection };
+      track('filter_apply', { props: { category: categorySlug, color, occasions, priceMax, collection } });
     }, 500);
     return () => clearTimeout(t);
     // categorySlug intentionally excluded: only filter changes should re-arm
     // the debounce, not a category navigation on its own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colors, occasions, priceMax, collection]);
+  }, [color, occasions, priceMax, collection]);
 
   const toggleIn = (list: string[], v: string) =>
     list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
 
-  const setCollection = (name: string) => {
+  /** Set/clear the server-filter search params in one go; any change resets paging. */
+  const patchParams = (patch: Record<string, string>) => {
     const next = new URLSearchParams(params);
-    if (name) next.set('collection', name);
-    else next.delete('collection');
+    for (const [key, value] of Object.entries(patch)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
     next.delete('page');
     setParams(next);
   };
 
+  const setCollection = (name: string) => patchParams({ collection: name });
+  const setColor = (token: string) => patchParams({ color: token });
+
   const clearAll = () => {
-    setColors([]);
     setSizes([]);
     setOccasions([]);
     setPriceMax(PRICE_MAX);
-    if (collection) setCollection('');
+    if (collection || color) patchParams({ collection: '', color: '' });
   };
 
   const setSort = (v: string) => {
@@ -177,8 +174,10 @@ export default function Collection() {
 
   const pages = data?.pages ?? 1;
   const total = data?.total ?? 0;
-  const hasClientFilters =
-    colors.length > 0 || sizes.length > 0 || occasions.length > 0 || priceMax < PRICE_MAX;
+  // Colour and collection are server filters, so `total` still describes the
+  // rendered set; only the client-side filters make it stale.
+  const hasClientFilters = sizes.length > 0 || occasions.length > 0 || priceMax < PRICE_MAX;
+  const colorMeta = color ? COLOR_FAMILY_META[color as ColorFamily] : undefined;
 
   const cards: ProductSummary[] = items;
 
@@ -233,15 +232,19 @@ export default function Collection() {
           <div className="fgroup">
             <h4>Colour</h4>
             <div className="fcolors">
-              {COLORS.map((c) => (
-                <button
-                  key={c}
-                  className={`sw ${COLOR_CLASS[c] ?? 'c-default'}${colors.includes(c) ? ' on' : ''}`}
-                  title={c}
-                  aria-label={c}
-                  onClick={() => setColors((prev) => toggleIn(prev, c))}
-                />
-              ))}
+              {COLOR_FAMILIES.map((token) => {
+                const meta = COLOR_FAMILY_META[token];
+                return (
+                  <button
+                    key={token}
+                    className={`sw${color === token ? ' on' : ''}`}
+                    style={{ background: meta.swatch }}
+                    title={meta.label}
+                    aria-label={meta.label}
+                    onClick={() => setColor(color === token ? '' : token)}
+                  />
+                );
+              })}
             </div>
           </div>
           <div className="fgroup">
@@ -329,14 +332,14 @@ export default function Collection() {
                 ✕
               </button>
             </span>
-            {colors.map((c) => (
-              <span className="ac" key={c}>
-                {c}{' '}
-                <button aria-label={`Remove ${c}`} onClick={() => setColors((p) => toggleIn(p, c))}>
+            {colorMeta && (
+              <span className="ac">
+                {colorMeta.label}{' '}
+                <button aria-label={`Remove ${colorMeta.label}`} onClick={() => setColor('')}>
                   ✕
                 </button>
               </span>
-            ))}
+            )}
             {sizes.map((s) => (
               <span className="ac" key={s}>
                 Size {s}{' '}
@@ -369,7 +372,7 @@ export default function Collection() {
                 </button>
               </span>
             )}
-            {(hasClientFilters || collection !== '') && (
+            {(hasClientFilters || collection !== '' || color !== '') && (
               <button className="clear" onClick={clearAll}>
                 Clear all
               </button>

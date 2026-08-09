@@ -5,16 +5,17 @@ import type { DocumentsRepo } from '../data/documents.repo';
 import type { MeasurementsRepo } from '../data/measurements.repo';
 import type { OrdersRepo } from '../data/orders.repo';
 import type { PaymentsRepo } from '../data/payments.repo';
-import type { ProductsRepo } from '../data/products.repo';
+import type { ProductsRepo, UpdateProductInput } from '../data/products.repo';
 import type { UsersRepo } from '../data/users.repo';
 import { deliveryTotals } from '../lib/deliveries';
 import { normalizePhone } from '../lib/phone';
 import { customersToVcf } from '../lib/vcard';
 import { AuthEnv, requireAdmin, requireAuth } from '../middleware/auth';
+import { resolveColorFamily, type CatalogAi } from '../services/ai/catalog-ai';
 import type { DocumentsService } from '../services/documents.service';
-import { newStorageKey, type ObjectStore } from '../services/objectstore';
+import { namedStorageKey, newStorageKey, sanitizeFileSlug, type ObjectStore } from '../services/objectstore';
 import type { OrdersService } from '../services/orders.service';
-import { OrderStatus } from '../types';
+import { DomainError, OrderStatus } from '../types';
 import { zodHook } from './hooks';
 
 const ORDER_STATUSES = [
@@ -109,13 +110,29 @@ const presignSchema = z.object({
   contentType: z.enum(UPLOAD_CONTENT_TYPES),
 });
 
-const flagSchema = z.enum(['bestseller', 'new']).nullable();
+/** Base64 of a ~10MB JPEG — the naming call is refused above this. */
+const MAX_IMAGE_BASE64 = 14_000_000;
+const MAX_SLUG_ATTEMPTS = 6;
+
+const productImagePresignSchema = z
+  .object({
+    contentType: z.literal('image/jpeg'),
+    // Both or neither: naming needs the piece's name AND the pixels.
+    productName: z.string().min(1).optional(),
+    imageBase64: z.string().max(MAX_IMAGE_BASE64).optional(),
+  })
+  .refine((v) => (v.productName === undefined) === (v.imageBase64 === undefined), {
+    message: 'productName and imageBase64 must be sent together',
+  });
+
+const flagSchema = z.enum(['bestseller', 'new', 'sale']).nullable();
 
 const productBaseSchema = z.object({
   // The category can be referenced by id or by slug (the admin UI knows slugs).
   categoryId: z.string().min(1).optional(),
   categorySlug: z.string().min(1).optional(),
-  slug: z.string().min(1),
+  // Optional: omitted → derived from name + colour (see the create route).
+  slug: z.string().min(1).optional(),
   name: z.string().min(1),
   description: z.string().optional(),
   details: z.string().optional(),
@@ -131,6 +148,10 @@ const productBaseSchema = z.object({
   // null = no such piece in the set; 0 = included at no extra cost.
   dupattaPrice: z.number().int().min(0).nullable().optional(),
   jacketPrice: z.number().int().min(0).nullable().optional(),
+  // Discounted BASE price — add-ons are never discounted.
+  salePrice: z.number().int().positive().nullable().optional(),
+  costPrice: z.number().int().min(0).nullable().optional(),
+  images: z.array(z.object({ url: z.string().min(1), pose: z.string().optional() })).max(12).optional(),
   variants: z.array(z.object({ size: z.string().min(1), stock: z.number().int().min(0) })).optional(),
 });
 
@@ -139,11 +160,33 @@ const bulkDeleteSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(200),
 });
 
-const createProductSchema = productBaseSchema.refine((v) => v.categoryId || v.categorySlug, {
-  message: 'categoryId or categorySlug is required',
-});
+const createProductSchema = productBaseSchema
+  .superRefine((v, ctx) => {
+    if (v.flag === 'sale') {
+      if (v.salePrice == null) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['salePrice'], message: 'a sale piece needs a salePrice' });
+      } else if (v.salePrice >= v.price) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['salePrice'], message: 'salePrice must be below price' });
+      }
+    } else if (v.salePrice != null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['salePrice'], message: 'salePrice needs flag "sale"' });
+    }
+  })
+  .refine((v) => v.categoryId || v.categorySlug, {
+    message: 'categoryId or categorySlug is required',
+  });
 
-const updateProductSchema = productBaseSchema.omit({ variants: true }).partial();
+// No `slug`: a PUT can never rename a piece (zod strips it, so old clients that
+// still send one get a 200 with the slug untouched rather than a 400).
+const updateProductSchema = productBaseSchema.omit({ variants: true, slug: true }).partial();
+
+/** Lowercase kebab-case; the same shape the seed data and pre-existing catalog slugs use. */
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 export interface AdminDeps {
   products: ProductsRepo;
@@ -156,6 +199,8 @@ export interface AdminDeps {
   documentsService: DocumentsService;
   /** Null → product-image presign answers 503. */
   objectStore: ObjectStore | null;
+  /** Null → colours fall back to the keyword map and photos to uuid names. */
+  catalogAi: CatalogAi | null;
   jwtSecret: string;
 }
 
@@ -236,23 +281,55 @@ export function adminRoutes(deps: AdminDeps) {
     const { categorySlug, ...body } = c.req.valid('json');
     const categoryId = await resolveCategoryId({ categoryId: body.categoryId, categorySlug });
     if (!categoryId) return c.json({ error: 'Category not found' }, 404);
-    return c.json(await deps.products.createProduct({ ...body, categoryId }), 201);
+    const colorFamily = body.color === undefined ? undefined : await resolveColorFamily(deps.catalogAi, body.color);
+    // The admin form no longer asks for a slug: derive it from name + colour and
+    // uniquify with a bounded suffix. An explicitly sent slug is taken as-is —
+    // a collision there is still the admin's 409 to resolve.
+    const base = body.slug?.trim() || slugify(`${body.name} ${body.color ?? ''}`);
+    for (let attempt = 1; ; attempt++) {
+      const slug = attempt === 1 ? base : `${base}-${attempt}`;
+      try {
+        return c.json(await deps.products.createProduct({ ...body, categoryId, slug, colorFamily }), 201);
+      } catch (err) {
+        const canRetry =
+          attempt < MAX_SLUG_ATTEMPTS &&
+          !body.slug &&
+          err instanceof DomainError &&
+          err.code === 'SLUG_TAKEN';
+        if (!canRetry) throw err;
+      }
+    }
   });
 
   // Presign a direct-to-storage PUT for a product photo and hand back the
-  // permanent public URL to store in imageUrl. The admin client always
+  // permanent public URL to store in the gallery. The admin client always
   // re-encodes to JPEG (see admin/src/lib/image.ts).
-  r.post(
-    '/uploads/product-image',
-    zValidator('json', z.object({ contentType: z.literal('image/jpeg') }), zodHook),
-    async (c) => {
-      if (!deps.objectStore) return c.json({ error: 'Uploads are not configured' }, 503);
-      const { contentType } = c.req.valid('json');
-      const key = newStorageKey('products');
-      const { url, headers } = await deps.objectStore.presignPut(key, contentType);
-      return c.json({ key, uploadUrl: url, headers, publicUrl: deps.objectStore.publicUrl(key) }, 201);
-    },
-  );
+  //
+  // With productName + imageBase64 (and an AI configured) the photo is named
+  // first, so the object key is the SEO name shoppers see in the URL. Naming is
+  // best-effort: anything unusable falls back to the uuid key, pose null.
+  r.post('/uploads/product-image', zValidator('json', productImagePresignSchema, zodHook), async (c) => {
+    if (!deps.objectStore) return c.json({ error: 'Uploads are not configured' }, 503);
+    const { contentType, productName, imageBase64 } = c.req.valid('json');
+    let key: string | null = null;
+    let pose: string | null = null;
+    if (productName && imageBase64 && deps.catalogAi) {
+      try {
+        const bytes = Buffer.from(imageBase64, 'base64');
+        const named = await deps.catalogAi.nameProductImage({ bytes, mediaType: contentType }, productName);
+        const fileSlug = named ? sanitizeFileSlug(named.fileSlug) : '';
+        if (fileSlug) {
+          key = namedStorageKey('products', fileSlug);
+          pose = named!.pose ?? null;
+        }
+      } catch {
+        // Naming never blocks an upload — fall through to the uuid key.
+      }
+    }
+    if (!key) key = newStorageKey('products');
+    const { url, headers } = await deps.objectStore.presignPut(key, contentType);
+    return c.json({ key, uploadUrl: url, headers, publicUrl: deps.objectStore.publicUrl(key), pose }, 201);
+  });
 
   r.post('/products/bulk-delete', zValidator('json', bulkDeleteSchema, zodHook), async (c) => {
     const { ids } = c.req.valid('json');
@@ -268,12 +345,22 @@ export function adminRoutes(deps: AdminDeps) {
 
   r.put('/products/:id', zValidator('json', updateProductSchema, zodHook), async (c) => {
     const { categorySlug, ...body } = c.req.valid('json');
+    const patch: UpdateProductInput = { ...body };
     if (categorySlug) {
       const categoryId = await resolveCategoryId({ categoryId: body.categoryId, categorySlug });
       if (!categoryId) return c.json({ error: 'Category not found' }, 404);
-      body.categoryId = categoryId;
+      patch.categoryId = categoryId;
     }
-    const product = await deps.products.updateProduct(c.req.param('id'), body);
+    // Leaving the sale clears the discount, so a stale sale_price can never be
+    // charged; staying on sale re-validates whenever both numbers are in play.
+    if (body.flag !== undefined && body.flag !== 'sale') patch.salePrice = null;
+    if (body.flag === 'sale' && body.salePrice != null && body.price !== undefined) {
+      if (body.salePrice <= 0 || body.salePrice >= body.price) {
+        return c.json({ error: 'salePrice: must be above 0 and below price' }, 400);
+      }
+    }
+    if (body.color !== undefined) patch.colorFamily = await resolveColorFamily(deps.catalogAi, body.color);
+    const product = await deps.products.updateProduct(c.req.param('id'), patch);
     if (!product) return c.json({ error: 'Product not found' }, 404);
     return c.json(product);
   });

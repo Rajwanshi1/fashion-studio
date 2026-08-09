@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { LocalObjectStore, newStorageKey } from '../src/services/objectstore';
+import { LocalObjectStore, namedStorageKey, newStorageKey, sanitizeFileSlug } from '../src/services/objectstore';
 
 describe('newStorageKey', () => {
   it('produces kind/yyyy/mm/uuid.jpg', () => {
@@ -12,6 +12,32 @@ describe('newStorageKey', () => {
 
   it('is unique per call', () => {
     expect(newStorageKey('bill')).not.toBe(newStorageKey('bill'));
+  });
+});
+
+describe('sanitizeFileSlug', () => {
+  it('kebab-cases anything the model suggests', () => {
+    expect(sanitizeFileSlug('Sage Zardozi Lehenga — Front')).toBe('sage-zardozi-lehenga-front');
+    expect(sanitizeFileSlug('  ..Peach/Coral Kaftan!! ')).toBe('peach-coral-kaftan');
+  });
+
+  it('caps at 60 chars without leaving a trailing dash', () => {
+    const slug = sanitizeFileSlug(`${'a'.repeat(59)} tail`);
+    expect(slug).toBe('a'.repeat(59));
+    expect(sanitizeFileSlug('x'.repeat(80))).toHaveLength(60);
+  });
+
+  it('returns an empty string when nothing usable survives', () => {
+    expect(sanitizeFileSlug('!!! ???')).toBe('');
+    expect(sanitizeFileSlug('')).toBe('');
+  });
+});
+
+describe('namedStorageKey', () => {
+  it('suffixes the slug with a short uuid under the same monthly prefix', () => {
+    const key = namedStorageKey('products', 'sage-zardozi-lehenga-front');
+    expect(key).toMatch(/^products\/\d{4}\/\d{2}\/sage-zardozi-lehenga-front-[0-9a-f]{6}\.jpg$/);
+    expect(namedStorageKey('products', 'x')).not.toBe(namedStorageKey('products', 'x'));
   });
 });
 

@@ -41,6 +41,9 @@
 .page-plp .active-chips .ac button { background: none; border: 0; cursor: pointer; color: var(--gold); font-size: 0.8rem; line-height: 1; }
 .page-plp .active-chips .clear { font-size: 0.64rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); border-bottom: 1px solid var(--hairline); cursor: pointer; background: none; border-top: 0; border-left: 0; border-right: 0; padding: 0 0 1px; }
 
+/* sale pricing — pre-sale price struck through, ahead of the sale price */
+.was { text-decoration: line-through; opacity: .55; margin-right: .5em; }
+
 /* editorial promo row inside grid */
 .page-plp .promo-tile { grid-column: span 2; background: var(--forest-800); color: var(--celadon-100); display: grid; grid-template-columns: 1fr 1fr; align-items: center; }
 @media (max-width: 560px){ .page-plp .promo-tile { grid-column: span 2; grid-template-columns: 1fr; } }
