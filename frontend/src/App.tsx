@@ -61,6 +61,8 @@ export function AppRoutes() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/collections" element={<Collections />} />
+        {/* Slugless: the whole catalogue, and the state a category clears to. */}
+        <Route path="/collection" element={<Collection />} />
         <Route path="/collection/:categorySlug" element={<Collection />} />
         <Route path="/product/:slug" element={<Product />} />
         <Route path="/cart" element={<CartPage />} />

@@ -103,7 +103,7 @@ export default function Home() {
             <span className="ital">{site.hero.titleItalic}</span>
           </h1>
           <div className="actions">
-            <Link className="btn-buy" to="/collection/lehenga">
+            <Link className="btn-buy" to="/collection">
               {site.hero.ctaPrimary}
             </Link>
             <Link className="btn-outline" to="/contact">

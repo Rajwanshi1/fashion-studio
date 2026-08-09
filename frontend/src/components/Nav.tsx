@@ -52,7 +52,7 @@ export default function Nav({ home = false }: NavProps) {
             </>
           ) : (
             <>
-              <Link to="/collection/lehenga">Women</Link>
+              <Link to="/collection">Women</Link>
               <Link to="/collections">Collections</Link>
               <Link to="/lookbook">Lookbook</Link>
             </>

@@ -333,7 +333,9 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
   return {
     async listCategories() {
       const { rows } = await pool.query(
-        `SELECT c.*, COUNT(p.id) FILTER (WHERE p.active) AS product_count
+        // The soft-delete gate has to match listProducts, or an archived piece
+        // inflates the sidebar badge and the count disagrees with the grid.
+        `SELECT c.*, COUNT(p.id) FILTER (WHERE p.active AND p.deleted_at IS NULL) AS product_count
          FROM categories c LEFT JOIN products p ON p.category_id = c.id
          GROUP BY c.id ORDER BY c.position, c.slug`,
       );
