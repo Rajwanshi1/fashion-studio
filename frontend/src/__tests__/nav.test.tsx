@@ -19,6 +19,7 @@ const item: Omit<CartItem, 'qty'> = {
   includeJacket: false,
   dupattaPrice: null,
   jacketPrice: null,
+  measurements: '',
 };
 
 function AddButton() {

@@ -117,6 +117,7 @@ export function makeOrder(overrides: Partial<Order> = {}): Order {
         imageUrl: null,
         dupattaPrice: null,
         jacketPrice: null,
+        measurements: '',
       },
     ],
     ...overrides,

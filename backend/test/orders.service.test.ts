@@ -210,6 +210,54 @@ describe('OrdersService', () => {
     });
   });
 
+  describe('made-to-measure measurements', () => {
+    it('persists the trimmed note on its line and defaults to empty', async () => {
+      const order = await service.createOrder(
+        input({
+          items: [
+            { variantId: sageCustom().id, quantity: 1, measurements: '  bust 36 waist 30  ' },
+            { variantId: sageM().id, quantity: 1 },
+          ],
+        }),
+      );
+      expect(order.items).toHaveLength(2);
+      const custom = order.items.find((i) => i.variantId === sageCustom().id)!;
+      const plain = order.items.find((i) => i.variantId === sageM().id)!;
+      expect(custom.measurements).toBe('bust 36 waist 30');
+      expect(plain.measurements).toBe('');
+    });
+
+    it('merges lines with the identical note', async () => {
+      const order = await service.createOrder(
+        input({
+          items: [
+            { variantId: sageCustom().id, quantity: 1, measurements: 'bust 36' },
+            { variantId: sageCustom().id, quantity: 2, measurements: 'bust 36' },
+          ],
+        }),
+      );
+      expect(order.items).toHaveLength(1);
+      expect(order.items[0].quantity).toBe(3);
+      expect(order.items[0].measurements).toBe('bust 36');
+    });
+
+    it('keeps different notes as separate lines but aggregates stock', async () => {
+      const order = await service.createOrder(
+        input({
+          items: [
+            { variantId: sageCustom().id, quantity: 1, measurements: 'bust 36' },
+            { variantId: sageCustom().id, quantity: 1, measurements: 'bust 38' },
+            { variantId: sageCustom().id, quantity: 1 }, // no note — a third line
+          ],
+        }),
+      );
+      expect(order.items).toHaveLength(3);
+      expect(order.items.map((i) => i.measurements).sort()).toEqual(['', 'bust 36', 'bust 38']);
+      const [v] = await products.getVariantsForUpdate({}, [sageCustom().id]);
+      expect(v.stock).toBe(47); // 50 - 3 across all note combos
+    });
+  });
+
   describe('sale pricing', () => {
     // The discount lives in the repo's unit_price CASE, so the service prices a
     // sale piece correctly without knowing sales exist. Add-ons stay full price.

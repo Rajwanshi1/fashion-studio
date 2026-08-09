@@ -198,6 +198,8 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
                     .filter(Boolean)
                     .join(' & ')}`}
               </div>
+              {/* Client-supplied free text — always plain text, never HTML. */}
+              {it.measurements && <div className="item-note">{it.measurements}</div>}
             </div>
             <div>{formatINR(it.unitPrice * it.quantity)}</div>
           </div>

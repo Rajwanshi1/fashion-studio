@@ -18,6 +18,7 @@ const base: Omit<CartItem, 'qty'> = {
   includeJacket: false,
   dupattaPrice: null,
   jacketPrice: null,
+  measurements: '',
 };
 const other: Omit<CartItem, 'qty'> = {
   ...base,
@@ -33,6 +34,11 @@ const fullSet: Omit<CartItem, 'qty'> = {
   includeJacket: true,
   dupattaPrice: 1200000,
   jacketPrice: 2400000,
+};
+// Same variant as `base`, with a made-to-measure note — also a distinct line.
+const noted: Omit<CartItem, 'qty'> = {
+  ...base,
+  measurements: 'bust 36in, waist 30in',
 };
 
 describe('cart context', () => {
@@ -55,6 +61,26 @@ describe('cart context', () => {
     act(() => result.current.remove(cartLineKey(fullSet)));
     expect(result.current.items).toHaveLength(1);
     expect(result.current.items[0].includeDupatta).toBe(false);
+  });
+
+  it('merges lines with the identical measurements note', () => {
+    const { result } = renderHook(() => useCart(), { wrapper });
+    act(() => result.current.add(noted));
+    act(() => result.current.add(noted, 2));
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0].qty).toBe(3);
+    expect(result.current.items[0].measurements).toBe('bust 36in, waist 30in');
+  });
+
+  it('keeps the same variant with a different note as its own line', () => {
+    const { result } = renderHook(() => useCart(), { wrapper });
+    act(() => result.current.add(base));
+    act(() => result.current.add(noted));
+    expect(result.current.items).toHaveLength(2);
+    // Removing the noted line leaves the plain one untouched.
+    act(() => result.current.remove(cartLineKey(noted)));
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0].measurements).toBe('');
   });
 
   it('computes subtotal across variants', () => {
@@ -102,7 +128,7 @@ describe('cart context', () => {
   });
 
   it('normalizes carts saved before set-includes existed', () => {
-    // Old shape: no include/addon fields at all.
+    // Old shape: no include/addon fields (and no measurements) at all.
     localStorage.setItem(
       'ta.cart',
       JSON.stringify([
@@ -127,7 +153,22 @@ describe('cart context', () => {
     expect(item.includeJacket).toBe(false);
     expect(item.dupattaPrice).toBeNull();
     expect(item.jacketPrice).toBeNull();
-    expect(cartLineKey(item)).toBe('v1:00');
+    expect(item.measurements).toBe('');
+    expect(cartLineKey(item)).toBe('v1:00:');
     expect(result.current.subtotal).toBe(2 * 18400000);
+  });
+
+  it('normalizes carts saved before measurements existed', () => {
+    // Set-includes era shape: addon fields present, measurements missing.
+    localStorage.setItem(
+      'ta.cart',
+      JSON.stringify([{ ...base, includeDupatta: true, dupattaPrice: 1200000, qty: 1, measurements: undefined }]),
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    expect(result.current.items).toHaveLength(1);
+    const item = result.current.items[0];
+    expect(item.includeDupatta).toBe(true); // untouched by the older normaliser
+    expect(item.measurements).toBe('');
+    expect(cartLineKey(item)).toBe('v1:10:');
   });
 });

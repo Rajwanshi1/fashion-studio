@@ -6,6 +6,7 @@ describe('Orders', () => {
   it('expands a row and PATCHes the selected valid transition', async () => {
     seedAdminAuth();
     const order = makeOrder({ status: 'paid' });
+    order.items[0].measurements = 'bust 36in, waist 30in';
     const { calls } = mockFetch((url, init) => {
       if (url.endsWith('/api/admin/orders') && (init?.method ?? 'GET') === 'GET') {
         return { json: [order] };
@@ -23,9 +24,10 @@ describe('Orders', () => {
     expect(screen.getByText('Meera Kapoor')).toBeInTheDocument();
     expect(screen.getByText('₹1,84,000', { selector: 'td' })).toBeInTheDocument();
 
-    // expand → detail pane with items + address + status select
+    // expand → detail pane with items (incl. the measurements note) + address + status select
     await userEvent.click(cell);
     expect(screen.getByText('Emerald Court Gown')).toBeInTheDocument();
+    expect(screen.getByText('bust 36in, waist 30in')).toBeInTheDocument();
     expect(screen.getByText(/14 Altamount Road/)).toBeInTheDocument();
 
     const select = screen.getByLabelText('Status');
@@ -126,6 +128,7 @@ describe('Orders', () => {
           dupattaPrice: null,
           jacketPrice: null,
           imageUrl: null,
+          measurements: '',
         },
       ],
     });

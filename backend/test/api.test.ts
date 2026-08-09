@@ -36,6 +36,7 @@ describe('API', () => {
   let adminToken: string;
 
   const sageM = () => seeded.sage.variants[0]; // stock 3
+  const sageCustom = () => seeded.sage.variants[1]; // stock 50
   const mossS = () => seeded.moss.variants[0]; // stock 1
 
   async function registerCustomer(email = 'aanya@example.com') {
@@ -351,6 +352,19 @@ describe('API', () => {
       const order = await res.json();
       expect(order.deliveryFee).toBe(250000);
       expect(order.total).toBe(18400000 + 250000);
+    });
+
+    it('accepts a measurements note up to 500 chars and echoes it on the item', async () => {
+      const note = 'bust 36 waist 30 '.padEnd(500, 'x'); // exactly the cap
+      const res = await app.request('/api/orders', post({ customer: CUSTOMER, deliveryMethod: 'standard', items: [{ variantId: sageCustom().id, quantity: 1, measurements: note }] }));
+      expect(res.status).toBe(201);
+      const order = await res.json();
+      expect(order.items[0].measurements).toBe(note);
+    });
+
+    it('400s a measurements note over 500 chars', async () => {
+      const res = await app.request('/api/orders', post({ customer: CUSTOMER, deliveryMethod: 'standard', items: [{ variantId: sageCustom().id, quantity: 1, measurements: 'x'.repeat(501) }] }));
+      expect(res.status).toBe(400);
     });
 
     it('attaches userId for Bearer orders and lists them under /api/me/orders', async () => {

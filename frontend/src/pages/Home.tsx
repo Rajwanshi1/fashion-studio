@@ -77,6 +77,7 @@ export default function Home() {
         includeJacket: detail.jacketPrice != null,
         dupattaPrice: detail.dupattaPrice,
         jacketPrice: detail.jacketPrice,
+        measurements: '',
       });
       showToast('Added to your bag');
       openDrawer();

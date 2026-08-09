@@ -29,13 +29,16 @@ export interface CartItem {
   /** Price of the kept add-on; null = excluded or not part of the set. */
   dupattaPrice: number | null;
   jacketPrice: number | null;
+  /** Free-text note for made-to-measure lines; '' otherwise. Part of line
+   *  identity — the same variant with a different note is a separate line. */
+  measurements: string;
 }
 
-/** Line identity: variant + set-includes selection. */
+/** Line identity: variant + set-includes selection + measurements note. */
 export function cartLineKey(
-  i: Pick<CartItem, 'variantId' | 'includeDupatta' | 'includeJacket'>,
+  i: Pick<CartItem, 'variantId' | 'includeDupatta' | 'includeJacket' | 'measurements'>,
 ): string {
-  return `${i.variantId}:${i.includeDupatta ? 1 : 0}${i.includeJacket ? 1 : 0}`;
+  return `${i.variantId}:${i.includeDupatta ? 1 : 0}${i.includeJacket ? 1 : 0}:${i.measurements}`;
 }
 
 interface CartContextValue {
@@ -64,7 +67,9 @@ function load(): CartItem[] {
         typeof i.includeDupatta === 'boolean'
           ? i
           : { ...i, includeDupatta: false, includeJacket: false, dupattaPrice: null, jacketPrice: null },
-      );
+      )
+      // Carts saved before made-to-measure notes lack the field; '' = no note.
+      .map((i) => (typeof i.measurements === 'string' ? i : { ...i, measurements: '' }));
   } catch {
     return [];
   }

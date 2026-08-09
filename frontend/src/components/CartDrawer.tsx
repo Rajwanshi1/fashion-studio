@@ -63,6 +63,7 @@ function DrawerUI({ open, onClose }: { open: boolean; onClose: () => void }) {
                       .filter(Boolean)
                       .join(' & ')}`}
                 </div>
+                {i.measurements && <div className="line-note">{i.measurements}</div>}
                 <button className="rm" onClick={() => remove(cartLineKey(i))}>
                   Remove
                 </button>

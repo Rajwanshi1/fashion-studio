@@ -25,10 +25,10 @@ Rang *Mehfil* featured band, lookbook cover band on the homepage.
 3. Active-filter chips reflect actually-applied filters (reference decoratively showed
    Sage + Size S).
 4. PLP price slider defaults to max so no seeded product is hidden on first load.
-5. PDP: default selected size is the first in-stock variant (reference showed S); a `Custom`
-   variant button appears (seeded made-to-measure capacity) alongside the reference's
-   "Made to Measure" button (routes to appointment booking); one extra made-to-order bullet
-   in Details & Composition.
+5. PDP: default selected size is the first in-stock variant (reference showed S); the seeded
+   `Custom` variant renders AS the "Made to Measure" chip (selectable like any size, with an
+   optional measurements note — no appointment-booking redirect); one extra made-to-order
+   bullet in Details & Composition.
 6. Image slots render the design system's celadon-gradient placeholder (no photography yet
    — see TODO-THIRD-PARTY.md); the design tool's tiny image icon glyph is not reproduced.
 

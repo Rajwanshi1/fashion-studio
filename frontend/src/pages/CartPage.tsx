@@ -47,6 +47,7 @@ export default function CartPage() {
                   )}
                   <span className="tag">Made to Order · 4–6 weeks</span>
                 </div>
+                {i.measurements && <div className="line-note">{i.measurements}</div>}
                 <div className="controls">
                   <div className="qty">
                     <button

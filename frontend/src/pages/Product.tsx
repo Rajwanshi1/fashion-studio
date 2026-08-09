@@ -50,6 +50,8 @@ export default function Product() {
   // Set pieces are included by default; unticking removes them from the price.
   const [incDupatta, setIncDupatta] = useState(false);
   const [incJacket, setIncJacket] = useState(false);
+  // Made-to-measure note draft; survives variant flips, addToBag gates on the flag.
+  const [measurements, setMeasurements] = useState('');
 
   const lastTrackedSlugRef = useRef<string | null>(null);
 
@@ -59,6 +61,7 @@ export default function Product() {
     setError(null);
     setThumb(0);
     setQty(1);
+    setMeasurements('');
     api
       .get<ProductDetail | { product: ProductDetail; related?: ProductSummary[] }>(
         `/api/products/${encodeURIComponent(slug)}`,
@@ -135,6 +138,7 @@ export default function Product() {
   }, [product]);
 
   const selectedVariant = product?.variants.find((v) => v.id === variantId);
+  const isMadeToMeasure = selectedVariant?.size === 'Custom';
   const detailLines = useMemo(
     () =>
       (product?.details ?? '')
@@ -169,6 +173,7 @@ export default function Product() {
         includeJacket: chosenJacket != null,
         dupattaPrice: chosenDupatta,
         jacketPrice: chosenJacket,
+        measurements: isMadeToMeasure ? measurements.trim() : '',
       },
       qty,
     );
@@ -279,22 +284,24 @@ export default function Product() {
             </span>
           </div>
           <div className="sizes" id="sizes">
-            {product.variants.map((v) => (
-              <button
-                key={v.id}
-                className={`size${v.id === variantId ? ' active' : ''}`}
-                disabled={v.stock === 0}
-                onClick={() => {
-                  setVariantId(v.id);
-                  track('variant_select', { productId: product.id, props: { variantId: v.id, size: v.size } });
-                }}
-              >
-                {v.size}
-              </button>
-            ))}
-            <button className="size custom" onClick={() => navigate('/contact')}>
-              Made to Measure
-            </button>
+            {product.variants.map((v) => {
+              // The Custom variant IS the made-to-measure option — a real,
+              // orderable size chip, not a detour to the contact page.
+              const custom = v.size === 'Custom';
+              return (
+                <button
+                  key={v.id}
+                  className={`size${custom ? ' custom' : ''}${v.id === variantId ? ' active' : ''}`}
+                  disabled={v.stock === 0}
+                  onClick={() => {
+                    setVariantId(v.id);
+                    track('variant_select', { productId: product.id, props: { variantId: v.id, size: v.size } });
+                  }}
+                >
+                  {custom ? 'Made to Measure' : v.size}
+                </button>
+              );
+            })}
           </div>
 
           {(product.dupattaPrice != null || product.jacketPrice != null) && (
@@ -329,11 +336,36 @@ export default function Product() {
             </>
           )}
 
+          {isMadeToMeasure && (
+            <div className="mtm-panel">
+              <p>
+                <strong>Made to measure.</strong> After you place your order, our atelier will
+                reach out over call and WhatsApp within 48 hours to take your measurements.
+              </p>
+              <label className="mtm-label" htmlFor="mtmNotes">
+                Share measurements or notes (optional)
+              </label>
+              <textarea
+                id="mtmNotes"
+                maxLength={500}
+                rows={3}
+                placeholder="e.g. bust 36in, waist 30in, height 5'6&quot; — or anything we should know"
+                value={measurements}
+                onChange={(e) => setMeasurements(e.target.value)}
+              />
+            </div>
+          )}
+
           <div className="mto">
             <span className="dot"></span>
             <p>
               <strong>Made to order.</strong> Each piece is crafted on commission and dispatched in
-              4–6 weeks. Book a complimentary virtual fitting for a made-to-measure cut.
+              4–6 weeks. Questions? Call us before ordering at{' '}
+              <a href="tel:+918118892523">+91 81188 92523</a> or on{' '}
+              <a href="https://wa.me/918118892523" target="_blank" rel="noreferrer">
+                WhatsApp
+              </a>
+              .
             </p>
           </div>
 
@@ -400,8 +432,8 @@ export default function Product() {
             </summary>
             <div className="acc-body">
               Crafted on commission in our atelier. Standard sizes ship in 4–6 weeks;
-              made-to-measure in 6–8 weeks following a virtual fitting. Our team will be in touch
-              within 48 hours of order to confirm measurements.
+              made-to-measure in 6–8 weeks. Our team will reach out over call and WhatsApp within
+              48 hours of your order to take measurements.
             </div>
           </details>
           <details className="acc">
