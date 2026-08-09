@@ -38,7 +38,31 @@ export interface Category {
   productCount?: number;
 }
 
-export type ProductFlag = 'bestseller' | 'new' | null;
+export type ProductFlag = 'bestseller' | 'new' | 'sale' | null;
+
+/** Canonical colour buckets. Order is the shop's swatch-row display order. */
+export const COLOR_FAMILIES = [
+  'red',
+  'pink',
+  'orange-rust',
+  'yellow-gold',
+  'green',
+  'blue',
+  'purple',
+  'white-ivory',
+  'beige-nude',
+  'brown',
+  'black',
+  'multi',
+] as const;
+
+export type ColorFamily = (typeof COLOR_FAMILIES)[number];
+
+/** One gallery photo. `pose` is a short label ('front', 'drape', …), '' when unknown. */
+export interface ProductImage {
+  url: string;
+  pose: string;
+}
 
 export interface ProductSummary {
   id: string;
@@ -57,6 +81,11 @@ export interface ProductSummary {
   dupattaPrice: number | null;
   /** Paise; null = no jacket in the set, 0 = included at no extra cost. */
   jacketPrice: number | null;
+  /** Canonical colour bucket for the shop filter; null when never resolved. */
+  colorFamily: ColorFamily | null;
+  /** Paise; discounted BASE price, meaningful only when flag === 'sale'.
+   *  Add-ons are never discounted. */
+  salePrice: number | null;
 }
 
 export interface Variant {
@@ -73,6 +102,8 @@ export interface ProductDetail extends ProductSummary {
   fabric: string;
   active: boolean;
   variants: Variant[];
+  /** Ordered gallery; images[0].url mirrors imageUrl. */
+  images: ProductImage[];
 }
 
 export type ProductSort = 'featured' | 'new' | 'price_asc' | 'price_desc';
@@ -80,6 +111,7 @@ export type ProductSort = 'featured' | 'new' | 'price_asc' | 'price_desc';
 export interface ProductFilter {
   categorySlug?: string;
   collection?: string;
+  colorFamily?: ColorFamily;
   search?: string;
   sort?: ProductSort;
   page: number;

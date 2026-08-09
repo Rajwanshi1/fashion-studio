@@ -25,6 +25,7 @@ import { orderRoutes } from './routes/orders.routes';
 import { paymentRoutes } from './routes/payments.routes';
 import { socialsRoutes } from './routes/socials.routes';
 import { uploadsRoutes } from './routes/uploads.routes';
+import type { CatalogAi } from './services/ai/catalog-ai';
 import type { BillParser } from './services/ai/parser';
 import { createAnalyticsService } from './services/analytics.service';
 import { createAuthService, VerifyGoogleToken } from './services/auth.service';
@@ -58,6 +59,9 @@ export interface AppDeps {
   objectStore: ObjectStore;
   /** Masked parsing seam — null/undefined until ANTHROPIC_API_KEY exists (parse answers 503). */
   billParser?: BillParser | null;
+  /** Masked catalog-AI seam — null/undefined until ANTHROPIC_API_KEY exists;
+   *  colour mapping then falls back to keywords and image names to uuids. */
+  catalogAi?: CatalogAi | null;
   /** Set only when the LocalObjectStore is active — mounts the dev-only /api/uploads transport. */
   localUploads?: LocalObjectStore | null;
   /** Masked Google sign-in seam — null/undefined until GOOGLE_CLIENT_ID exists. */

@@ -256,6 +256,8 @@ function toSummary(p: AdminProduct): ProductSummary {
     occasion: p.occasion,
     dupattaPrice: p.dupattaPrice,
     jacketPrice: p.jacketPrice,
+    colorFamily: p.colorFamily,
+    salePrice: p.salePrice,
   };
 }
 
@@ -416,6 +418,10 @@ export class FakeProductsRepo implements ProductsRepo {
       occasion: input.occasion ?? '',
       dupattaPrice: input.dupattaPrice ?? null,
       jacketPrice: input.jacketPrice ?? null,
+      // Contract placeholders — CreateProductInput does not carry these yet.
+      colorFamily: null,
+      salePrice: null,
+      images: [],
       active: input.active ?? true,
       variants: sizes.map((v) => ({ id: nextId('v'), productId: id, size: v.size, stock: v.stock })),
       categoryId: category.id,

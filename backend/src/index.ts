@@ -76,6 +76,10 @@ async function main() {
     paymentProvider: config.paymentProvider === 'mock' ? new MockRazorpayProvider() : null,
     objectStore,
     billParser,
+    // Placeholder: the Claude-backed catalog AI (colour mapping + image naming)
+    // lands separately. Null keeps colour on the keyword map and image names on
+    // uuid keys, which is also the no-API-key behaviour.
+    catalogAi: null,
     localUploads,
     verifyGoogleToken: config.googleClientId ? createGoogleVerifier(config.googleClientId) : null,
     smsProvider:

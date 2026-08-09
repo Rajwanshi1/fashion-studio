@@ -144,6 +144,9 @@ function mapSummary(row: any): ProductSummary {
     occasion: row.occasion ?? '',
     dupattaPrice: row.dupatta_price ?? null,
     jacketPrice: row.jacket_price ?? null,
+    // Contract placeholders — the selects do not read these columns yet.
+    colorFamily: null,
+    salePrice: null,
   };
 }
 
@@ -160,6 +163,8 @@ function mapDetail(row: any, variants: Variant[]): AdminProduct {
     fabric: row.fabric ?? '',
     active: row.active,
     variants,
+    // Contract placeholder — the gallery is not loaded yet.
+    images: [],
     categoryId: row.category_id,
     createdAt: row.created_at.toISOString(),
   };

@@ -30,7 +30,7 @@ interface FormState {
   details: string;
   priceRupees: string;
   color: string;
-  flag: '' | 'bestseller' | 'new';
+  flag: '' | 'bestseller' | 'new' | 'sale';
   imageUrl: string;
   active: boolean;
   collection: string;

@@ -34,7 +34,31 @@ export interface Category {
   productCount?: number;
 }
 
-export type ProductFlag = 'bestseller' | 'new' | null;
+export type ProductFlag = 'bestseller' | 'new' | 'sale' | null;
+
+/** Canonical colour buckets. Order is the shop's swatch-row display order. */
+export const COLOR_FAMILIES = [
+  'red',
+  'pink',
+  'orange-rust',
+  'yellow-gold',
+  'green',
+  'blue',
+  'purple',
+  'white-ivory',
+  'beige-nude',
+  'brown',
+  'black',
+  'multi',
+] as const;
+
+export type ColorFamily = (typeof COLOR_FAMILIES)[number];
+
+/** One gallery photo. `pose` is a short label ('front', 'drape', …), '' when unknown. */
+export interface ProductImage {
+  url: string;
+  pose: string;
+}
 
 export interface Variant {
   id: string;
@@ -63,6 +87,15 @@ export interface AdminProduct {
   /** Paise; null = no such piece in the set, 0 = included at no extra cost. */
   dupattaPrice: number | null;
   jacketPrice: number | null;
+  /** Canonical colour bucket for the shop filter; null when never resolved. */
+  colorFamily: ColorFamily | null;
+  /** Paise; discounted BASE price, meaningful only when flag === 'sale'.
+   *  Add-ons are never discounted. */
+  salePrice: number | null;
+  /** Paise; what the piece cost to make. Admin-only — never on a public endpoint. */
+  costPrice: number | null;
+  /** Ordered gallery; images[0].url mirrors imageUrl. */
+  images: ProductImage[];
   active: boolean;
   variants: Variant[];
 }

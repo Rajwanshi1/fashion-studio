@@ -78,6 +78,8 @@ export const P1: ProductSummary = {
   occasion: 'Wedding',
   dupattaPrice: null,
   jacketPrice: null,
+  colorFamily: null,
+  salePrice: null,
 };
 
 export const P2: ProductSummary = {
@@ -94,6 +96,8 @@ export const P2: ProductSummary = {
   occasion: 'Festive',
   dupattaPrice: null,
   jacketPrice: null,
+  colorFamily: null,
+  salePrice: null,
 };
 
 export const DETAIL1: ProductDetail = {
@@ -108,6 +112,7 @@ export const DETAIL1: ProductDetail = {
     { id: 'v2', productId: 'p1', size: 'M', stock: 2 },
     { id: 'v3', productId: 'p1', size: 'L', stock: 0 },
   ],
+  images: [],
   related: [P2],
 };
 
