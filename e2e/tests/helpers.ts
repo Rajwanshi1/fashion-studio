@@ -27,6 +27,10 @@ export interface AdminProductRow {
   id: string;
   name: string;
   slug: string;
+  price: number;
+  flag: 'bestseller' | 'new' | 'sale' | null;
+  salePrice: number | null;
+  active: boolean;
   variants: AdminVariant[];
 }
 

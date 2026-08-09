@@ -44,6 +44,8 @@ since printed QRs outlive any environment. Each scan logs the source via
 Seeded logins: admin `admin@tanviagnihotry.com` / `TanviAdmin@2026` ·
 demo customer `aanya@example.com` / `Aanya@2026`.
 API base for the SPAs: `VITE_API_URL` (defaults to `http://localhost:3001`).
+Storefront origin for the admin's live product links: `VITE_SHOP_URL` (defaults to
+`http://localhost:5173`).
 Backend env (see `docker-compose.yml`): `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS`,
 `SEED_ON_START`, `PORT`, `MIGRATIONS_DIR`.
 

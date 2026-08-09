@@ -190,6 +190,15 @@ table.data { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .data td .dim { color: var(--fg-muted); font-size: 0.78rem; }
 .data tbody tr.rowlink { cursor: pointer; transition: background var(--dur) var(--ease); }
 .data tbody tr.rowlink:hover { background: var(--celadon-50); }
+/* Up to three gallery frames per row — enough to judge a piece at a glance. */
+.data td .thumbs { display: flex; gap: 0.3rem; }
+.data td .thumbs img {
+  width: 34px; height: 44px; object-fit: cover;
+  border-radius: 2px; border: 1px solid var(--hairline); background: var(--celadon-50);
+}
+/* On sale: the struck list price sits beside what the piece now sells for. */
+.data td .was { color: var(--fg-muted); text-decoration: line-through; margin-right: 0.45rem; font-size: 0.78rem; }
+.data td .off { color: var(--gold); font-size: 0.7rem; margin-left: 0.35rem; }
 .data td.empty { text-align: center; color: var(--fg-muted); padding: 2.6rem 1rem; font-size: var(--t-sm); }
 .data tr.detail > td { background: var(--celadon-50); padding: 1.4rem 1.1rem; }
 
@@ -360,6 +369,34 @@ select.inp {
 .chip { font-size: 0.64rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink); border: 1px solid var(--hairline); border-radius: var(--edge); padding: 0.6em 1.1em; cursor: pointer; background: none; transition: all var(--dur) var(--ease); font-family: var(--sans); }
 .chip:hover { border-color: var(--gold); }
 .chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+/* ---- Products: filter bar + bulk action bar ---- */
+/* Both bars are flex rows of .field groups, so the shared form margin has to go. */
+.filter-bar, .bulk-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.7rem 1rem; }
+.filter-bar { margin: 1.1rem 0 1.4rem; }
+.filter-bar .field, .bulk-bar .field { margin-bottom: 0; }
+.filter-bar .field { flex: 1 1 9rem; }
+.filter-bar .field.narrow { flex: 0 1 7rem; }
+.filter-tail { display: flex; align-items: center; gap: 1rem; margin-left: auto; }
+
+.bulk-bar {
+  margin: 1.1rem 0 1.4rem;
+  padding: 1rem 1.2rem;
+  background: var(--celadon-50);
+  border: 1px solid var(--hairline-gold);
+  border-radius: var(--edge);
+}
+.bulk-count { font-size: 0.7rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold); }
+/* Each group keeps its input glued to the button that consumes it. */
+.bulk-group { display: flex; align-items: flex-end; gap: 0.5rem; }
+.bulk-group .lab { margin-bottom: 0; align-self: center; white-space: nowrap; }
+.bulk-bar .inp { width: auto; padding-block: 0.7em; }
+.bulk-bar .inp.narrow { width: 5.5rem; }
+.bulk-bar .btn-outline.fit { padding: 0.85em 1.4em; }
+.btn-outline.danger { border-color: var(--danger); color: var(--danger); }
+.btn-outline.danger:hover { background: var(--danger); color: var(--paper); border-color: var(--danger); }
+.btn-outline:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-outline:disabled:hover { background: none; border-color: var(--hairline-gold); }
 
 /* Comfortable touch targets on touch devices */
 @media (pointer: coarse) {

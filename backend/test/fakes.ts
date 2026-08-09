@@ -12,6 +12,8 @@ import type { AdminPayment, CreatePaymentInput, PaymentsRepo } from '../src/data
 import type {
   AdminProduct,
   BulkDeleteResult,
+  BulkProductAction,
+  BulkUpdateResult,
   CreateCategoryInput,
   CreateProductInput,
   ProductsRepo,
@@ -505,6 +507,53 @@ export class FakeProductsRepo implements ProductsRepo {
       }
     }
     return { deleted, archived };
+  }
+
+  async bulkUpdate(ids: string[], action: BulkProductAction): Promise<BulkUpdateResult> {
+    const updated: string[] = [];
+    const skipped: string[] = [];
+    const notFound: string[] = [];
+    for (const id of ids) {
+      const p = this.products.find((x) => x.id === id && !x.deletedAt);
+      if (!p) {
+        notFound.push(id);
+        continue;
+      }
+      if (!applyBulkAction(p, action)) {
+        skipped.push(id);
+        continue;
+      }
+      updated.push(id);
+    }
+    return { updated, skipped, notFound };
+  }
+}
+
+/**
+ * Mirrors the SQL in products.repo.ts, including the whole-rupee rounding and
+ * the 0 < sale_price < price guard. Returns false when the action doesn't apply.
+ */
+function applyBulkAction(p: FakeProduct, action: BulkProductAction): boolean {
+  switch (action.type) {
+    case 'sale': {
+      const sale = Math.round((p.price * (100 - action.discountPct)) / 10000) * 100;
+      if (sale < 1 || sale > p.price - 1) return false;
+      p.flag = 'sale';
+      p.salePrice = sale;
+      return true;
+    }
+    case 'end_sale':
+      if (p.flag !== 'sale') return false;
+      p.flag = null;
+      p.salePrice = null;
+      return true;
+    case 'visibility':
+      p.active = action.active;
+      return true;
+    case 'flag':
+      p.flag = action.flag;
+      p.salePrice = null;
+      return true;
   }
 }
 
