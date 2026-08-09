@@ -23,7 +23,13 @@ function productsPayload() {
 /** renderApp() + a probe so ?color= URL syncing can be asserted directly. */
 function LocationProbe() {
   const loc = useLocation();
-  return <span data-testid="loc">{loc.search}</span>;
+  return (
+    <>
+      <span data-testid="loc">{loc.search}</span>
+      {/* Category lives in the path, not the query string. */}
+      <span data-testid="path">{loc.pathname}</span>
+    </>
+  );
 }
 
 function renderPlp(route: string) {
@@ -194,6 +200,96 @@ describe('PLP', () => {
       expect(screen.getByTestId('loc')).not.toHaveTextContent('color=pink');
     });
     expect(screen.getByRole('button', { name: 'Pink' })).not.toHaveClass('on');
+  });
+
+  // The category is the route, so clearing it is a navigation to the slugless
+  // PLP. Before this existed the checked box was a no-op and the chip's ✕ left
+  // for the editorial page — there was no way to see the whole catalogue.
+  it('unchecking the active category clears to the all-pieces route', async () => {
+    const fetchMock = mockFetch((url) => {
+      if (url.includes('/api/categories')) return CATEGORIES;
+      if (url.includes('/api/products')) return productsPayload();
+      return undefined;
+    });
+
+    renderPlp('/collection/lehenga');
+    await screen.findAllByText('Sage Sequin Jacket Lehenga');
+    expect(screen.getByRole('checkbox', { name: /^Lehenga/ })).toBeChecked();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('checkbox', { name: /^Lehenga/ }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('path')).toHaveTextContent('/collection');
+    });
+    expect(screen.getByTestId('path').textContent).toBe('/collection');
+    expect(screen.getByRole('heading', { level: 1, name: 'All Pieces' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'All Pieces' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /^Lehenga/ })).not.toBeChecked();
+
+    // An empty category= is what the API reads as "no category filter".
+    const urls = productUrls(fetchMock);
+    expect(urls[urls.length - 1]).toContain('category=&');
+  });
+
+  it("clears the category from the chip's ✕, keeping the other refinements", async () => {
+    mockFetch((url) => {
+      if (url.includes('/api/categories')) return CATEGORIES;
+      if (url.includes('/api/products')) return productsPayload();
+      return undefined;
+    });
+
+    renderPlp('/collection/lehenga?color=pink');
+    await screen.findAllByText('Sage Sequin Jacket Lehenga');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Remove Lehenga' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('path').textContent).toBe('/collection');
+    });
+    expect(screen.getByTestId('loc')).toHaveTextContent('color=pink');
+    expect(screen.queryByRole('button', { name: 'Remove Lehenga' })).not.toBeInTheDocument();
+  });
+
+  it('lists the whole catalogue on the slugless route, with no category chip', async () => {
+    const fetchMock = mockFetch((url) => {
+      if (url.includes('/api/categories')) return CATEGORIES;
+      if (url.includes('/api/products')) return productsPayload();
+      return undefined;
+    });
+
+    renderPlp('/collection');
+
+    expect((await screen.findAllByText('Sage Sequin Jacket Lehenga')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Moss Tissue Mirror Lehenga').length).toBeGreaterThan(0);
+    expect(screen.getByRole('checkbox', { name: 'All Pieces' })).toBeChecked();
+    CATEGORIES.forEach((c) => {
+      expect(screen.getByRole('checkbox', { name: new RegExp(`^${c.name}`) })).not.toBeChecked();
+    });
+    expect(screen.queryByRole('button', { name: /^Remove (Kaftan|Anarkali|Suits|Lehenga|Antifit)$/ })).not.toBeInTheDocument();
+    expect(productUrls(fetchMock).every((u) => u.includes('category=&'))).toBe(true);
+  });
+
+  it('checking a category from the all-pieces route filters to it', async () => {
+    const fetchMock = mockFetch((url) => {
+      if (url.includes('/api/categories')) return CATEGORIES;
+      if (url.includes('/api/products')) return productsPayload();
+      return undefined;
+    });
+
+    renderPlp('/collection');
+    await screen.findAllByText('Sage Sequin Jacket Lehenga');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('checkbox', { name: /^Anarkali/ }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('path').textContent).toBe('/collection/anarkali');
+    });
+    expect(screen.getByRole('checkbox', { name: 'All Pieces' })).not.toBeChecked();
+    const urls = productUrls(fetchMock);
+    expect(urls[urls.length - 1]).toContain('category=anarkali');
   });
 
   it('prices a sale card with the pre-sale total struck through', async () => {

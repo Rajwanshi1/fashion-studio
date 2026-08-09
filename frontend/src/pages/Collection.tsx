@@ -14,6 +14,8 @@ import '../styles/plp.css';
 
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'Custom'];
 const OCCASIONS = ['Wedding', 'Reception', 'Festive', 'Cocktail'];
+/** Heading and sidebar label for the slugless route — the whole catalogue. */
+const ALL_PIECES = 'All Pieces';
 const PRICE_MIN = 50000; // rupees
 const PRICE_MAX = 300000; // rupees
 
@@ -84,13 +86,18 @@ export default function Collection() {
     };
   }, [categorySlug, sort, page, collection, color]);
 
+  // No slug in the route means every piece. The fetch above already sends an
+  // empty `category=`, which catalog.service.ts normalises away, so the only
+  // thing that needs saying here is what to call it on screen.
+  const allPieces = categorySlug === '';
   const category = cats.find((c) => c.slug === categorySlug);
-  const categoryName =
-    category?.name ??
-    categorySlug
-      .split('-')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
+  const categoryName = allPieces
+    ? ALL_PIECES
+    : (category?.name ??
+      categorySlug
+        .split('-')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' '));
 
   const items = useMemo(() => {
     let list = data?.items ?? [];
@@ -150,6 +157,19 @@ export default function Collection() {
 
   const setCollection = (name: string) => patchParams({ collection: name });
   const setColor = (token: string) => patchParams({ color: token });
+
+  /**
+   * Category lives in the route rather than the query string, so switching it is
+   * a navigation. An empty slug lands on the slugless route — the whole
+   * catalogue — which is how the category gets cleared. The refinement params
+   * ride along and paging resets, matching patchParams.
+   */
+  const goToCategory = (slug: string) => {
+    const next = new URLSearchParams(params);
+    next.delete('page');
+    const qs = next.toString();
+    navigate(`${slug ? `/collection/${slug}` : '/collection'}${qs ? `?${qs}` : ''}`);
+  };
 
   const clearAll = () => {
     setSizes([]);
@@ -212,17 +232,23 @@ export default function Collection() {
         <aside className={`filters${filtersOpen ? ' show' : ''}`}>
           <div className="fgroup">
             <h4>Category</h4>
+            <label className="fopt">
+              <input type="checkbox" checked={allPieces} onChange={() => goToCategory('')} />{' '}
+              {ALL_PIECES}
+            </label>
             {(cats.length
               ? cats
-              : [{ id: categorySlug, slug: categorySlug, name: categoryName, description: '', position: 0 }]
+              : // Categories failed to load: keep the current one visible so it can
+                // still be cleared. On the slugless route there is nothing to stand in for.
+                allPieces
+                ? []
+                : [{ id: categorySlug, slug: categorySlug, name: categoryName, description: '', position: 0 }]
             ).map((c) => (
               <label className="fopt" key={c.slug}>
                 <input
                   type="checkbox"
                   checked={c.slug === categorySlug}
-                  onChange={() => {
-                    if (c.slug !== categorySlug) navigate(`/collection/${c.slug}`);
-                  }}
+                  onChange={() => goToCategory(c.slug === categorySlug ? '' : c.slug)}
                 />{' '}
                 {c.name}{' '}
                 {c.productCount != null && <span className="ct">{c.productCount}</span>}
@@ -326,12 +352,14 @@ export default function Collection() {
           </div>
 
           <div className="active-chips">
-            <span className="ac">
-              {categoryName}{' '}
-              <button aria-label={`Remove ${categoryName}`} onClick={() => navigate('/collections')}>
-                ✕
-              </button>
-            </span>
+            {!allPieces && (
+              <span className="ac">
+                {categoryName}{' '}
+                <button aria-label={`Remove ${categoryName}`} onClick={() => goToCategory('')}>
+                  ✕
+                </button>
+              </span>
+            )}
             {colorMeta && (
               <span className="ac">
                 {colorMeta.label}{' '}

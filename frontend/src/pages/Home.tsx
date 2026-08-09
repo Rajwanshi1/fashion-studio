@@ -100,7 +100,7 @@ export default function Home() {
             Tanvi Agnihotry<span className="ital">heritage, made to move.</span>
           </h1>
           <div className="actions">
-            <Link className="btn-buy" to="/collection/lehenga">
+            <Link className="btn-buy" to="/collection">
               Discover the Collection
             </Link>
             <Link className="btn-outline" to="/contact">
@@ -161,7 +161,7 @@ export default function Home() {
               way the modern Indian woman actually moves. Each piece made to order, each made to
               last.
             </p>
-            <Link className="btn btn-line" to="/collection/lehenga">
+            <Link className="btn btn-line" to="/collection">
               Explore the Edit <span>→</span>
             </Link>
           </div>
