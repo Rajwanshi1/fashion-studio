@@ -20,11 +20,13 @@ const str = z.string().max(300);
 const copy = z.string().max(1000);
 // Links land in href/src on the public storefront; only an admin writes them,
 // but keep `javascript:` and friends out. '' is legal — the admin form submits
-// blanks for socials the studio has not set.
+// blanks for socials the studio has not set. The path branch excludes a second
+// slash: `//evil.com` is protocol-relative, an off-site link wearing a path's
+// clothes.
 const url = z
   .string()
   .max(500)
-  .refine((v) => v === '' || /^(https?:\/\/|\/|mailto:|tel:)/i.test(v), 'Must be a link (https://…, /path, mailto: or tel:)');
+  .refine((v) => v === '' || /^(https?:\/\/|\/(?!\/)|mailto:|tel:)/i.test(v), 'Must be a link (https://…, /path, mailto: or tel:)');
 const image = url.nullable();
 
 const look = z.object({ imageUrl: image, lookNo: str, title: str, copy, ctaHref: url }).partial().strict();

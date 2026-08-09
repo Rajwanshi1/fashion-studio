@@ -23,6 +23,26 @@ function Caption({ look }: { look: Look }) {
   );
 }
 
+/**
+ * A look's photo. `label` is the empty-state caption — an instruction to the
+ * boutique about what belongs in the slot — so once a photo exists the look's
+ * own title is what a visitor's screen reader should hear instead. Looks
+ * without a caption (02, 03, 05–07) fall back to the label.
+ */
+function LookSlot({
+  look,
+  label,
+  className,
+}: {
+  look: Look;
+  label: string;
+  className: string;
+}) {
+  return (
+    <ImageSlot className={className} src={look.imageUrl} label={label} alt={look.title || label} />
+  );
+}
+
 export default function Lookbook() {
   const { lookbookCover, lookbook } = useSiteContent();
   // Fixed slots: the page's shape never changes, only the content flowing in.
@@ -31,7 +51,11 @@ export default function Lookbook() {
   return (
     <Shop page="page-lookbook">
       <header className="lb-cover">
-        <ImageSlot src={lookbookCover.imageUrl} label="Lookbook cover — full bleed editorial" />
+        <ImageSlot
+          src={lookbookCover.imageUrl}
+          label="Lookbook cover — full bleed editorial"
+          alt={lookbookCover.masthead}
+        />
         <div className="cc">
           <div className="masthead">{lookbookCover.masthead}</div>
           <div className="sub">
@@ -49,12 +73,12 @@ export default function Lookbook() {
       <main className="lb">
         <section className="spread text-left">
           <Caption look={looks[0]} />
-          <ImageSlot className="ar54" src={looks[0].imageUrl} label="Look 01 — wide" />
+          <LookSlot className="ar54" look={looks[0]} label="Look 01 — wide" />
         </section>
 
         <section className="spread duo">
-          <ImageSlot className="ar34" src={looks[1].imageUrl} label="Look 02" />
-          <ImageSlot className="ar34" src={looks[2].imageUrl} label="Look 03" />
+          <LookSlot className="ar34" look={looks[1]} label="Look 02" />
+          <LookSlot className="ar34" look={looks[2]} label="Look 03" />
         </section>
 
         <div className="pull">
@@ -63,17 +87,17 @@ export default function Lookbook() {
         </div>
 
         <section className="spread offset">
-          <ImageSlot className="ar45" src={looks[3].imageUrl} label="Look 04 — large" />
+          <LookSlot className="ar45" look={looks[3]} label="Look 04 — large" />
           <Caption look={looks[3]} />
         </section>
 
         <section className="spread duo">
-          <ImageSlot className="ar34" src={looks[4].imageUrl} label="Look 05" />
-          <ImageSlot className="ar34" src={looks[5].imageUrl} label="Look 06" />
+          <LookSlot className="ar34" look={looks[4]} label="Look 05" />
+          <LookSlot className="ar34" look={looks[5]} label="Look 06" />
         </section>
 
         <section className="spread">
-          <ImageSlot className="ar54" src={looks[6].imageUrl} label="Look 07 — full bleed" />
+          <LookSlot className="ar54" look={looks[6]} label="Look 07 — full bleed" />
         </section>
       </main>
       <Reveal />

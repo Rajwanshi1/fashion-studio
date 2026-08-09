@@ -23,6 +23,27 @@ describe('site content list', () => {
     expect(screen.getByText('Custom headline')).toBeInTheDocument();
   });
 
+  it('previews the default when a stored field is blank', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/content')) {
+        // Cleared in the editor and saved: the site still shows its built-in
+        // copy, so the card has to preview that too — not an empty line.
+        return { json: { sections: { hero: { title: '' }, ticker: { items: [] } } } };
+      }
+      return undefined;
+    });
+
+    renderApp('/site');
+
+    expect(await screen.findByText('Tanvi Agnihotry', { selector: '.prev' })).toBeInTheDocument();
+    expect(
+      screen.getByText(/^Complimentary Made-to-Order Consultation · Worldwide Shipping/),
+    ).toBeInTheDocument();
+    // still flagged as customised — the section row does exist
+    expect(screen.getAllByText('Customised')).toHaveLength(2);
+  });
+
   it('previews built-in defaults and links each card to its editor', async () => {
     seedAdminAuth();
     mockFetch((url) => {

@@ -511,7 +511,13 @@ select.inp {
 /* ---- Site: one card per editable storefront section ---- */
 /* Softer corners than the couture --edge here on purpose: these are thumb-sized
    tap targets on a phone, not editorial chrome. */
-.site-cards { display: grid; grid-template-columns: 1fr; gap: 12px; max-width: 860px; }
+/* minmax(0, 1fr), not 1fr: a plain `1fr` track takes its automatic minimum from
+   the card's min-content width, and the card's one-line preview is `nowrap`, so
+   the track grew to ~700px and pushed the badge off the right of a phone
+   screen. `min-width: 0` on the text column can't prevent that — min-width
+   governs shrinking, not the min-content contribution. Desktop is unaffected:
+   the track still fills the 860px max-width. */
+.site-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; max-width: 860px; }
 .site-card {
   display: flex;
   align-items: center;
@@ -552,7 +558,15 @@ select.inp {
   text-transform: uppercase;
   color: var(--gold);
 }
-.site-card .nm { font-family: var(--serif-display); font-size: 1rem; line-height: 1.25; }
+/* One line each, ellipsised — the badge column is never pushed off the card. */
+.site-card .nm {
+  font-family: var(--serif-display);
+  font-size: 1rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .site-card .prev {
   font-size: 0.8rem;
   color: var(--fg-muted);

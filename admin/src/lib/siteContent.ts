@@ -66,7 +66,7 @@ export const SECTIONS: SectionConfig[] = [
       { name: 'titleEm', label: 'Title italic word', type: 'text' },
       { name: 'copy', label: 'Copy', type: 'textarea' },
       { name: 'ctaLabel', label: 'Link label', type: 'text' },
-      { name: 'ctaHref', label: 'Link target', type: 'text', hint: 'A path on the site, e.g. /collection/lehenga' },
+      { name: 'ctaHref', label: 'Link target', type: 'text', hint: 'A path on the site, e.g. /collection' },
     ],
   },
   {
@@ -150,7 +150,7 @@ export const SECTION_DEFAULTS: Record<SectionKey, Record<string, unknown>> = {
     titleEm: 'Mehfil',
     copy: 'Hand-embroidered indo-western silhouettes in moss, sage and pistachio — cut for the way the modern Indian woman actually moves. Each piece made to order, each made to last.',
     ctaLabel: 'Explore the Edit',
-    ctaHref: '/collection/lehenga',
+    ctaHref: '/collection',
   },
   marquee: {
     items: ['Made to Order', '— hand embroidered —', 'The Verdant Edit', '— Spring 2026 —'],
@@ -207,6 +207,59 @@ export const SECTION_DEFAULTS: Record<SectionKey, Record<string, unknown>> = {
     whatsappUrl: '',
   },
 };
+
+/* ---- Stored ← default, by the storefront's blank-loses rule ---- */
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function mergeValue(stored: unknown, fallback: unknown): unknown {
+  if (stored === undefined || stored === null) return fallback;
+  if (typeof stored === 'string') return stored.trim() === '' ? fallback : stored;
+  if (Array.isArray(stored)) return mergeArray(stored, fallback);
+  if (isRecord(stored)) return mergeRecord(stored, isRecord(fallback) ? fallback : {});
+  return stored;
+}
+
+function mergeArray(stored: unknown[], fallback: unknown): unknown[] {
+  const defaults = Array.isArray(fallback) ? fallback : [];
+  // Lists of copy (marquee, ticker, sub-lines) are replaced wholesale — an
+  // empty or all-blank list falls back to the default.
+  if (stored.every((item) => typeof item === 'string')) {
+    const kept = (stored as string[]).filter((item) => item.trim() !== '');
+    return kept.length > 0 ? kept : defaults;
+  }
+  // Lists of rows (trust promises, looks) merge per index over their default.
+  const length = Math.max(stored.length, defaults.length);
+  return Array.from({ length }, (_, i) => mergeValue(stored[i], defaults[i]));
+}
+
+function mergeRecord(
+  stored: Record<string, unknown>,
+  fallback: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...fallback };
+  for (const [name, value] of Object.entries(stored)) {
+    merged[name] = mergeValue(value, fallback[name]);
+  }
+  return merged;
+}
+
+/**
+ * A section's *effective* content — what the storefront actually renders.
+ *
+ * A shallow `{ ...defaults, ...stored }` would let a stored `''` win, so a card
+ * would preview a blank the site never shows; the storefront and the editor
+ * both read blank as "no override" (frontend/src/lib/content.tsx). This applies
+ * that rule per field so all three agree.
+ */
+export function sectionValue(
+  key: SectionKey,
+  stored: Record<string, unknown> | null,
+): Record<string, unknown> {
+  return mergeRecord(stored ?? {}, SECTION_DEFAULTS[key]);
+}
 
 /** Values arrive from the API as `unknown` — read them defensively. */
 function text(value: unknown): string {

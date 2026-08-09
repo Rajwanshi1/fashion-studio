@@ -93,7 +93,13 @@ export default function Home() {
 
       {/* HERO */}
       <header className="hero">
-        <ImageSlot src={site.hero.imageUrl} label="Drop campaign image — full bleed editorial" />
+        {/* `label` is the empty-state caption (an instruction to the boutique);
+            `alt` is what a visitor's screen reader hears once a photo exists. */}
+        <ImageSlot
+          src={site.hero.imageUrl}
+          label="Drop campaign image — full bleed editorial"
+          alt={site.hero.title}
+        />
         <div className="veil"></div>
         <div className="side-label">{site.hero.seasonLabel}</div>
         <div className="hero-inner">
@@ -155,6 +161,7 @@ export default function Home() {
           <ImageSlot
             src={site.featured.imageUrl}
             label="Featured collection — editorial portrait"
+            alt={site.featured.title}
           />
           <div className="feat-text">
             <span className="eyebrow">{site.featured.eyebrow}</span>
@@ -204,7 +211,11 @@ export default function Home() {
 
       {/* LOOKBOOK COVER */}
       <section id="look" className="look">
-        <ImageSlot src={site.lookbookCover.imageUrl} label="Lookbook cover — full bleed" />
+        <ImageSlot
+          src={site.lookbookCover.imageUrl}
+          label="Lookbook cover — full bleed"
+          alt={site.lookbookCover.masthead}
+        />
         <div className="look-cover">
           <div className="masthead">{site.lookbookCover.masthead}</div>
           <div className="sub">

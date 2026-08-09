@@ -698,6 +698,10 @@ export default function SiteSectionEdit() {
       <div className="page-head-admin">
         <span className="eyebrow">Site · {config.blurb}</span>
         <h1>{config.title}</h1>
+        {/* The storefront reads a blank field as "no override", so clearing one
+            saves cleanly and still shows the built-in copy. Said once, here,
+            rather than under all twenty-odd fields. */}
+        <p className="sub">Leaving a field blank restores the built-in copy.</p>
       </div>
 
       {error && <p className="state-note">{error}</p>}

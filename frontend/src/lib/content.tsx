@@ -70,7 +70,7 @@ export const DEFAULT_CONTENT: SiteContent = {
     titleEm: 'Mehfil',
     copy: 'Hand-embroidered indo-western silhouettes in moss, sage and pistachio — cut for the way the modern Indian woman actually moves. Each piece made to order, each made to last.',
     ctaLabel: 'Explore the Edit',
-    ctaHref: '/collection/lehenga',
+    ctaHref: '/collection',
   },
   // The four unique lines; the marquee track prints the list twice to loop.
   marquee: {
@@ -260,7 +260,12 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         if (!cancelled) setContent(mergeContent(data?.sections ?? {}));
       })
-      .catch(() => undefined); // fetch failure → defaults; never a broken page
+      // Fetch failure → defaults; never a broken page. Silent in production,
+      // but visible while developing so a broken /api/content isn't mistaken
+      // for "the admin hasn't customised anything yet".
+      .catch((err: unknown) => {
+        if (import.meta.env.DEV) console.warn('site content fetch failed', err);
+      });
     return () => {
       cancelled = true;
     };

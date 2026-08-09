@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
-import { SECTIONS, SECTION_DEFAULTS, sectionPreview } from '../lib/siteContent';
+import { SECTIONS, sectionPreview, sectionValue } from '../lib/siteContent';
 import type { SectionConfig } from '../lib/siteContent';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -15,9 +15,9 @@ function SectionCard({
   config: SectionConfig;
   stored: Record<string, unknown> | null;
 }) {
-  // The card previews what the site actually shows: the saved section if there
-  // is one, otherwise the built-in default.
-  const value = { ...SECTION_DEFAULTS[config.key], ...(stored ?? {}) };
+  // The card previews what the site actually shows — saved values layered over
+  // the built-in copy, blank losing to the default just as the storefront does.
+  const value = sectionValue(config.key, stored);
   const imageUrl = typeof value.imageUrl === 'string' && value.imageUrl ? value.imageUrl : null;
   const preview = sectionPreview(config.key, value);
 

@@ -114,6 +114,12 @@ describe('site content API', () => {
   it('PUT rejects a link field that is not http(s)/path/mailto/tel', async () => {
     const res = await app.request('/api/admin/content/footer', jsonReq('PUT', { instagramUrl: 'javascript:alert(1)' }, adminToken));
     expect(res.status).toBe(400);
+    // `//evil.com` is protocol-relative — an off-site link that looks like a path.
+    const protocolRelative = await app.request('/api/admin/content/footer', jsonReq('PUT', { instagramUrl: '//evil.com' }, adminToken));
+    expect(protocolRelative.status).toBe(400);
+    // A real path stays legal.
+    const path = await app.request('/api/admin/content/featured', jsonReq('PUT', { ctaHref: '/collection' }, adminToken));
+    expect(path.status).toBe(204);
     // Blank stays legal — the admin form submits '' for socials it has not filled in.
     const ok = await app.request('/api/admin/content/footer', jsonReq('PUT', { instagramUrl: '', whatsappUrl: 'https://wa.me/91' }, adminToken));
     expect(ok.status).toBe(204);

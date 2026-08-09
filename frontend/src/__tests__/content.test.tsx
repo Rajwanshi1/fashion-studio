@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { AppRoutes, Providers } from '../App';
 import { DEFAULT_CONTENT, SiteContentProvider, mergeContent, useSiteContent } from '../lib/content';
 import { mockFetch, mockFetchDown } from './helpers';
 
@@ -119,5 +121,53 @@ describe('SiteContentProvider', () => {
       </SiteContentProvider>,
     );
     expect(await screen.findByText(DEFAULT_CONTENT.hero.title)).toBeInTheDocument();
+  });
+});
+
+/** Content-driven photos describe themselves to a visitor, not to the boutique:
+ *  the slot's `label` is an internal instruction ("Look 02", "Lookbook cover —
+ *  full bleed editorial") and must not end up as public alt text. */
+describe('alt text on content-driven photos', () => {
+  const renderRoute = (route: string, sections: Record<string, unknown>) => {
+    mockFetch((url) => (url.endsWith('/api/content') ? { sections } : undefined));
+    return render(
+      <SiteContentProvider>
+        <MemoryRouter initialEntries={[route]}>
+          <Providers>
+            <AppRoutes />
+          </Providers>
+        </MemoryRouter>
+      </SiteContentProvider>,
+    );
+  };
+
+  it('names the lookbook cover and looks by their own copy', async () => {
+    renderRoute('/lookbook', {
+      lookbookCover: { imageUrl: '/img/cover.jpg', masthead: 'The Edit' },
+      lookbook: {
+        looks: [
+          { imageUrl: '/img/look-01.jpg', title: 'Rain, again.' },
+          { imageUrl: '/img/look-02.jpg', title: '' },
+        ],
+      },
+    });
+
+    expect(await screen.findByAltText('The Edit')).toBeInTheDocument();
+    expect(screen.getByAltText('Rain, again.')).toBeInTheDocument();
+    // No title of its own — the slot label stands in rather than nothing.
+    expect(screen.getByAltText('Look 02')).toBeInTheDocument();
+    expect(screen.queryByAltText(/full bleed editorial/)).not.toBeInTheDocument();
+  });
+
+  it('names the home hero and featured photos by their headlines', async () => {
+    renderRoute('/', {
+      hero: { imageUrl: '/img/hero.jpg', title: 'A New Season' },
+      featured: { imageUrl: '/img/feature.jpg', title: 'Rang' },
+    });
+
+    expect(await screen.findByAltText('A New Season')).toBeInTheDocument();
+    expect(screen.getByAltText('Rang')).toBeInTheDocument();
+    expect(screen.queryByAltText(/editorial portrait/)).not.toBeInTheDocument();
+    expect(screen.queryByAltText(/Drop campaign image/)).not.toBeInTheDocument();
   });
 });

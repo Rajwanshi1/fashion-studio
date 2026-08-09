@@ -85,6 +85,8 @@ describe('site section editor', () => {
     expect(screen.getByLabelText('Eyebrow')).toHaveValue(
       'The Verdant Edit · Indo-Western Couture',
     );
+    // and says so, once, so clearing a field is not a silent no-op
+    expect(screen.getByText('Leaving a field blank restores the built-in copy.')).toBeInTheDocument();
   });
 
   it('adds, reorders and drops blank rows in a list section', async () => {
