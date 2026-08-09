@@ -62,10 +62,53 @@ Resources:
             ManagedRuleGroupStatement:
               VendorName: AWS
               Name: AWSManagedRulesCommonRuleSet
+              # SizeRestrictions_BODY blocks every request body over 8KB, which
+              # kills the product-image presign: it carries the photo as ~2.7MB
+              # of base64 so Claude can name the object after what it shows.
+              # Counted here rather than excluded, so the rule still reports, and
+              # re-blocked at priority 2 for every OTHER path — the relaxation is
+              # scoped to that one route instead of the whole ACL. The rest of the
+              # rule set (SQLi, XSS, bad inputs) still applies to that route.
+              RuleActionOverrides:
+                - Name: SizeRestrictions_BODY
+                  ActionToUse: { Count: {} }
           VisibilityConfig:
             SampledRequestsEnabled: true
             CloudWatchMetricsEnabled: true
             MetricName: !Sub 'fashion-${EnvName}-common'
+        # Restores the 8KB body cap everywhere except the image-naming presign.
+        # Case-sensitive path match on purpose: a request that varies the casing
+        # fails the NOT and gets blocked, so the exemption cannot be widened by
+        # rewriting the URI.
+        - Name: oversize-body-except-image-naming
+          Priority: 2
+          Action: { Block: {} }
+          Statement:
+            AndStatement:
+              Statements:
+                - SizeConstraintStatement:
+                    FieldToMatch: { Body: { OversizeHandling: CONTINUE } }
+                    ComparisonOperator: GT
+                    Size: 8192
+                    TextTransformations: [{ Priority: 0, Type: NONE }]
+                - NotStatement:
+                    Statement:
+                      AndStatement:
+                        Statements:
+                          - ByteMatchStatement:
+                              FieldToMatch: { UriPath: {} }
+                              PositionalConstraint: EXACTLY
+                              SearchString: /api/admin/uploads/product-image
+                              TextTransformations: [{ Priority: 0, Type: NONE }]
+                          - ByteMatchStatement:
+                              FieldToMatch: { Method: {} }
+                              PositionalConstraint: EXACTLY
+                              SearchString: POST
+                              TextTransformations: [{ Priority: 0, Type: NONE }]
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub 'fashion-${EnvName}-oversize-body'
 Outputs:
   WebAclArn:
     Value: !GetAtt WebAcl.Arn
