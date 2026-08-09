@@ -152,5 +152,5 @@ img { display: block; max-width: 100%; }
 /* ---- Reveal motion (applied via reveal.js; safe without JS) ---- */
 @media (prefers-reduced-motion: no-preference) {
   .rv { opacity: 0; transform: translateY(26px); transition: opacity 900ms var(--ease), transform 900ms var(--ease); transition-delay: var(--rv-d, 0ms); will-change: opacity, transform; }
-  .rv.rv-in { opacity: 1; transform: none; }
+  .rv.rv-in { opacity: 1; transform: none; will-change: auto; }
 }

@@ -25,6 +25,7 @@
 
 /* summary */
 .page-cart .summary { background: var(--celadon-50); border: 1px solid var(--hairline); padding: 1.8rem; position: sticky; top: 96px; }
+@media (max-width: 900px){ .page-cart .summary { position: static; } }
 .page-cart .summary h2 { font-family: var(--serif-display); font-size: 1.3rem; margin: 0 0 1.4rem; }
 .page-cart .sline { display: flex; justify-content: space-between; font-size: var(--t-sm); color: var(--ink-soft); padding: 0.55rem 0; }
 .page-cart .sline.muted { color: var(--fg-muted); }
