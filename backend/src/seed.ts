@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { Pool } from 'pg';
 import { createProductsRepo } from './data/products.repo';
 import { createUsersRepo } from './data/users.repo';
+import { keywordColorFamily } from './services/ai/catalog-ai';
 import { ProductFlag } from './types';
 
 // All product copy is drawn from design-reference/DESIGN-NOTES.md and the
@@ -352,6 +353,8 @@ export async function seed(pool: Pool, overrides: SeedOverrides = {}): Promise<b
       details: p.details,
       price: p.price,
       color: p.color,
+      // Fresh DBs get a filled-in shop filter; live rows stay NULL until saved.
+      colorFamily: keywordColorFamily(p.color),
       flag: p.flag,
       imageUrl: null,
       active: true,

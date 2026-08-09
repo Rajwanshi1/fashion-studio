@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DETAIL1, DETAIL_SET, mockFetch, renderApp } from './helpers';
+import { DETAIL1, DETAIL_LEGACY, DETAIL_SALE, DETAIL_SET, mockFetch, renderApp } from './helpers';
+
+const thumbCount = () => document.querySelectorAll('#thumbs .img-slot').length;
 
 describe('PDP', () => {
   it('add to bag opens the drawer and shows the toast', async () => {
@@ -68,6 +70,78 @@ describe('PDP', () => {
       jacketPrice: null,
       unitPrice: 16200000,
     });
+  });
+
+  it('renders one thumb per gallery image, poses in the alt text, and swaps the stage', async () => {
+    mockFetch((url) => {
+      if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;
+      if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+      if (url.includes('/api/categories')) return [];
+      return undefined;
+    });
+
+    renderApp('/product/sage-sequin-jacket-lehenga');
+    await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
+
+    // Three gallery rows → three thumbs (no fixed four-label strip).
+    expect(thumbCount()).toBe(3);
+    // Thumb 0 is also the stage, hence two matches for its pose.
+    expect(screen.getAllByAltText('Sage Sequin Jacket Lehenga — front')).toHaveLength(2);
+    // The third row carries no pose → positional fallback.
+    expect(screen.getByAltText('Sage Sequin Jacket Lehenga — View 3')).toBeInTheDocument();
+
+    const back = screen.getByAltText('Sage Sequin Jacket Lehenga — back');
+    const user = userEvent.setup();
+    await user.click(back);
+    expect(screen.getAllByAltText('Sage Sequin Jacket Lehenga — back')).toHaveLength(2);
+  });
+
+  it('falls back to the single legacy image when the piece has no gallery rows', async () => {
+    mockFetch((url) => {
+      if (url.includes('/api/products/legacy-single-image')) return DETAIL_LEGACY;
+      if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+      if (url.includes('/api/categories')) return [];
+      return undefined;
+    });
+
+    renderApp('/product/legacy-single-image');
+    await screen.findByRole('heading', { level: 1, name: 'Legacy Single Image' });
+
+    expect(thumbCount()).toBe(1);
+    // Thumb + stage, both the denormalized imageUrl.
+    const shots = screen.getAllByAltText('Legacy Single Image — View 1');
+    expect(shots).toHaveLength(2);
+    expect(shots[0]).toHaveAttribute('src', '/img/legacy.jpg');
+  });
+
+  it('sale: struck-through pre-sale total, live total = sale base + chosen add-ons', async () => {
+    mockFetch((url) => {
+      if (url.includes('/api/products/ivory-sale-set')) return DETAIL_SALE;
+      if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+      if (url.includes('/api/categories')) return [];
+      return undefined;
+    });
+
+    renderApp('/product/ivory-sale-set');
+    await screen.findByRole('heading', { level: 1, name: 'Ivory Sale Set' });
+
+    expect(screen.getByText('Sale')).toBeInTheDocument();
+    // Base 1,50,000 → 1,20,000; dupatta 12,000 + jacket 24,000 stay full price.
+    const struck = screen.getByText('₹1,86,000');
+    expect(struck.tagName).toBe('S');
+    expect(struck).toHaveClass('was');
+    expect(screen.getByText('₹1,56,000')).toBeInTheDocument();
+
+    // Dropping the jacket reprices both lines.
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('checkbox', { name: /Jacket/ }));
+    expect(screen.getByText('₹1,62,000')).toHaveClass('was');
+    expect(screen.getByText('₹1,32,000')).toBeInTheDocument();
+
+    // The bag carries the sale-adjusted unit price the server recomputes.
+    await user.click(screen.getByRole('button', { name: 'Add to Bag' }));
+    const stored = JSON.parse(localStorage.getItem('ta.cart') ?? '[]');
+    expect(stored[0]).toMatchObject({ unitPrice: 13200000, dupattaPrice: 1200000, jacketPrice: null });
   });
 
   it('disables out-of-stock sizes', async () => {

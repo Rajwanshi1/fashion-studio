@@ -23,6 +23,8 @@
 .page-pdp .info .price { font-family: var(--serif-soft); font-size: 1.7rem; color: var(--forest-700); }
 .page-pdp .info .price .tax { font-family: var(--sans); font-size: 0.7rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); margin-left: 0.6rem; }
 .page-pdp .info .desc { color: var(--fg-muted); margin: 1.4rem 0; max-width: 46ch; }
+/* sale pricing — pre-sale price struck through, ahead of the sale price */
+.was { text-decoration: line-through; opacity: .55; margin-right: .5em; }
 
 .page-pdp .divline { height: 1px; background: var(--hairline); margin: 1.8rem 0; }
 

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import { displayPrice } from '../lib/format';
-import type { ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
+import { displayPrice, displaySalePrice, effectiveBasePrice } from '../lib/format';
+import type { ProductDetail, ProductImage, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useWishlist } from '../lib/wishlist';
 import { track } from '../lib/analytics';
@@ -26,7 +26,9 @@ const COLOR_CLASS: Record<string, string> = {
   Mint: 'c-mint',
 };
 const SWATCH_PALETTE = ['Sage', 'Moss', 'Antique Gold', 'Deep Forest'];
-const THUMB_LABELS = ['View 1', 'View 2', 'Detail', 'Back'];
+
+/** Positional fallback when a gallery row carries no pose. */
+const poseLabel = (img: ProductImage, i: number) => img.pose || `View ${i + 1}`;
 
 export default function Product() {
   const { slug = '' } = useParams();
@@ -111,6 +113,20 @@ export default function Product() {
     };
   }, [slug]);
 
+  // Gallery rows when the piece has them, else the legacy denormalized single
+  // image, else nothing (the placeholder slot renders).
+  const gallery = useMemo<ProductImage[]>(() => {
+    if (!product) return [];
+    if (product.images.length) return product.images;
+    return product.imageUrl ? [{ url: product.imageUrl, pose: '' }] : [];
+  }, [product]);
+
+  // A shorter gallery (product switch, edited piece) must not strand `thumb`
+  // past its end — the per-slug effect above only covers navigation.
+  useEffect(() => {
+    setThumb((t) => (t < gallery.length ? t : 0));
+  }, [gallery.length]);
+
   const swatches = useMemo(() => {
     if (!product) return SWATCH_PALETTE;
     return SWATCH_PALETTE.includes(product.color)
@@ -130,7 +146,12 @@ export default function Product() {
 
   const chosenDupatta = product && incDupatta && product.dupattaPrice != null ? product.dupattaPrice : null;
   const chosenJacket = product && incJacket && product.jacketPrice != null ? product.jacketPrice : null;
-  const liveTotal = product ? product.price + (chosenDupatta ?? 0) + (chosenJacket ?? 0) : 0;
+  const chosenAddons = (chosenDupatta ?? 0) + (chosenJacket ?? 0);
+  // A sale discounts the base only; add-ons are always charged in full. This is
+  // the number checkout independently recomputes from getVariantsForUpdate.
+  const liveTotal = product ? effectiveBasePrice(product) + chosenAddons : 0;
+  const onSale = product ? displaySalePrice(product) != null : false;
+  const preSaleTotal = product ? product.price + chosenAddons : 0;
 
   const addToBag = () => {
     if (!product || !selectedVariant) return;
@@ -186,27 +207,32 @@ export default function Product() {
       <main className="pdp">
         <div className="gallery">
           <div className="thumbs" id="thumbs">
-            {THUMB_LABELS.map((label, i) => (
-              <ImageSlot
-                key={label}
-                className={i === thumb ? 'active' : ''}
-                src={i === 0 ? product.imageUrl : null}
-                label={label}
-                alt={`${product.name} — ${label}`}
-                onClick={() => setThumb(i)}
-              />
-            ))}
+            {gallery.length > 0 ? (
+              gallery.map((img, i) => (
+                <ImageSlot
+                  key={`${img.url}-${i}`}
+                  className={i === thumb ? 'active' : ''}
+                  src={img.url}
+                  label={poseLabel(img, i)}
+                  alt={`${product.name} — ${poseLabel(img, i)}`}
+                  onClick={() => setThumb(i)}
+                />
+              ))
+            ) : (
+              <ImageSlot className="active" label="View 1" alt={`${product.name} — View 1`} />
+            )}
           </div>
           <div className="stage">
             <div className="flag">
               {product.flag === 'bestseller' && <span>Bestseller</span>}
               {product.flag === 'new' && <span>New</span>}
+              {product.flag === 'sale' && <span>Sale</span>}
               <span>Made to Order</span>
             </div>
             <ImageSlot
-              src={thumb === 0 ? product.imageUrl : null}
-              label={thumb === 0 ? product.name : THUMB_LABELS[thumb]}
-              alt={product.name}
+              src={gallery[thumb]?.url ?? null}
+              label={product.name}
+              alt={gallery[thumb] ? `${product.name} — ${poseLabel(gallery[thumb], thumb)}` : product.name}
             />
           </div>
         </div>
@@ -215,6 +241,11 @@ export default function Product() {
           <div className="brandline">{product.collection || 'The Verdant Edit'}</div>
           <h1>{product.name}</h1>
           <div className="price">
+            {onSale && (
+              <s className="was">
+                <Price paise={preSaleTotal} />
+              </s>
+            )}
             <Price paise={liveTotal} /> <span className="tax">incl. of all taxes</span>
           </div>
           <p className="desc">{product.description}</p>
@@ -416,7 +447,12 @@ export default function Product() {
                 <div className="m">
                   <div className="nm">{r.name}</div>
                   <div className="pr">
-                    <Price paise={displayPrice(r)} />
+                    {displaySalePrice(r) != null && (
+                      <s className="was">
+                        <Price paise={displayPrice(r)} />
+                      </s>
+                    )}
+                    <Price paise={displaySalePrice(r) ?? displayPrice(r)} />
                   </div>
                 </div>
               </Link>

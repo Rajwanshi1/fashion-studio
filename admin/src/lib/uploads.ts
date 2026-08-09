@@ -137,8 +137,25 @@ export interface ProductImagePresign {
   key: string;
   uploadUrl: string;
   headers: Record<string, string>;
-  /** Permanent public URL — what gets saved into the product's imageUrl. */
+  /** Permanent public URL — what gets saved into the product's gallery. */
   publicUrl: string;
+  /** Pose Claude read off the photo ('front', 'drape', …); null when unnamed. */
+  pose?: string | null;
+}
+
+/**
+ * btoa() takes a binary string, and String.fromCharCode(...bytes) blows the
+ * call stack somewhere north of 100k arguments — a 2000px JPEG is comfortably
+ * past that. 32k-byte chunks stay well inside every engine's limit.
+ */
+const B64_CHUNK = 0x8000;
+
+function base64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += B64_CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + B64_CHUNK));
+  }
+  return btoa(binary);
 }
 
 /**
@@ -146,13 +163,37 @@ export interface ProductImagePresign {
  * step. The PUT goes plain first (S3 presigned URLs reject an Authorization
  * header); the dev-only local transport answers 401/403 instead, so retry
  * with the admin JWT — the same dance as uploadDocument.
+ *
+ * Passing `productName` opts into AI naming: the photo travels along as base64
+ * so the server can name the object after what it shows ("emerald-gown-front")
+ * instead of a uuid, and answers with the pose it read. That body runs a few
+ * MB, so a failed presign is retried once WITHOUT the naming fields — a name
+ * is a nicety, the upload is not.
  */
-export async function uploadProductImage(file: File): Promise<{ publicUrl: string }> {
+export async function uploadProductImage(
+  file: File,
+  productName?: string,
+): Promise<{ publicUrl: string; pose: string | null }> {
   const { blob, contentType } = await prepareImage(file);
-  const presign = await api<ProductImagePresign>('/api/admin/uploads/product-image', {
-    method: 'POST',
-    body: { contentType },
-  });
+  const name = productName?.trim() ?? '';
+  const plainBody = { contentType };
+  const body = name
+    ? { ...plainBody, productName: name, imageBase64: base64(new Uint8Array(await blob.arrayBuffer())) }
+    : plainBody;
+
+  let presign: ProductImagePresign;
+  try {
+    presign = await api<ProductImagePresign>('/api/admin/uploads/product-image', {
+      method: 'POST',
+      body,
+    });
+  } catch (err) {
+    if (!name) throw err;
+    presign = await api<ProductImagePresign>('/api/admin/uploads/product-image', {
+      method: 'POST',
+      body: plainBody,
+    });
+  }
   let res = await fetch(presign.uploadUrl, { method: 'PUT', headers: presign.headers, body: blob });
   if (res.status === 401 || res.status === 403) {
     const token = storedToken();
@@ -165,5 +206,5 @@ export async function uploadProductImage(file: File): Promise<{ publicUrl: strin
     }
   }
   if (!res.ok) throw new Error(`Photo upload failed (${res.status})`);
-  return { publicUrl: presign.publicUrl };
+  return { publicUrl: presign.publicUrl, pose: presign.pose ?? null };
 }

@@ -17,6 +17,7 @@ import { createPool, makeTxRunner } from './db';
 import { migrate } from './migrate';
 import { seed } from './seed';
 import { createAnthropicClient } from './services/ai/anthropic';
+import { AnthropicCatalogAi, CATALOG_AI_EFFORT, CATALOG_AI_MODEL } from './services/ai/catalog-ai-anthropic';
 import { AnthropicBillParser } from './services/ai/parser';
 import { PARSE_SPECS } from './services/ai/prompts';
 import { createGoogleVerifier } from './services/google.verifier';
@@ -57,6 +58,12 @@ async function main() {
   const billParser = config.anthropicApiKey
     ? new AnthropicBillParser(createAnthropicClient(config.anthropicApiKey))
     : null;
+  // Same key, separate client: catalog assist is best-effort on the product
+  // save and upload paths. Null keeps colour on the keyword map and image names
+  // on uuid keys, which is exactly the no-API-key behaviour.
+  const catalogAi = config.anthropicApiKey
+    ? new AnthropicCatalogAi(createAnthropicClient(config.anthropicApiKey))
+    : null;
 
   const app = createApp({
     repos: {
@@ -76,10 +83,7 @@ async function main() {
     paymentProvider: config.paymentProvider === 'mock' ? new MockRazorpayProvider() : null,
     objectStore,
     billParser,
-    // Placeholder: the Claude-backed catalog AI (colour mapping + image naming)
-    // lands separately. Null keeps colour on the keyword map and image names on
-    // uuid keys, which is also the no-API-key behaviour.
-    catalogAi: null,
+    catalogAi,
     localUploads,
     verifyGoogleToken: config.googleClientId ? createGoogleVerifier(config.googleClientId) : null,
     smsProvider:
@@ -119,6 +123,13 @@ async function main() {
     console.log(`ai: bill parsing via the Claude API — ${models}`);
   } else {
     console.log('ai: parsing masked — set ANTHROPIC_API_KEY to enable');
+  }
+  if (config.anthropicApiKey) {
+    console.log(
+      `ai: catalog assist via the Claude API — colour mapping + image naming on ${CATALOG_AI_MODEL}/${CATALOG_AI_EFFORT}`,
+    );
+  } else {
+    console.log('ai: catalog assist masked — colours use the keyword map only, image names stay uuid keys');
   }
   // Stated rather than silent, so nobody sets it and wonders why nothing changed.
   // Not a warning: the deployed launch template still exports it, so this is the

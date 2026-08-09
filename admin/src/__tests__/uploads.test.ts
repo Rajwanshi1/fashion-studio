@@ -7,7 +7,8 @@ vi.mock('../lib/image', () => ({
   })),
 }));
 
-import { uploadDocument } from '../lib/uploads';
+import { prepareImage } from '../lib/image';
+import { uploadDocument, uploadProductImage } from '../lib/uploads';
 import { mockFetch, seedAdminAuth } from '../test/utils';
 
 const PRESIGN = {
@@ -66,5 +67,104 @@ describe('uploadDocument', () => {
     await expect(
       uploadDocument('bill', new File(['x'], 'bill.jpg', { type: 'image/jpeg' })),
     ).rejects.toThrow('Photo upload failed (413)');
+  });
+});
+
+const PRODUCT_PRESIGN = {
+  key: 'products/2026/08/emerald-gown-front-a1b2c3.jpg',
+  uploadUrl: 'http://localhost:3001/api/uploads/local/products%2Fkey.jpg',
+  headers: { 'Content-Type': 'image/jpeg' },
+  publicUrl: 'https://cdn.example/products/2026/08/emerald-gown-front-a1b2c3.jpg',
+  pose: 'front',
+};
+
+interface PresignBody {
+  contentType: string;
+  productName?: string;
+  imageBase64?: string;
+}
+
+describe('uploadProductImage', () => {
+  beforeEach(() => {
+    seedAdminAuth();
+  });
+
+  /** Records every presign body, answers the presign then the raw PUT. */
+  function stubPresign(respond: (attempt: number) => { status?: number; json: unknown }) {
+    const bodies: PresignBody[] = [];
+    mockFetch((url, init) => {
+      if (url.endsWith('/api/admin/uploads/product-image')) {
+        bodies.push(JSON.parse(String(init?.body)) as PresignBody);
+        return respond(bodies.length);
+      }
+      if (init?.method === 'PUT') return { status: 200, json: {} };
+      return undefined;
+    });
+    return bodies;
+  }
+
+  it('sends the product name and the photo bytes so the server can name the object', async () => {
+    const bodies = stubPresign(() => ({ json: PRODUCT_PRESIGN }));
+
+    const result = await uploadProductImage(
+      new File(['x'], 'shot.jpg', { type: 'image/jpeg' }),
+      '  Emerald Court Gown  ',
+    );
+
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].contentType).toBe('image/jpeg');
+    expect(bodies[0].productName).toBe('Emerald Court Gown'); // trimmed
+    expect(atob(String(bodies[0].imageBase64))).toBe('jpeg'); // the prepared blob
+    expect(result).toEqual({ publicUrl: PRODUCT_PRESIGN.publicUrl, pose: 'front' });
+  });
+
+  it('omits the naming fields without a product name, and reports a null pose', async () => {
+    const bodies = stubPresign(() => ({ json: { ...PRODUCT_PRESIGN, pose: undefined } }));
+
+    const result = await uploadProductImage(new File(['x'], 'shot.jpg', { type: 'image/jpeg' }));
+
+    expect(bodies).toEqual([{ contentType: 'image/jpeg' }]);
+    expect(result.pose).toBeNull();
+  });
+
+  it('retries the presign without the naming fields when the first attempt fails', async () => {
+    // A multi-MB base64 body is the one part of this request that can be
+    // rejected for size — a name is a nicety, the upload is not.
+    const bodies = stubPresign((attempt) =>
+      attempt === 1 ? { status: 413, json: { error: 'Payload too large' } } : { json: PRODUCT_PRESIGN },
+    );
+
+    const result = await uploadProductImage(
+      new File(['x'], 'shot.jpg', { type: 'image/jpeg' }),
+      'Emerald Court Gown',
+    );
+
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0].productName).toBe('Emerald Court Gown');
+    expect(bodies[1]).toEqual({ contentType: 'image/jpeg' });
+    expect(result.publicUrl).toBe(PRODUCT_PRESIGN.publicUrl);
+  });
+
+  it('surfaces the presign error when the retry-free path fails', async () => {
+    stubPresign(() => ({ status: 500, json: { error: 'Storage is not configured' } }));
+
+    await expect(
+      uploadProductImage(new File(['x'], 'shot.jpg', { type: 'image/jpeg' })),
+    ).rejects.toThrow('Storage is not configured');
+  });
+
+  it('base64-encodes a multi-KB photo across chunk boundaries', async () => {
+    const bytes = new Uint8Array(100_000);
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = (i * 7) % 256;
+    vi.mocked(prepareImage).mockResolvedValueOnce({
+      blob: new Blob([bytes], { type: 'image/jpeg' }),
+      contentType: 'image/jpeg',
+    });
+    const bodies = stubPresign(() => ({ json: PRODUCT_PRESIGN }));
+
+    await uploadProductImage(new File(['x'], 'shot.jpg', { type: 'image/jpeg' }), 'Emerald Court Gown');
+
+    const decoded = Uint8Array.from(atob(String(bodies[0].imageBase64)), (c) => c.charCodeAt(0));
+    expect(decoded).toEqual(bytes);
   });
 });

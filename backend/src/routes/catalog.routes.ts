@@ -4,11 +4,14 @@ import { z } from 'zod';
 import type { WishlistRepo } from '../data/products.repo';
 import { AuthEnv, requireAuth } from '../middleware/auth';
 import type { CatalogService } from '../services/catalog.service';
+import { COLOR_FAMILIES } from '../types';
 import { zodHook } from './hooks';
 
 const listQuerySchema = z.object({
   category: z.string().optional(),
   collection: z.string().optional(),
+  /** Canonical family token, not free text — the shop swatches send these. */
+  color: z.enum(COLOR_FAMILIES).optional(),
   search: z.string().optional(),
   sort: z.enum(['featured', 'new', 'price_asc', 'price_desc']).optional(),
   page: z.coerce.number().int().min(1).optional(),

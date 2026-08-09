@@ -132,13 +132,20 @@ export function createApp(deps: AppDeps) {
 
   app.use(secureHeaders());
   // Global 100KB JSON cap — skipped for the dev-only local photo transport,
-  // which enforces its own 10MB cap (uploads.routes.ts).
+  // which enforces its own 10MB cap (uploads.routes.ts), and raised for the
+  // product-image presign, whose body carries the base64 photo the naming call
+  // looks at (capped at 14MB of base64 by its own schema).
   const jsonBodyLimit = bodyLimit({
     maxSize: 100 * 1024,
     onError: (c) => c.json({ error: 'Payload too large' }, 413),
   });
+  const photoJsonBodyLimit = bodyLimit({
+    maxSize: 15 * 1024 * 1024,
+    onError: (c) => c.json({ error: 'Payload too large' }, 413),
+  });
   app.use('/api/*', (c, next) => {
     if (c.req.path.startsWith('/api/uploads/local/')) return next();
+    if (c.req.path === '/api/admin/uploads/product-image') return photoJsonBodyLimit(c, next);
     return jsonBodyLimit(c, next);
   });
 
@@ -194,6 +201,7 @@ export function createApp(deps: AppDeps) {
       ordersService: orders,
       documentsService: documents,
       objectStore: deps.objectStore,
+      catalogAi: deps.catalogAi ?? null,
       jwtSecret,
     }),
   );

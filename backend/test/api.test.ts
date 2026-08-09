@@ -285,6 +285,30 @@ describe('API', () => {
       expect(none.total).toBe(0);
     });
 
+    it('filters by colour family server-side and 400s an unknown token', async () => {
+      // The fixtures are all greens; add a pink piece through the admin route so
+      // its family comes from the same keyword mapping the shop filters on.
+      const created = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categorySlug: 'gowns',
+          name: 'Blush Chiffon Gown',
+          price: 8800000,
+          color: 'Blush',
+        }, adminToken),
+      );
+      expect((await created.json()).colorFamily).toBe('pink');
+
+      const pink = await (await app.request('/api/products?color=pink')).json();
+      expect(pink.items.map((p: any) => p.slug)).toEqual(['blush-chiffon-gown-blush']);
+      expect(pink.items[0].colorFamily).toBe('pink');
+
+      const green = await (await app.request('/api/products?color=green')).json();
+      expect(green.total).toBe(3); // the three active fixtures
+      expect((await (await app.request('/api/products?color=purple')).json()).total).toBe(0);
+      expect((await app.request('/api/products?color=zalgo')).status).toBe(400);
+    });
+
     it('exposes set-includes pricing fields on summaries and detail', async () => {
       const set = await seedSetProduct(f.products, seeded.lehengas.id);
       const list = await (await app.request('/api/products?search=zardozi')).json();
@@ -583,7 +607,7 @@ describe('API', () => {
       expect((await app.request('/api/admin/products', withMethod('POST', { categoryId: 'ghost', slug: 'x', name: 'X', price: 1 }, adminToken))).status).toBe(404);
     });
 
-    it('409s on duplicate slug for create and update', async () => {
+    it('409s on a duplicate slug the admin asked for by hand', async () => {
       const dupCreate = await app.request(
         '/api/admin/products',
         withMethod('POST', {
@@ -595,12 +619,209 @@ describe('API', () => {
       );
       expect(dupCreate.status).toBe(409);
       expect((await dupCreate.json()).error).toMatch(/slug/i);
+    });
 
-      const dupUpdate = await app.request(
+    it('derives the slug from name + colour and uniquifies it on a collision', async () => {
+      const body = (over: Record<string, unknown> = {}) => ({
+        categoryId: seeded.gowns.id,
+        name: 'Fern Pleated Gown',
+        price: 11200000,
+        color: 'Fern',
+        ...over,
+      });
+      const first = await app.request('/api/admin/products', withMethod('POST', body(), adminToken));
+      expect(first.status).toBe(201);
+      expect((await first.json()).slug).toBe('fern-pleated-gown-fern');
+
+      // Same name + colour again: the route walks base-2…base-6 instead of 409ing.
+      const second = await app.request('/api/admin/products', withMethod('POST', body(), adminToken));
+      expect(second.status).toBe(201);
+      expect((await second.json()).slug).toBe('fern-pleated-gown-fern-2');
+
+      const third = await app.request('/api/admin/products', withMethod('POST', body(), adminToken));
+      expect((await third.json()).slug).toBe('fern-pleated-gown-fern-3');
+    });
+
+    it('never changes a slug on PUT, even when one is sent', async () => {
+      const res = await app.request(
         `/api/admin/products/${seeded.moss.id}`,
-        withMethod('PUT', { slug: 'sage-sequin-jacket-lehenga' }, adminToken),
+        withMethod('PUT', { slug: 'sage-sequin-jacket-lehenga', name: 'Moss Tissue Draped Gown II' }, adminToken),
       );
-      expect(dupUpdate.status).toBe(409);
+      expect(res.status).toBe(200);
+      const product = await res.json();
+      expect(product.slug).toBe('moss-tissue-draped-gown');
+      expect(product.name).toBe('Moss Tissue Draped Gown II');
+    });
+
+    it('validates sale pricing on create and clears it when the sale ends', async () => {
+      const saleBody = (over: Record<string, unknown> = {}) => ({
+        categoryId: seeded.gowns.id,
+        name: 'Sale Gown',
+        price: 10000000,
+        color: 'Blush Pink',
+        flag: 'sale',
+        ...over,
+      });
+      // flag sale without a sale price, and a sale price that is not a discount.
+      expect((await app.request('/api/admin/products', withMethod('POST', saleBody(), adminToken))).status).toBe(400);
+      expect(
+        (await app.request('/api/admin/products', withMethod('POST', saleBody({ salePrice: 10000000 }), adminToken)))
+          .status,
+      ).toBe(400);
+      // A sale price without the sale flag is refused too.
+      expect(
+        (await app.request('/api/admin/products', withMethod('POST', saleBody({ flag: null, salePrice: 900 }), adminToken)))
+          .status,
+      ).toBe(400);
+
+      const created = await app.request(
+        '/api/admin/products',
+        withMethod('POST', saleBody({ salePrice: 7500000 }), adminToken),
+      );
+      expect(created.status).toBe(201);
+      const product = await created.json();
+      expect(product).toMatchObject({ flag: 'sale', salePrice: 7500000, colorFamily: 'pink' });
+
+      // PUT keeps the same guard…
+      const badUpdate = await app.request(
+        `/api/admin/products/${product.id}`,
+        withMethod('PUT', { flag: 'sale', price: 10000000, salePrice: 12000000 }, adminToken),
+      );
+      expect(badUpdate.status).toBe(400);
+
+      // …and leaving the sale wipes the stale discount.
+      const ended = await app.request(`/api/admin/products/${product.id}`, withMethod('PUT', { flag: null }, adminToken));
+      expect(ended.status).toBe(200);
+      expect(await ended.json()).toMatchObject({ flag: null, salePrice: null });
+    });
+
+    it('keeps costPrice on the admin product and off both public reads', async () => {
+      const created = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categorySlug: 'gowns',
+          name: 'Cost Gown',
+          price: 9900000,
+          color: 'Sage',
+          costPrice: 4200000,
+        }, adminToken),
+      );
+      expect(created.status).toBe(201);
+      const product = await created.json();
+      expect(product.costPrice).toBe(4200000);
+
+      const adminList = await (await app.request('/api/admin/products', bearer(adminToken))).json();
+      expect(adminList.find((p: any) => p.id === product.id).costPrice).toBe(4200000);
+
+      const detail = await (await app.request(`/api/products/${product.slug}`)).json();
+      expect(detail.id).toBe(product.id);
+      expect(detail).not.toHaveProperty('costPrice');
+
+      const list = await (await app.request('/api/products?search=Cost%20Gown')).json();
+      expect(list.items).toHaveLength(1);
+      expect(list.items[0]).not.toHaveProperty('costPrice');
+    });
+
+    it('round-trips an ordered gallery and keeps imageUrl on images[0]', async () => {
+      const created = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categorySlug: 'gowns',
+          name: 'Gallery Gown',
+          price: 9900000,
+          color: 'Sage',
+          imageUrl: 'https://cdn.test/legacy.jpg', // a gallery always wins
+          images: [
+            { url: 'https://cdn.test/a.jpg', pose: 'front' },
+            { url: 'https://cdn.test/b.jpg' },
+            { url: 'https://cdn.test/c.jpg', pose: 'detail' },
+          ],
+        }, adminToken),
+      );
+      expect(created.status).toBe(201);
+      const product = await created.json();
+      expect(product.images).toEqual([
+        { url: 'https://cdn.test/a.jpg', pose: 'front' },
+        { url: 'https://cdn.test/b.jpg', pose: '' },
+        { url: 'https://cdn.test/c.jpg', pose: 'detail' },
+      ]);
+      expect(product.imageUrl).toBe('https://cdn.test/a.jpg');
+
+      const summary = (await (await app.request('/api/products?search=Gallery')).json()).items[0];
+      expect(summary.imageUrl).toBe(product.images[0].url);
+
+      // Reordering is a wholesale replace, primary photo included.
+      const reordered = await app.request(
+        `/api/admin/products/${product.id}`,
+        withMethod('PUT', {
+          images: [
+            { url: 'https://cdn.test/c.jpg', pose: 'detail' },
+            { url: 'https://cdn.test/a.jpg', pose: 'front' },
+          ],
+        }, adminToken),
+      );
+      expect(reordered.status).toBe(200);
+      const after = await reordered.json();
+      expect(after.images.map((i: any) => i.url)).toEqual(['https://cdn.test/c.jpg', 'https://cdn.test/a.jpg']);
+      expect(after.imageUrl).toBe('https://cdn.test/c.jpg');
+
+      const publicDetail = await (await app.request(`/api/products/${product.slug}`)).json();
+      expect(publicDetail.images.map((i: any) => i.pose)).toEqual(['detail', 'front']);
+    });
+
+    it('names the uploaded photo through the catalog AI, falling back to a uuid key', async () => {
+      const withAi = (catalogAi: any) =>
+        createApp({
+          repos: f,
+          paymentProvider: new FakePaymentProvider(),
+          objectStore: new FakeObjectStore(),
+          jwtSecret: SECRET,
+          corsOrigins: [],
+          runInTransaction: fakeTx,
+          catalogAi,
+        });
+      const presign = (target: ReturnType<typeof createApp>, body: Record<string, unknown>) =>
+        target.request('/api/admin/uploads/product-image', post(body, adminToken));
+      const named = {
+        contentType: 'image/jpeg',
+        productName: 'Sage Sequin Jacket Lehenga',
+        imageBase64: Buffer.from([0xff, 0xd8, 0xff, 0xe0]).toString('base64'),
+      };
+
+      const naming = withAi({
+        colorFamily: async () => null,
+        nameProductImage: async () => ({ fileSlug: 'Sage Sequin  Lehenga — Front!', pose: 'front' }),
+      });
+      const res = await presign(naming, named);
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.key).toMatch(/^products\/\d{4}\/\d{2}\/sage-sequin-lehenga-front-[0-9a-f]{6}\.jpg$/);
+      expect(body.pose).toBe('front');
+      expect(body.publicUrl).toContain(encodeURIComponent(body.key));
+
+      // Unusable name, thrown error, and no AI at all: the uuid key, pose null.
+      const uuidKey = /^products\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.jpg$/;
+      for (const catalogAi of [
+        { colorFamily: async () => null, nameProductImage: async () => null },
+        { colorFamily: async () => null, nameProductImage: async () => ({ fileSlug: '!!!', pose: null }) },
+        {
+          colorFamily: async () => null,
+          nameProductImage: async () => {
+            throw new Error('anthropic exploded');
+          },
+        },
+        null,
+      ]) {
+        const fallback = await (await presign(withAi(catalogAi), named)).json();
+        expect(fallback.key).toMatch(uuidKey);
+        expect(fallback.pose).toBeNull();
+      }
+
+      // Naming fields are all-or-nothing, and a plain presign still answers.
+      expect((await presign(naming, { contentType: 'image/jpeg', productName: 'X' })).status).toBe(400);
+      const plain = await (await presign(naming, { contentType: 'image/jpeg' })).json();
+      expect(plain.key).toMatch(uuidKey);
+      expect(plain.pose).toBeNull();
     });
 
     it('bulk-deletes products: hard-deletes unordered, archives ordered, reports unknowns', async () => {

@@ -252,7 +252,9 @@ table.data { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .field { margin-bottom: 1rem; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
-label.lab { display: block; font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink-soft); margin-bottom: 0.5rem; }
+/* span.lab captions a chip group — there is no single control to point a label at. */
+label.lab,
+span.lab { display: block; font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink-soft); margin-bottom: 0.5rem; }
 .inp { width: 100%; border: 1px solid var(--hairline); border-radius: var(--edge); background: var(--surface); padding: 0.95em 1em; font-family: var(--sans); font-size: 0.92rem; color: var(--ink); transition: border-color var(--dur) var(--ease); }
 .inp::placeholder { color: var(--sage-600); }
 .inp:focus { outline: none; border-color: var(--gold); }
@@ -438,6 +440,12 @@ select.inp {
   border-radius: var(--edge);
   display: block;
 }
+/* Product gallery strip — ordered thumbnails with ↑ ↓ ✕ under each */
+.thumb-strip { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.thumb-actions { display: flex; gap: 0.25rem; justify-content: center; margin-top: 0.25rem; }
+.thumb-strip .thumb img { width: 96px; height: 128px; object-fit: cover; }
+.thumb-actions .ulink:disabled { opacity: 0.35; cursor: default; }
+
 .form-card {
   background: var(--surface);
   border: 1px solid var(--hairline);

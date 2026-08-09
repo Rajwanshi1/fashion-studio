@@ -1,9 +1,10 @@
 import type { AdminProduct, ProductsRepo } from '../data/products.repo';
-import { Category, DomainError, ProductSort, ProductSummary } from '../types';
+import { Category, ColorFamily, DomainError, ProductSort, ProductSummary } from '../types';
 
 export interface ListProductsQuery {
   category?: string;
   collection?: string;
+  color?: ColorFamily;
   search?: string;
   sort?: ProductSort;
   page?: number;
@@ -17,11 +18,14 @@ export interface ProductListing {
   pages: number;
 }
 
+/** Everything the admin sees except the cost price, which is never public. */
+export type PublicProduct = Omit<AdminProduct, 'costPrice'>;
+
 export interface CatalogService {
   listCategories(): Promise<Category[]>;
   listCollections(): Promise<string[]>;
   listProducts(query: ListProductsQuery): Promise<ProductListing>;
-  getProduct(slug: string): Promise<AdminProduct & { related: ProductSummary[] }>;
+  getProduct(slug: string): Promise<PublicProduct & { related: ProductSummary[] }>;
 }
 
 const DEFAULT_LIMIT = 12;
@@ -45,6 +49,7 @@ export function createCatalogService(deps: { products: ProductsRepo }): CatalogS
       const { items, total } = await deps.products.listProducts({
         categorySlug: query.category?.trim() || undefined,
         collection: query.collection?.trim() || undefined,
+        colorFamily: query.color,
         search,
         sort: query.sort ?? 'featured',
         page,
@@ -54,9 +59,11 @@ export function createCatalogService(deps: { products: ProductsRepo }): CatalogS
     },
 
     async getProduct(slug) {
-      const product = await deps.products.getBySlug(slug);
-      if (!product || !product.active) throw new DomainError('NOT_FOUND', 'Product not found');
-      const related = await deps.products.getRelated(product.id, product.categoryId, RELATED_LIMIT);
+      const found = await deps.products.getBySlug(slug);
+      if (!found || !found.active) throw new DomainError('NOT_FOUND', 'Product not found');
+      const related = await deps.products.getRelated(found.id, found.categoryId, RELATED_LIMIT);
+      // The storefront is the one caller that must never see the cost price.
+      const { costPrice, ...product } = found;
       return { ...product, related };
     },
   };
