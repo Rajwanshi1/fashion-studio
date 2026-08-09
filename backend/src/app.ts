@@ -5,6 +5,7 @@ import { HTTPException } from 'hono/http-exception';
 import { secureHeaders } from 'hono/secure-headers';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { ClicksRepo } from './data/clicks.repo';
+import type { ContentRepo } from './data/content.repo';
 import type { DocumentsRepo } from './data/documents.repo';
 import type { EventsRepo } from './data/events.repo';
 import type { MeasurementsRepo } from './data/measurements.repo';
@@ -52,6 +53,7 @@ export interface AppDeps {
     receipts: ReceiptsRepo;
     documents: DocumentsRepo;
     measurements: MeasurementsRepo;
+    content: ContentRepo;
   };
   /** Masked payments seam — null while payments are disabled (endpoints answer 503). */
   paymentProvider: PaymentProvider | null;

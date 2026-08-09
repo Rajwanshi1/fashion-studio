@@ -3,6 +3,7 @@ import path from 'path';
 import { createApp } from './app';
 import { loadConfig } from './config';
 import { createClicksRepo } from './data/clicks.repo';
+import { createContentRepo } from './data/content.repo';
 import { createDocumentsRepo } from './data/documents.repo';
 import { createEventsRepo } from './data/events.repo';
 import { createMeasurementsRepo } from './data/measurements.repo';
@@ -79,6 +80,7 @@ async function main() {
       receipts: createReceiptsRepo(pool),
       documents: createDocumentsRepo(pool),
       measurements: createMeasurementsRepo(pool),
+      content: createContentRepo(pool),
     },
     paymentProvider: config.paymentProvider === 'mock' ? new MockRazorpayProvider() : null,
     objectStore,
