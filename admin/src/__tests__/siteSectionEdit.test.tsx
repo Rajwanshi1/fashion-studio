@@ -1,0 +1,305 @@
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { mockFetch, renderApp, seedAdminAuth } from '../test/utils';
+import { uploadProductImage } from '../lib/uploads';
+
+// prepareImage needs canvas/createImageBitmap, which jsdom lacks — the upload
+// pipeline itself is covered by uploads.test.ts.
+vi.mock('../lib/uploads', () => ({
+  uploadProductImage: vi.fn(async () => ({
+    publicUrl: 'https://fashion-uploads.s3.ap-south-1.amazonaws.com/products/2026/08/hero.jpg',
+    pose: null,
+  })),
+}));
+
+const UPLOADED = 'https://fashion-uploads.s3.ap-south-1.amazonaws.com/products/2026/08/hero.jpg';
+
+const SECTION_KEYS = [
+  'hero',
+  'featured',
+  'marquee',
+  'trust',
+  'lookbookCover',
+  'lookbook',
+  'ticker',
+  'footer',
+];
+
+/** GET /api/content with the given stored sections; every write answers 204. */
+function stubContent(sections: Record<string, unknown>) {
+  return mockFetch((url, init) => {
+    if (url.endsWith('/api/content')) return { json: { sections } };
+    if (url.includes('/api/admin/content/') && init?.method !== 'GET') {
+      return { status: 204, json: null };
+    }
+    return undefined;
+  });
+}
+
+describe('site section editor', () => {
+  it('prefills the built-in defaults and PUTs the whole section', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({});
+
+    renderApp('/site/hero');
+
+    const title = await screen.findByLabelText('Headline');
+    expect(title).toHaveValue('Tanvi Agnihotry');
+    // untouched section — nothing to reset to
+    expect(screen.queryByRole('button', { name: 'Reset to default' })).not.toBeInTheDocument();
+
+    await userEvent.clear(title);
+    await userEvent.type(title, 'The Verdant Season');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(screen.getByText('Live on the site')).toBeInTheDocument());
+
+    const put = calls.find((c) => c.method === 'PUT');
+    expect(put?.url).toMatch(/\/api\/admin\/content\/hero$/);
+    // the whole section travels, not just the edited field
+    expect(put?.body).toEqual({
+      imageUrl: null,
+      seasonLabel: 'Spring / Summer 2026',
+      eyebrow: 'The Verdant Edit · Indo-Western Couture',
+      title: 'The Verdant Season',
+      titleItalic: 'heritage, made to move.',
+      ctaPrimary: 'Discover the Collection',
+      ctaSecondary: 'Book an Appointment',
+      edgeLeft: 'Made to Order — India',
+      edgeRight: 'Vol. 01 / 24 Looks',
+    });
+
+    // saved → back on the Site list
+    expect(await screen.findByRole('heading', { name: 'Site' })).toBeInTheDocument();
+  });
+
+  it('shows the stored value, falling back to the default for blanks', async () => {
+    seedAdminAuth();
+    stubContent({ hero: { title: 'Custom headline', eyebrow: '' } });
+
+    renderApp('/site/hero');
+
+    expect(await screen.findByLabelText('Headline')).toHaveValue('Custom headline');
+    // the storefront falls back to its default for a blank string — so does the
+    // editor, which shows what the site actually renders.
+    expect(screen.getByLabelText('Eyebrow')).toHaveValue(
+      'The Verdant Edit · Indo-Western Couture',
+    );
+  });
+
+  it('adds, reorders and drops blank rows in a list section', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({});
+
+    renderApp('/site/marquee');
+
+    expect(await screen.findByLabelText('Line 1')).toHaveValue('Made to Order');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Move line 2 up' }));
+    expect(screen.getByLabelText('Line 1')).toHaveValue('— hand embroidered —');
+    expect(screen.getByLabelText('Line 2')).toHaveValue('Made to Order');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove line 4' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add line' }));
+    // a row left blank never reaches the server (the schema rejects empties)
+    await userEvent.type(screen.getByLabelText('Line 4'), '   ');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const put = calls.find((c) => c.method === 'PUT');
+    expect(put?.url).toMatch(/\/api\/admin\/content\/marquee$/);
+    expect(put?.body).toEqual({
+      items: ['— hand embroidered —', 'Made to Order', 'The Verdant Edit'],
+    });
+  });
+
+  it('stops offering new lines at the eight-line cap', async () => {
+    seedAdminAuth();
+    stubContent({});
+
+    renderApp('/site/marquee');
+    await screen.findByLabelText('Line 1');
+
+    for (let i = 0; i < 4; i += 1) {
+      await userEvent.click(screen.getByRole('button', { name: 'Add line' }));
+    }
+
+    expect(screen.getByLabelText('Line 8')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add line' })).not.toBeInTheDocument();
+  });
+
+  it('refuses to save a list section with nothing left in it', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({});
+
+    renderApp('/site/marquee');
+    await screen.findByLabelText('Line 1');
+
+    // last row first, so the remaining labels keep their numbers
+    for (let i = 4; i > 0; i -= 1) {
+      await userEvent.click(screen.getByRole('button', { name: `Remove line ${i}` }));
+    }
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    // an empty list reads as "use the default" to the storefront — saying so
+    // beats a save that looks successful and changes nothing
+    expect(await screen.findByText('Marquee needs at least one line')).toBeInTheDocument();
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false);
+  });
+
+  it('uploads a picked photo into the section image', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({});
+
+    renderApp('/site/hero');
+    await screen.findByLabelText('Headline');
+
+    const file = new File([new Uint8Array([1])], 'hero.jpg', { type: 'image/jpeg' });
+    await userEvent.upload(screen.getByLabelText('Photo file'), file);
+
+    // no product to name it after — a plain uuid presign
+    expect(uploadProductImage).toHaveBeenCalledWith(file);
+    expect(await screen.findByAltText('Photo')).toHaveAttribute('src', UPLOADED);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const put = calls.find((c) => c.method === 'PUT');
+    expect((put?.body as { imageUrl: string }).imageUrl).toBe(UPLOADED);
+  });
+
+  it('clears the section image with Remove photo', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({ hero: { imageUrl: 'https://cdn.example/old.jpg' } });
+
+    renderApp('/site/hero');
+    expect(await screen.findByAltText('Photo')).toHaveAttribute('src', 'https://cdn.example/old.jpg');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove photo' }));
+    expect(screen.queryByAltText('Photo')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const put = calls.find((c) => c.method === 'PUT');
+    expect((put?.body as { imageUrl: string | null }).imageUrl).toBeNull();
+  });
+
+  it('keeps exactly three trust promises and saves them whole', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({});
+
+    renderApp('/site/trust');
+
+    expect(await screen.findByLabelText('Promise 1 title')).toHaveValue('Made to Order');
+    expect(screen.getByLabelText('Promise 3 detail')).toHaveValue(
+      'Insured & tracked, on the house',
+    );
+    expect(screen.queryByLabelText('Promise 4 title')).not.toBeInTheDocument();
+    // three is the schema's exact count — no add/remove affordance
+    expect(screen.queryByRole('button', { name: /^Add/ })).not.toBeInTheDocument();
+
+    const detail = screen.getByLabelText('Promise 2 detail');
+    await userEvent.clear(detail);
+    await userEvent.type(detail, 'In studio, Bandra');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const items = (calls.find((c) => c.method === 'PUT')?.body as {
+      items: { title: string; detail: string }[];
+    }).items;
+    expect(items).toHaveLength(3);
+    expect(items[1]).toEqual({ title: 'Complimentary Fittings', detail: 'In studio, Bandra' });
+  });
+
+  it('saves all seven looks alongside the pull-quote', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({});
+
+    renderApp('/site/lookbook');
+
+    expect(await screen.findByLabelText('Look 1 title')).toHaveValue('The garden, after rain.');
+    expect(screen.getByLabelText('Look 7 number')).toHaveValue('Look 07');
+    expect(screen.queryByLabelText('Look 8 number')).not.toBeInTheDocument();
+    // looks 1 and 4 are the two the storefront prints a caption for
+    expect(screen.getAllByText(/shown with caption/)).toHaveLength(2);
+
+    const title = screen.getByLabelText('Look 2 title');
+    await userEvent.clear(title);
+    await userEvent.type(title, 'Ivory hour.');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const body = calls.find((c) => c.method === 'PUT')?.body as {
+      looks: Record<string, unknown>[];
+      quote: string;
+      quoteCite: string;
+    };
+    expect(body.looks).toHaveLength(7);
+    expect(Object.keys(body.looks[0]).sort()).toEqual(
+      ['copy', 'ctaHref', 'imageUrl', 'lookNo', 'title'].sort(),
+    );
+    expect(body.looks[1].title).toBe('Ivory hour.');
+    expect(body.quote).toBe(
+      '"She does not choose between heritage and the present. She wears both, at once."',
+    );
+    expect(body.quoteCite).toBe('— The Verdant Edit');
+  });
+
+  it('resets a customised section to its default after confirming', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({ hero: { title: 'Custom' } });
+
+    renderApp('/site/hero');
+    expect(await screen.findByLabelText('Headline')).toHaveValue('Custom');
+
+    // backing out of the confirm leaves the section alone
+    await userEvent.click(screen.getByRole('button', { name: 'Reset to default' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reset to default' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, reset' }));
+
+    await waitFor(() => expect(screen.queryByDisplayValue('Custom')).not.toBeInTheDocument());
+    const del = calls.find((c) => c.method === 'DELETE');
+    expect(del?.url).toMatch(/\/api\/admin\/content\/hero$/);
+    expect(screen.getByLabelText('Headline')).toHaveValue('Tanvi Agnihotry');
+    expect(screen.queryByRole('button', { name: 'Reset to default' })).not.toBeInTheDocument();
+  });
+
+  it('toasts the server message when a save is rejected', async () => {
+    seedAdminAuth();
+    mockFetch((url, init) => {
+      if (url.endsWith('/api/content')) return { json: { sections: {} } };
+      if (url.endsWith('/api/admin/content/hero') && init?.method === 'PUT') {
+        return { status: 400, json: { error: 'title: String must contain at most 300 character(s)' } };
+      }
+      return undefined;
+    });
+
+    renderApp('/site/hero');
+    await screen.findByLabelText('Headline');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(
+      await screen.findByText('title: String must contain at most 300 character(s)'),
+    ).toBeInTheDocument();
+    // still on the editor, edits intact
+    expect(screen.getByRole('heading', { name: 'Hero' })).toBeInTheDocument();
+  });
+
+  it('renders an editor for every section without crashing', async () => {
+    seedAdminAuth();
+    stubContent({});
+
+    for (const key of SECTION_KEYS) {
+      const { unmount } = renderApp(`/site/${key}`);
+      expect(await screen.findByRole('button', { name: 'Save' })).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it('sends an unknown section key back to the site list', async () => {
+    seedAdminAuth();
+    stubContent({});
+
+    renderApp('/site/nonsense');
+
+    expect(await screen.findByRole('heading', { name: 'Site' })).toBeInTheDocument();
+  });
+});
