@@ -24,7 +24,7 @@
 .page-auth .auth-or { display: flex; align-items: center; gap: 1rem; margin: 1.6rem 0; color: var(--fg-muted); font-size: 0.62rem; letter-spacing: var(--track-wide); text-transform: uppercase; }
 .page-auth .auth-or::before, .page-auth .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--hairline); }
 .page-auth .social-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
-.page-auth .social-row button { padding: 0.95em; border: 1px solid var(--hairline); background: var(--surface); font-family: var(--sans); font-size: 0.74rem; letter-spacing: 0.04em; cursor: pointer; transition: all var(--dur) var(--ease); }
+.page-auth .social-row button { display: inline-flex; align-items: center; justify-content: center; padding: 0.95em; border: 1px solid var(--hairline); background: var(--surface); font-family: var(--sans); font-size: 0.74rem; letter-spacing: 0.04em; cursor: pointer; transition: all var(--dur) var(--ease); }
 .page-auth .social-row button:hover { border-color: var(--gold); background: var(--celadon-50); }
 .page-auth .social-row .google-slot { display: flex; align-items: center; justify-content: center; min-height: 42px; }
 .page-auth .soon { text-align: center; font-size: 0.62rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); margin-top: 0.8rem; }

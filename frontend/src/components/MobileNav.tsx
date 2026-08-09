@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import BrandLogo from './BrandLogo';
 
 const LINKS = [
-  { t: 'Women', h: '/collection/lehenga' },
+  { t: 'Women', h: '/collection' },
   { t: 'Collections', h: '/collections' },
   { t: 'Lookbook', h: '/lookbook' },
   { t: 'The House', h: '/the-house' },

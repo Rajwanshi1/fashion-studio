@@ -169,7 +169,7 @@ export default function OrderConfirmation() {
               <Link className="btn-buy" to="/account">
                 Track in My Account
               </Link>
-              <Link className="btn-outline" to="/collection/lehenga">
+              <Link className="btn-outline" to="/collection">
                 Continue Shopping
               </Link>
             </div>
