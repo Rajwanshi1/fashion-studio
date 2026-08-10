@@ -121,27 +121,34 @@ export default function PreviewFrame({
   const visibleHeight = Math.min(contentHeight, frameHeight);
 
   return (
-    <div
-      ref={wrapRef}
-      className="pv-wrap"
-      style={{ height: Math.round(visibleHeight * scale) }}
-    >
-      <iframe
-        ref={adopt}
-        title={label}
-        tabIndex={-1}
+    <div ref={wrapRef} className="pv-wrap">
+      {/* Inner box at the scaled size, centred — a life-size phone frame sits
+          mid-pane instead of leaving a dead margin on its right. */}
+      <div
         style={{
-          width,
-          height: frameHeight,
-          border: 0,
-          display: 'block',
-          transform: `scale(${scale})`,
-          transformOrigin: 'top left',
-          // A picture of the site, not a page: taps and scrolls belong to the
-          // admin around it (the canvas link, the editor page).
-          pointerEvents: 'none',
+          width: Math.round(width * scale),
+          height: Math.round(visibleHeight * scale),
+          margin: '0 auto',
+          overflow: 'hidden',
         }}
-      />
+      >
+        <iframe
+          ref={adopt}
+          title={label}
+          tabIndex={-1}
+          style={{
+            width,
+            height: frameHeight,
+            border: 0,
+            display: 'block',
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+            // A picture of the site, not a page: taps and scrolls belong to
+            // the admin around it (the canvas link, the editor page).
+            pointerEvents: 'none',
+          }}
+        />
+      </div>
       {doc && createPortal(<div className={pageClass}>{children}</div>, doc.body)}
     </div>
   );
