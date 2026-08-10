@@ -479,7 +479,9 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
               // A gallery always owns the primary photo (images[0]); the legacy
               // single imageUrl only applies when no gallery was sent.
               input.images ? (input.images[0]?.url ?? null) : (input.imageUrl ?? null),
-              input.active ?? true,
+              // New pieces start hidden unless explicitly published — a
+              // half-finished piece must never appear on the boutique.
+              input.active ?? false,
               input.collection ?? '',
               input.craft ?? '',
               input.fabric ?? '',

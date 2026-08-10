@@ -65,11 +65,19 @@ const createOfflineOrderSchema = z.object({
   customer: offlineCustomerSchema,
   items: z
     .array(
-      z.object({
-        description: z.string().min(1),
-        quantity: z.number().int().min(1),
-        unitPrice: z.number().int().min(0),
-      }),
+      z
+        .object({
+          description: z.string().min(1),
+          quantity: z.number().int().min(1),
+          unitPrice: z.number().int().min(0),
+          productId: z.string().min(1).optional(),
+          variantId: z.string().min(1).optional(),
+        })
+        // Both or neither: a variant link without its product (or vice versa)
+        // cannot be validated against the catalogue.
+        .refine((it) => (it.productId === undefined) === (it.variantId === undefined), {
+          message: 'productId and variantId must be sent together',
+        }),
     )
     .min(1)
     // Keeps the JSON body comfortably under the WAF's edge cap on request size.

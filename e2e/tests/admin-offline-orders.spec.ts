@@ -62,3 +62,64 @@ test('offline order: intake → appears in Orders → record payment → advance
   await page.locator(`#status-${focusId}`).selectOption({ label: 'Quality Check' });
   await expect(row.getByText('Quality Check')).toBeVisible();
 });
+
+test('offline order: a catalogue-linked line reserves stock, cancelling restores it', async ({
+  page,
+  request,
+}) => {
+  // A piece with stock the other specs leave alone.
+  const token = await adminToken(request);
+  const productsRes = await request.get(`${API}/api/admin/products`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const products = (await productsRes.json()) as {
+    id: string;
+    name: string;
+    active: boolean;
+    variants: { id: string; size: string; stock: number }[];
+  }[];
+  const piece = products.find(
+    (p) => p.active && p.name !== 'Tissue Column Kaftan' && p.variants.some((v) => v.stock > 0),
+  );
+  if (!piece) throw new Error('no in-stock piece for the linked-line spec');
+  const variant = piece.variants.find((v) => v.stock > 0)!;
+
+  await adminLogin(page);
+  await page.goto(`${ADMIN_URL}/orders/new`);
+  await page.locator('#oi-phone').fill(uniquePhone());
+  await page.locator('#oi-first').fill('Linked');
+  await page.getByRole('group', { name: 'Bill type' }).getByRole('button', { name: 'Cash Memo' }).click();
+
+  // Pick the piece + size from the catalogue instead of typing a freeform line.
+  await page.locator('#oi-picker').fill(piece.name.slice(0, 8));
+  await page.getByRole('button', { name: new RegExp(piece.name) }).first().click();
+  await page
+    .getByRole('group', { name: `Sizes for ${piece.name}` })
+    .getByRole('button', { name: new RegExp(`^${variant.size} ·`) })
+    .click();
+  await expect(page.getByText('Linked · reserves stock')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Record Order' }).click();
+  await expect(page).toHaveURL(/\/orders\?focus=/);
+  const focusId = new URL(page.url()).searchParams.get('focus')!;
+
+  // Stock went down by one.
+  const after = (await (
+    await request.get(`${API}/api/admin/products`, { headers: { Authorization: `Bearer ${token}` } })
+  ).json()) as { id: string; variants: { id: string; stock: number }[] }[];
+  const afterVariant = after.find((p) => p.id === piece.id)!.variants.find((v) => v.id === variant.id)!;
+  expect(afterVariant.stock).toBe(variant.stock - 1);
+
+  // Cancel through the guarded dropdown — the modal confirms, stock returns.
+  await page.locator(`#status-${focusId}`).selectOption({ label: 'Cancelled' });
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel order' }).click();
+  await expect(page.getByText('no further transitions').first()).toBeVisible();
+
+  const restored = (await (
+    await request.get(`${API}/api/admin/products`, { headers: { Authorization: `Bearer ${token}` } })
+  ).json()) as { id: string; variants: { id: string; stock: number }[] }[];
+  const restoredVariant = restored
+    .find((p) => p.id === piece.id)!
+    .variants.find((v) => v.id === variant.id)!;
+  expect(restoredVariant.stock).toBe(variant.stock);
+});

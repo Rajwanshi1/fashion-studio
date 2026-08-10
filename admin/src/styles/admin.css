@@ -346,6 +346,14 @@ select.inp {
   .item-row .f-desc { grid-column: 1 / -1; }
 }
 
+/* ---- Catalogue picker on the intake form ---- */
+.picker { margin-bottom: 1rem; }
+.picker-list { list-style: none; margin: 0.4rem 0 0; padding: 0; border: 1px solid var(--celadon-100); border-radius: var(--edge); }
+.picker-item + .picker-item { border-top: 1px solid var(--celadon-100); }
+.picker-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 0.8rem; width: 100%; padding: 0.55rem 0.8rem; background: none; border: 0; text-align: left; cursor: pointer; font: inherit; align-items: baseline; }
+.picker-row:hover, .picker-row:focus-visible { background: var(--celadon-50); }
+.picker-sizes { padding: 0 0.8rem 0.7rem; }
+
 /* 44px icon-only button (remove row) */
 .icon-btn {
   width: 44px;
