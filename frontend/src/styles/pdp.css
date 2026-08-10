@@ -5,6 +5,7 @@
 
 /* gallery */
 .page-pdp .gallery { display: grid; grid-template-columns: 76px 1fr; gap: 1rem; position: sticky; top: 96px; }
+@media (max-width: 900px){ .page-pdp .gallery { position: static; } }
 @media (max-width: 560px){ .page-pdp .gallery { grid-template-columns: 1fr; } }
 .page-pdp .thumbs { display: flex; flex-direction: column; gap: 0.7rem; }
 @media (max-width: 560px){ .page-pdp .thumbs { flex-direction: row; order: 2; } }
