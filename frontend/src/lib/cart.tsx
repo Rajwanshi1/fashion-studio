@@ -102,7 +102,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setQty = useCallback((lineKey: string, qty: number) => {
-    if (qty < 1) track('remove_from_cart', { props: { variantId: lineKey } });
+    // Track only the variant id — the full line key carries the free-text
+    // measurements note, which must not land in the analytics events table.
+    if (qty < 1) track('remove_from_cart', { props: { variantId: lineKey.split(':')[0] } });
     setItems((prev) =>
       qty < 1
         ? prev.filter((i) => cartLineKey(i) !== lineKey)
@@ -111,7 +113,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const remove = useCallback((lineKey: string) => {
-    track('remove_from_cart', { props: { variantId: lineKey } });
+    track('remove_from_cart', { props: { variantId: lineKey.split(':')[0] } });
     setItems((prev) => prev.filter((i) => cartLineKey(i) !== lineKey));
   }, []);
 

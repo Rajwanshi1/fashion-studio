@@ -1,6 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
+
+// Mocked so the remove_from_cart payload can be asserted directly (the line
+// key embeds the free-text measurements note, which must never be tracked).
+vi.mock('../lib/analytics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/analytics')>();
+  return { ...actual, track: vi.fn() };
+});
+
+import { track } from '../lib/analytics';
 import { CartProvider, cartLineKey, useCart, type CartItem } from '../lib/cart';
 
 const wrapper = ({ children }: { children: ReactNode }) => <CartProvider>{children}</CartProvider>;
@@ -70,6 +79,19 @@ describe('cart context', () => {
     expect(result.current.items).toHaveLength(1);
     expect(result.current.items[0].qty).toBe(3);
     expect(result.current.items[0].measurements).toBe('bust 36in, waist 30in');
+  });
+
+  it('tracks removal with the bare variant id, never the measurements note', () => {
+    const { result } = renderHook(() => useCart(), { wrapper });
+    act(() => result.current.add(noted));
+    act(() => result.current.remove(cartLineKey(noted)));
+    expect(track).toHaveBeenCalledWith('remove_from_cart', { props: { variantId: 'v1' } });
+    act(() => result.current.add(noted));
+    act(() => result.current.setQty(cartLineKey(noted), 0));
+    const calls = vi.mocked(track).mock.calls.filter(([e]) => e === 'remove_from_cart');
+    for (const [, payload] of calls) {
+      expect(JSON.stringify(payload)).not.toContain('bust 36in');
+    }
   });
 
   it('keeps the same variant with a different note as its own line', () => {
