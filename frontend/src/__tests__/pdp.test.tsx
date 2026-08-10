@@ -1,9 +1,16 @@
-import { describe, expect, it } from 'vitest';
-import { screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DETAIL1, DETAIL_LEGACY, DETAIL_SALE, DETAIL_SET, mockFetch, renderApp } from './helpers';
 
 const thumbCount = () => document.querySelectorAll('#thumbs .img-slot').length;
+
+/** The carousel track, with a mocked width so index math works in jsdom. */
+const getTrack = (width = 600) => {
+  const track = document.querySelector('.stage-track') as HTMLElement;
+  Object.defineProperty(track, 'clientWidth', { configurable: true, value: width });
+  return track;
+};
 
 describe('PDP', () => {
   it('add to bag opens the drawer and shows the toast', async () => {
@@ -72,7 +79,7 @@ describe('PDP', () => {
     });
   });
 
-  it('renders one thumb per gallery image, poses in the alt text, and swaps the stage', async () => {
+  it('renders one thumb per gallery image, poses in the alt text, and syncs the carousel', async () => {
     mockFetch((url) => {
       if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;
       if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
@@ -83,17 +90,117 @@ describe('PDP', () => {
     renderApp('/product/sage-sequin-jacket-lehenga');
     await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
 
-    // Three gallery rows → three thumbs (no fixed four-label strip).
+    // Three gallery rows → three thumbs and three carousel slides.
     expect(thumbCount()).toBe(3);
-    // Thumb 0 is also the stage, hence two matches for its pose.
+    expect(document.querySelectorAll('.stage-track .stage-slide')).toHaveLength(3);
+    // Every pose appears twice — thumb + its slide.
     expect(screen.getAllByAltText('Sage Sequin Jacket Lehenga — front')).toHaveLength(2);
     // The third row carries no pose → positional fallback.
-    expect(screen.getByAltText('Sage Sequin Jacket Lehenga — View 3')).toBeInTheDocument();
+    expect(screen.getAllByAltText('Sage Sequin Jacket Lehenga — View 3')).toHaveLength(2);
 
-    const back = screen.getByAltText('Sage Sequin Jacket Lehenga — back');
+    const track = getTrack();
+    const thumbs = document.getElementById('thumbs')!;
+    const back = within(thumbs).getByAltText('Sage Sequin Jacket Lehenga — back');
     const user = userEvent.setup();
     await user.click(back);
-    expect(screen.getAllByAltText('Sage Sequin Jacket Lehenga — back')).toHaveLength(2);
+    // Thumb goes active and the track scrolls to slide 1.
+    expect(back.className).toContain('active');
+    expect(track.scrollLeft).toBe(600);
+
+    // Dots reflect the same index and are labelled for a screen reader.
+    const dots = screen.getAllByRole('button', { name: /Go to photo \d of 3/ });
+    expect(dots).toHaveLength(3);
+    expect(dots[1]).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('swiping the stage (native scroll) drives the active thumb', async () => {
+    mockFetch((url) => {
+      if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;
+      if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+      if (url.includes('/api/categories')) return [];
+      return undefined;
+    });
+
+    renderApp('/product/sage-sequin-jacket-lehenga');
+    await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
+
+    const track = getTrack();
+    track.scrollLeft = 600; // snap landed on slide 1
+    fireEvent.scroll(track);
+
+    const thumbs = document.getElementById('thumbs')!;
+    await waitFor(() =>
+      expect(within(thumbs).getByAltText('Sage Sequin Jacket Lehenga — back').className).toContain(
+        'active',
+      ),
+    );
+  });
+
+  it('mouse drag past the threshold scrolls the track and snaps to the next slide', async () => {
+    mockFetch((url) => {
+      if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;
+      if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+      if (url.includes('/api/categories')) return [];
+      return undefined;
+    });
+
+    renderApp('/product/sage-sequin-jacket-lehenga');
+    await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
+
+    const track = getTrack();
+    fireEvent.pointerDown(track, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 500 });
+    fireEvent.pointerMove(track, { pointerId: 1, pointerType: 'mouse', clientX: 100 });
+    // Drag follows the pointer 1:1 while snap is off.
+    expect(track.scrollLeft).toBe(400);
+    fireEvent.pointerUp(track, { pointerId: 1, pointerType: 'mouse', clientX: 100 });
+    // Release snaps to the nearest slide (round(400/600) = 1).
+    expect(track.scrollLeft).toBe(600);
+
+    const thumbs = document.getElementById('thumbs')!;
+    await waitFor(() =>
+      expect(within(thumbs).getByAltText('Sage Sequin Jacket Lehenga — back').className).toContain(
+        'active',
+      ),
+    );
+  });
+
+  it('honours prefers-reduced-motion: programmatic jumps are instant, not smooth', async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }) as MediaQueryList) as typeof window.matchMedia;
+    const scrollSpy = vi.spyOn(Element.prototype, 'scrollTo');
+
+    try {
+      mockFetch((url) => {
+        if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;
+        if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+        if (url.includes('/api/categories')) return [];
+        return undefined;
+      });
+
+      renderApp('/product/sage-sequin-jacket-lehenga');
+      await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
+
+      getTrack();
+      const thumbs = document.getElementById('thumbs')!;
+      await userEvent.click(within(thumbs).getByAltText('Sage Sequin Jacket Lehenga — back'));
+
+      expect(scrollSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ left: 600, behavior: 'auto' }),
+      );
+    } finally {
+      scrollSpy.mockRestore();
+      window.matchMedia = originalMatchMedia;
+    }
   });
 
   it('falls back to the single legacy image when the piece has no gallery rows', async () => {
@@ -112,6 +219,9 @@ describe('PDP', () => {
     const shots = screen.getAllByAltText('Legacy Single Image — View 1');
     expect(shots).toHaveLength(2);
     expect(shots[0]).toHaveAttribute('src', '/img/legacy.jpg');
+    // A single image gets the plain stage — no carousel chrome.
+    expect(document.querySelector('.stage-track')).toBeNull();
+    expect(document.querySelector('.stage-dots')).toBeNull();
   });
 
   it('sale: struck-through pre-sale total, live total = sale base + chosen add-ons', async () => {
