@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   Navigate,
   Outlet,
@@ -35,41 +36,52 @@ function RequireAuth() {
   return <Outlet />;
 }
 
+/**
+ * The full route tree, exported for the test harness: a data router cannot be
+ * nested inside a test's MemoryRouter, so tests mount these same routes on a
+ * createMemoryRouter instead.
+ */
+export const appRoutes = createRoutesFromElements(
+  <>
+    <Route path="/login" element={<Login />} />
+    <Route element={<RequireAuth />}>
+      <Route element={<Layout />}>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/deliveries" element={<Deliveries />} />
+        <Route path="/intake" element={<BillIntake />} />
+        <Route path="/products" element={<Products />} />
+        <Route path="/products/new" element={<ProductEdit />} />
+        <Route path="/products/:id" element={<ProductEdit />} />
+        <Route path="/site" element={<Site />} />
+        <Route path="/site/:key" element={<SiteSectionEdit />} />
+        <Route path="/orders" element={<Orders />} />
+        <Route path="/orders/new" element={<OrderIntake />} />
+        <Route path="/payments" element={<Payments />} />
+        <Route path="/users" element={<Users />} />
+        <Route path="/socials" element={<Socials />} />
+        <Route path="/analytics" element={<Analytics />} />
+      </Route>
+    </Route>
+    <Route path="*" element={<NotFound />} />
+  </>,
+);
+
+export function AppProviders({ children }: { children: ReactNode }) {
+  return (
+    <AuthProvider>
+      <ToastProvider>{children}</ToastProvider>
+    </AuthProvider>
+  );
+}
+
 // A data router (not <BrowserRouter>) so pages can useBlocker to guard
 // unsaved changes against in-app navigation.
-const router = createBrowserRouter(
-  createRoutesFromElements(
-    <>
-      <Route path="/login" element={<Login />} />
-      <Route element={<RequireAuth />}>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/deliveries" element={<Deliveries />} />
-          <Route path="/intake" element={<BillIntake />} />
-          <Route path="/products" element={<Products />} />
-          <Route path="/products/new" element={<ProductEdit />} />
-          <Route path="/products/:id" element={<ProductEdit />} />
-          <Route path="/site" element={<Site />} />
-          <Route path="/site/:key" element={<SiteSectionEdit />} />
-          <Route path="/orders" element={<Orders />} />
-          <Route path="/orders/new" element={<OrderIntake />} />
-          <Route path="/payments" element={<Payments />} />
-          <Route path="/users" element={<Users />} />
-          <Route path="/socials" element={<Socials />} />
-          <Route path="/analytics" element={<Analytics />} />
-        </Route>
-      </Route>
-      <Route path="*" element={<NotFound />} />
-    </>,
-  ),
-);
+const router = createBrowserRouter(appRoutes);
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>
-    </AuthProvider>
+    <AppProviders>
+      <RouterProvider router={router} />
+    </AppProviders>
   );
 }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import { formatDate, formatINR, todayIST } from '../lib/format';
+import { formatDate, formatINR } from '../lib/format';
 import type { BillType, DocumentSummary, Order, OrderChannel, OrderStatus, ReceiptMode } from '../lib/types';
 import {
   BILL_TYPE_LABELS,
@@ -184,9 +184,9 @@ function ExpandedOrder({ order, onUpdated: onUpdatedProp }: ExpandedProps) {
     try {
       const updated = await api<Order>(`/api/admin/orders/${order.id}/receipts`, {
         method: 'POST',
-        // The date the money changed hands, in the boutique's timezone — the
-        // server's UTC "today" is yesterday until 05:30 IST.
-        body: { amount: paise, mode, receivedAt: todayIST() },
+        // No receivedAt: the server stamps today in IST. The device clock is
+        // not trusted for ledger dates.
+        body: { amount: paise, mode },
       });
       setAmount('');
       onUpdated(updated, `Payment of ${formatINR(paise)} recorded`);
