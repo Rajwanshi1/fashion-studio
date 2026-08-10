@@ -117,6 +117,10 @@ describe('site content API', () => {
     // `//evil.com` is protocol-relative — an off-site link that looks like a path.
     const protocolRelative = await app.request('/api/admin/content/footer', jsonReq('PUT', { instagramUrl: '//evil.com' }, adminToken));
     expect(protocolRelative.status).toBe(400);
+    // …and so is `/\evil.example`: WHATWG URL parsing treats the backslash as a
+    // second slash, so a browser follows it straight off the site.
+    const backslash = await app.request('/api/admin/content/footer', jsonReq('PUT', { instagramUrl: '/\\evil.example' }, adminToken));
+    expect(backslash.status).toBe(400);
     // A real path stays legal.
     const path = await app.request('/api/admin/content/featured', jsonReq('PUT', { ctaHref: '/collection' }, adminToken));
     expect(path.status).toBe(204);

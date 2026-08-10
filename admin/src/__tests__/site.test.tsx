@@ -1,5 +1,22 @@
 import { screen } from '@testing-library/react';
 import { mockFetch, renderApp, seedAdminAuth } from '../test/utils';
+import { sectionPreview } from '../lib/siteContent';
+
+describe('sectionPreview', () => {
+  it('truncates by code point, never through an emoji', () => {
+    const out = sectionPreview('hero', { title: `${'a'.repeat(78)}😀 more text` });
+
+    // slicing UTF-16 units at 79 would cut the emoji in half and leave a lone
+    // surrogate, which renders as a replacement glyph on the card
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(out)).toBe(false);
+    expect(out.endsWith('…')).toBe(true);
+    expect(out).toBe(`${'a'.repeat(78)}😀…`);
+  });
+
+  it('leaves a summary inside the cap alone', () => {
+    expect(sectionPreview('hero', { title: 'Tanvi Agnihotry' })).toBe('Tanvi Agnihotry');
+  });
+});
 
 describe('site content list', () => {
   it('shows a card per section with customised/default badges', async () => {

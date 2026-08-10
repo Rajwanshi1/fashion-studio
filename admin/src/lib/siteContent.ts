@@ -290,11 +290,18 @@ const PREVIEWS: Record<SectionKey, (value: Record<string, unknown>) => string> =
 
 const PREVIEW_MAX = 80;
 
-/** One-line summary of a section's effective content, for its card. */
+/**
+ * One-line summary of a section's effective content, for its card.
+ *
+ * Counted and cut by code point, not by UTF-16 unit: an emoji or a joined
+ * Devanagari cluster sits astride the 80th unit often enough, and slicing
+ * through one leaves a lone surrogate that renders as a replacement glyph.
+ */
 export function sectionPreview(key: SectionKey, value: Record<string, unknown>): string {
   const preview = PREVIEWS[key];
   const summary = preview ? preview(value ?? {}) : '';
-  return summary.length > PREVIEW_MAX
-    ? `${summary.slice(0, PREVIEW_MAX - 1).trimEnd()}…`
+  const chars = [...summary];
+  return chars.length > PREVIEW_MAX
+    ? `${chars.slice(0, PREVIEW_MAX - 1).join('').trimEnd()}…`
     : summary;
 }

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AppRoutes, Providers } from '../App';
 import { DEFAULT_CONTENT, SiteContentProvider, mergeContent, useSiteContent } from '../lib/content';
+import Ticker from '../components/Ticker';
 import { mockFetch, mockFetchDown } from './helpers';
 
 describe('mergeContent', () => {
@@ -169,5 +170,72 @@ describe('alt text on content-driven photos', () => {
     expect(screen.getByAltText('Rang')).toBeInTheDocument();
     expect(screen.queryByAltText(/editorial portrait/)).not.toBeInTheDocument();
     expect(screen.queryByAltText(/Drop campaign image/)).not.toBeInTheDocument();
+  });
+});
+
+/** Both scrollers translate a doubled track -50% to loop: the two halves have
+ *  to be the same copy, and one half has to be wide enough to fill the band. */
+describe('scrolling tracks', () => {
+  const renderTicker = (sections: Record<string, unknown>) => {
+    mockFetch((url) => (url.endsWith('/api/content') ? { sections } : undefined));
+    return render(
+      <SiteContentProvider>
+        <Ticker />
+      </SiteContentProvider>,
+    );
+  };
+
+  const renderHome = (sections: Record<string, unknown>) => {
+    mockFetch((url) => (url.endsWith('/api/content') ? { sections } : undefined));
+    return render(
+      <SiteContentProvider>
+        <MemoryRouter initialEntries={['/']}>
+          <Providers>
+            <AppRoutes />
+          </Providers>
+        </MemoryRouter>
+      </SiteContentProvider>,
+    );
+  };
+
+  it('prints each default ticker message exactly twice, repeating nothing', async () => {
+    const { container } = renderTicker({});
+
+    await screen.findAllByText(DEFAULT_CONTENT.ticker.items[0]);
+    for (const message of DEFAULT_CONTENT.ticker.items) {
+      expect(screen.getAllByText(message)).toHaveLength(2);
+    }
+    // message + '·', for each half of the loop
+    expect(container.querySelectorAll('.ticker-track span')).toHaveLength(
+      DEFAULT_CONTENT.ticker.items.length * 4,
+    );
+  });
+
+  it('repeats a single short message so the bar is never half empty', async () => {
+    renderTicker({ ticker: { items: ['Sale'] } });
+
+    // one message doubled would leave the band blank between wraps, with a pop
+    // on every loop — the track is filled out to the built-in run first
+    expect((await screen.findAllByText('Sale')).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('italicises the same marquee lines in both halves of an odd-length list', async () => {
+    const items = [
+      'Made to order in the Mumbai studio',
+      'hand embroidered over many weeks',
+      'The Verdant Edit — Spring 2026',
+    ];
+    const { container } = renderHome({ marquee: { items } });
+
+    await screen.findAllByText(items[0]);
+    const spans = [...container.querySelectorAll('.marquee-track span')];
+    expect(spans).toHaveLength(items.length * 2);
+
+    const italics = spans.map((span) => span.classList.contains('it'));
+    const half = italics.length / 2;
+    // parity by position in the whole track would flip on an odd count, so the
+    // loop would visibly restyle every line each time it wrapped
+    expect(italics.slice(half)).toEqual(italics.slice(0, half));
+    expect(italics.slice(0, half)).toEqual([false, true, false]);
   });
 });

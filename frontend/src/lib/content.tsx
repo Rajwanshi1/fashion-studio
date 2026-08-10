@@ -134,6 +134,30 @@ export const DEFAULT_CONTENT: SiteContent = {
 
 const EMPTY_LOOK: Look = { imageUrl: null, lookNo: '', title: '', copy: '', ctaHref: '' };
 
+/* ---- Scrolling tracks (ticker, marquee) ---- */
+
+/**
+ * Both scrollers loop by printing their list twice and translating the track
+ * -50%, which only reads as a seamless loop while *one* copy is wide enough to
+ * span the band. Cut the list down to a single short message and the strip runs
+ * mostly empty, with a visible jump each time it wraps.
+ *
+ * So repeat the list until its copy is at least as long as the run the
+ * component was designed around. `minChars` is the component's own default copy
+ * (see the two constants below), which makes the defaults — and anything of
+ * comparable length — repeat nothing at all.
+ */
+export function fillTrack(items: string[], minChars: number): string[] {
+  const chars = items.join('').length;
+  if (chars === 0) return [...items];
+  const copies = Math.max(1, Math.ceil(minChars / chars));
+  return Array.from({ length: copies }, () => items).flat();
+}
+
+/** The band each scroller was drawn for, measured in its own built-in copy. */
+export const TICKER_MIN_CHARS = DEFAULT_CONTENT.ticker.items.join('').length;
+export const MARQUEE_MIN_CHARS = DEFAULT_CONTENT.marquee.items.join('').length;
+
 /** A plain object, or {} for anything else (null, arrays, scalars, junk). */
 function obj(v: unknown): Record<string, unknown> {
   return v !== null && typeof v === 'object' && !Array.isArray(v)

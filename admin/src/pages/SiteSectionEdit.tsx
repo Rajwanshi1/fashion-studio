@@ -42,6 +42,15 @@ const COPY_MAX = 1000;
 const URL_MAX = 500;
 
 /**
+ * Prod sits behind a CloudFront WAF that answers any request body over 8KB
+ * with an opaque edge 403 — no API error body, nothing in the app logs. The
+ * API refuses the same 6KB budget with a readable 400, but the WAF fires
+ * first, so the section is measured here as well and never leaves the browser.
+ * Keep in step with MAX_SECTION_BYTES in backend/src/routes/content.routes.ts.
+ */
+const MAX_SECTION_BYTES = 6 * 1024;
+
+/**
  * The schemas type every `…Url` / `…Href` field as `url` (500) and everything
  * else as `str` (300) — the names carry the distinction, so the field configs
  * don't have to.
@@ -482,22 +491,25 @@ function TrustField({
   );
 }
 
+/**
+ * Patches, not whole arrays: a look's photo upload resolves long after it was
+ * picked, and rebuilding the list from the `looks` this render closed over
+ * would put back every other look as it stood at pick time. `onPatch` hands
+ * the page an index and the changed keys, which it applies to current state.
+ */
 function LooksField({
   label,
   hint,
   looks,
   onUploading,
-  onChange,
+  onPatch,
 }: {
   label: string;
   hint?: string;
   looks: Look[];
   onUploading: (uploading: boolean) => void;
-  onChange: (looks: Look[]) => void;
+  onPatch: (index: number, patch: Partial<Look>) => void;
 }) {
-  const update = (index: number, patch: Partial<Look>) =>
-    onChange(looks.map((look, i) => (i === index ? { ...look, ...patch } : look)));
-
   return (
     <>
       <span className="lab">{label}</span>
@@ -512,33 +524,33 @@ function LooksField({
             label={`Look ${i + 1} photo`}
             value={look.imageUrl}
             onUploading={onUploading}
-            onChange={(imageUrl) => update(i, { imageUrl })}
+            onChange={(imageUrl) => onPatch(i, { imageUrl })}
           />
           <TextField
             id={`look-${i}-no`}
             label={`Look ${i + 1} number`}
             value={look.lookNo}
-            onChange={(lookNo) => update(i, { lookNo })}
+            onChange={(lookNo) => onPatch(i, { lookNo })}
           />
           <TextField
             id={`look-${i}-title`}
             label={`Look ${i + 1} title`}
             value={look.title}
-            onChange={(title) => update(i, { title })}
+            onChange={(title) => onPatch(i, { title })}
           />
           <TextField
             id={`look-${i}-copy`}
             label={`Look ${i + 1} caption`}
             multiline
             value={look.copy}
-            onChange={(copy) => update(i, { copy })}
+            onChange={(copy) => onPatch(i, { copy })}
           />
           <TextField
             id={`look-${i}-href`}
             label={`Look ${i + 1} link`}
             maxLength={URL_MAX}
             value={look.ctaHref}
-            onChange={(ctaHref) => update(i, { ctaHref })}
+            onChange={(ctaHref) => onPatch(i, { ctaHref })}
           />
         </fieldset>
       ))}
@@ -584,6 +596,23 @@ export default function SiteSectionEdit() {
   const setField = (name: string, value: unknown) =>
     setForm((f) => (f ? { ...f, [name]: value } : f));
 
+  /**
+   * One look, patched onto whatever the form holds *now*. A photo upload
+   * resolves minutes after its pick on a phone; applying it to the array the
+   * picker closed over would silently undo every edit made in between.
+   */
+  const patchLook = (name: string, index: number, patch: Partial<Look>) =>
+    setForm((f) =>
+      f
+        ? {
+            ...f,
+            [name]: looksOf(f, name).map((look, i) =>
+              i === index ? { ...look, ...patch } : look,
+            ),
+          }
+        : f,
+    );
+
   const onUploading = (uploading: boolean) =>
     setUploads((n) => Math.max(0, n + (uploading ? 1 : -1)));
 
@@ -604,6 +633,12 @@ export default function SiteSectionEdit() {
     if (emptied) {
       const noun = (LIST_NOUN[config.key] ?? 'Item').toLowerCase();
       toast(`${config.title} needs at least one ${noun}`, { tone: 'error' });
+      return;
+    }
+    // Same budget, same wording as the API — but said here, because in prod the
+    // WAF eats an over-long body at the edge and the readable 400 never lands.
+    if (new Blob([JSON.stringify(body)]).size > MAX_SECTION_BYTES) {
+      toast('Section too large — shorten the copy', { tone: 'error' });
       return;
     }
     setBusy(true);
@@ -674,7 +709,7 @@ export default function SiteSectionEdit() {
             hint={field.hint}
             looks={looksOf(state, field.name)}
             onUploading={onUploading}
-            onChange={(looks) => setField(field.name, looks)}
+            onPatch={(index, patch) => patchLook(field.name, index, patch)}
           />
         );
       default:

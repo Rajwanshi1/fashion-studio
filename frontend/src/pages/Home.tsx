@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
-import { useSiteContent } from '../lib/content';
+import { MARQUEE_MIN_CHARS, fillTrack, useSiteContent } from '../lib/content';
 import { displayPrice } from '../lib/format';
 import type { Category, ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
@@ -27,6 +27,10 @@ export default function Home() {
   const [cats, setCats] = useState<Array<Pick<Category, 'slug' | 'name'>>>(FALLBACK_CATS);
   const [best, setBest] = useState<ProductSummary[]>([]);
   const site = useSiteContent();
+  // One copy of the marquee has to span the strip before it can be doubled into
+  // a seamless loop — a one- or two-line marquee is repeated up to the length
+  // the band was drawn for.
+  const marquee = fillTrack(site.marquee.items, MARQUEE_MIN_CHARS);
   const cart = useCart();
   const { openDrawer } = useCartDrawer();
   const { showToast } = useToast();
@@ -145,10 +149,12 @@ export default function Home() {
       {/* MARQUEE */}
       <div className="marquee" aria-hidden="true">
         {/* The track prints the list twice so the loop is seamless; every
-            second line is set in italics, as the reference marquee does. */}
+            second line is set in italics, as the reference marquee does.
+            Parity runs over the position *within one copy*, so an odd number
+            of lines can't italicise the second half opposite the first. */}
         <div className="marquee-track">
-          {[...site.marquee.items, ...site.marquee.items].map((t, i) => (
-            <span key={i} className={i % 2 === 1 ? 'it' : undefined}>
+          {[...marquee, ...marquee].map((t, i) => (
+            <span key={i} className={(i % marquee.length) % 2 === 1 ? 'it' : undefined}>
               {t}
             </span>
           ))}

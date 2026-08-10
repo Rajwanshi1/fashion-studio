@@ -315,6 +315,61 @@ describe('site section editor', () => {
     expect(body.quoteCite).toBe('— The Verdant Edit');
   });
 
+  it('keeps edits made while a look photo was still uploading', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({});
+    let land: (result: { publicUrl: string; pose: string | null }) => void = () => {};
+    vi.mocked(uploadProductImage).mockImplementationOnce(
+      () => new Promise((resolve) => (land = resolve)),
+    );
+
+    renderApp('/site/lookbook');
+    await screen.findByLabelText('Look 1 title');
+
+    const file = new File([new Uint8Array([1])], 'look.jpg', { type: 'image/jpeg' });
+    await userEvent.upload(screen.getByLabelText('Look 1 photo file'), file);
+
+    // the boutique carries on writing while the photo goes up
+    await userEvent.type(screen.getByLabelText('Look 2 caption'), 'Ivory hour, after the rain.');
+
+    await act(async () => {
+      land({ publicUrl: UPLOADED, pose: null });
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const looks = (
+      calls.find((c) => c.method === 'PUT')?.body as { looks: Record<string, unknown>[] }
+    ).looks;
+    expect(looks[0].imageUrl).toBe(UPLOADED);
+    // a late upload lands as a patch on current state — it must not put back
+    // the looks as they stood when the picker opened
+    expect(looks[1].copy).toBe('Ivory hour, after the rain.');
+  });
+
+  it('refuses to send a section too big for the edge WAF', async () => {
+    seedAdminAuth();
+    const bigLook = {
+      imageUrl: `https://cdn.example/${'a'.repeat(400)}.jpg`,
+      lookNo: 'Look 01',
+      title: 'T'.repeat(300),
+      copy: 'C'.repeat(1000),
+      ctaHref: `/collection/${'b'.repeat(400)}`,
+    };
+    const { calls } = stubContent({
+      lookbook: { looks: Array.from({ length: 7 }, () => bigLook) },
+    });
+
+    renderApp('/site/lookbook');
+    await screen.findByLabelText('Look 1 title');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    // prod's CloudFront WAF answers a >8KB body with an opaque 403 and no log
+    // line, so an over-long section never leaves the browser
+    expect(await screen.findByText('Section too large — shorten the copy')).toBeInTheDocument();
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false);
+  });
+
   it('resets a customised section to its default after confirming', async () => {
     seedAdminAuth();
     const { calls } = stubContent({ hero: { title: 'Custom' } });
