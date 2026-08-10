@@ -7,6 +7,8 @@ work as it's discovered. Refresh the PR list with `gh pr list --state open`.
 Keep this file under ~60 lines.
 
 ## Open PRs (as of 2026-08-10)
+- #36 draft Storefront PDP swipe gallery, admin drag-and-drop photo reorder,
+            mobile nav fix
 - #26 open  Fix mobile overlap: reset sticky columns when their grids collapse
 - #30 draft Site content CMS: admin-editable storefront content (mweb-first)
 - #29 draft Invoicing: PDF cash memo + WhatsApp Cloud API send — blocked on Meta
@@ -23,6 +25,8 @@ Keep this file under ~60 lines.
 - Staging teardown (2026-08-09) leftover: one AWS secret still needs manual
   deletion (needs Sarthak).
 - No CI — all tests run manually (see PRODUCTION-TODO P1).
+- Shop-page footer (.foot-col) overflows ~15px at 320px viewports — pre-existing
+  on prod, spotted during #36 verification.
 
 ## Go-live headline (full list: PRODUCTION-TODO.md)
 - Payments are gated/mocked in production — live Razorpay integration pending.
