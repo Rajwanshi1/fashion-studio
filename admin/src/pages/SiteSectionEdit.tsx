@@ -13,13 +13,16 @@
  *     per-field, so a partial body would silently drop the rest.
  */
 import { useEffect, useRef, useState } from 'react';
-import type { ChangeEvent } from 'react';
+import type { ChangeEvent, KeyboardEvent, MouseEvent } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { uploadProductImage } from '../lib/uploads';
 import { useToast } from '../components/Toast';
 import { SECTIONS, SECTION_DEFAULTS } from '../lib/siteContent';
 import type { FieldConfig, SectionConfig } from '../lib/siteContent';
+import DeviceToggle from '../preview/DeviceToggle';
+import SectionLivePreview from '../preview/SectionLivePreview';
+import type { PreviewDevice } from '../preview/PreviewFrame';
 
 interface TrustItem {
   title: string;
@@ -319,6 +322,72 @@ function TextField({
   );
 }
 
+/** How far one arrow-key press moves the focal point, in percent. */
+const FOCAL_STEP = 5;
+
+/**
+ * The focal-point picker: the photo at its natural aspect, a crosshair where
+ * the current focal point sits. A tap moves it; arrow keys nudge it. The
+ * *uncropped* photo is the right input surface — the point of the control is
+ * choosing what survives the storefront's object-fit: cover crop, and the
+ * subject may be outside today's crop entirely. The live preview beside the
+ * form shows the resulting crop as it moves.
+ */
+function FocalPointField({
+  src,
+  noun,
+  focusX,
+  focusY,
+  onChange,
+}: {
+  src: string;
+  noun: string;
+  focusX: number;
+  focusY: number;
+  onChange: (focusX: number, focusY: number) => void;
+}) {
+  const button = useRef<HTMLButtonElement>(null);
+
+  const onPick = (e: MouseEvent<HTMLButtonElement>) => {
+    const rect = button.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return;
+    onChange(
+      clampPct(((e.clientX - rect.left) / rect.width) * 100),
+      clampPct(((e.clientY - rect.top) / rect.height) * 100),
+    );
+  };
+
+  const onKey = (e: KeyboardEvent<HTMLButtonElement>) => {
+    const nudge: Record<string, [number, number]> = {
+      ArrowLeft: [-FOCAL_STEP, 0],
+      ArrowRight: [FOCAL_STEP, 0],
+      ArrowUp: [0, -FOCAL_STEP],
+      ArrowDown: [0, FOCAL_STEP],
+    };
+    const delta = nudge[e.key];
+    if (!delta) return;
+    e.preventDefault();
+    onChange(clampPct(focusX + delta[0]), clampPct(focusY + delta[1]));
+  };
+
+  return (
+    <div className="focal-wrap">
+      <button
+        ref={button}
+        type="button"
+        className="focal-pick"
+        aria-label={`Focal point for ${noun}: ${focusX}% across, ${focusY}% down. Tap the photo or use the arrow keys.`}
+        onClick={onPick}
+        onKeyDown={onKey}
+      >
+        <img src={src} alt="" />
+        <span className="focal-dot" style={{ left: `${focusX}%`, top: `${focusY}%` }} aria-hidden="true" />
+      </button>
+      <p className="hint">Focal point — tap what the photo must keep in frame.</p>
+    </div>
+  );
+}
+
 /**
  * A photo tile plus a hidden file input. No product to name the object after,
  * so `uploadProductImage` presigns a plain uuid key.
@@ -331,12 +400,19 @@ function ImageField({
   label,
   hint,
   value,
+  focusX,
+  focusY,
+  onFocusChange,
   onUploading,
   onChange,
 }: {
   label: string;
   hint?: string;
   value: string | null;
+  /** Present only for photos that carry a focal point (FieldConfig.focus). */
+  focusX?: number;
+  focusY?: number;
+  onFocusChange?: (focusX: number, focusY: number) => void;
   onUploading: (uploading: boolean) => void;
   onChange: (value: string | null) => void;
 }) {
@@ -399,6 +475,15 @@ function ImageField({
         </div>
       </div>
       {hint && <p className="hint">{hint}</p>}
+      {value && onFocusChange && (
+        <FocalPointField
+          src={value}
+          noun={noun}
+          focusX={focusX ?? 50}
+          focusY={focusY ?? 50}
+          onChange={onFocusChange}
+        />
+      )}
       <input
         ref={input}
         type="file"
@@ -532,12 +617,14 @@ function LooksField({
   label,
   hint,
   looks,
+  withFocus,
   onUploading,
   onPatch,
 }: {
   label: string;
   hint?: string;
   looks: Look[];
+  withFocus: boolean;
   onUploading: (uploading: boolean) => void;
   onPatch: (index: number, patch: Partial<Look>) => void;
 }) {
@@ -554,6 +641,11 @@ function LooksField({
           <ImageField
             label={`Look ${i + 1} photo`}
             value={look.imageUrl}
+            focusX={withFocus ? look.focusX : undefined}
+            focusY={withFocus ? look.focusY : undefined}
+            onFocusChange={
+              withFocus ? (focusX, focusY) => onPatch(i, { focusX, focusY }) : undefined
+            }
             onUploading={onUploading}
             onChange={(imageUrl) => onPatch(i, { imageUrl })}
           />
@@ -602,6 +694,10 @@ export default function SiteSectionEdit() {
   const [busy, setBusy] = useState(false);
   /** Photo uploads still in flight, across every image field on the page. */
   const [uploads, setUploads] = useState(0);
+  const [device, setDevice] = useState<PreviewDevice>('phone');
+  const [previewOpen, setPreviewOpen] = useState(true);
+  /** Stored lookbookCover row — the lookbook's preview renders beneath it. */
+  const [coverStored, setCoverStored] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     if (!config) return;
@@ -611,8 +707,11 @@ export default function SiteSectionEdit() {
     api<{ sections: Record<string, unknown> }>('/api/content')
       .then((data) => {
         if (!live) return;
-        const stored = isRecord(data.sections) ? data.sections[config.key] : undefined;
+        const sections = isRecord(data.sections) ? data.sections : {};
+        const stored = sections[config.key];
+        const cover = sections.lookbookCover;
         setCustomised(isRecord(stored));
+        setCoverStored(isRecord(cover) ? cover : null);
         setForm(buildForm(config, isRecord(stored) ? stored : null));
       })
       .catch((err: Error) => live && setError(err.message));
@@ -697,6 +796,10 @@ export default function SiteSectionEdit() {
     setBusy(false);
   };
 
+  /** Both focal coordinates land in one state update — a tap sets a point. */
+  const setFocus = (focusX: number, focusY: number) =>
+    setForm((f) => (f ? { ...f, focusX, focusY } : f));
+
   const renderField = (field: FieldConfig, state: FormState) => {
     switch (field.type) {
       case 'image':
@@ -706,6 +809,9 @@ export default function SiteSectionEdit() {
             label={field.label}
             hint={field.hint}
             value={imgOf(state, field.name)}
+            focusX={field.focus ? pctOf(state, 'focusX') : undefined}
+            focusY={field.focus ? pctOf(state, 'focusY') : undefined}
+            onFocusChange={field.focus ? setFocus : undefined}
             onUploading={onUploading}
             onChange={(value) => setField(field.name, value)}
           />
@@ -739,6 +845,7 @@ export default function SiteSectionEdit() {
             label={field.label}
             hint={field.hint}
             looks={looksOf(state, field.name)}
+            withFocus={Boolean(field.focus)}
             onUploading={onUploading}
             onPatch={(index, patch) => patchLook(field.name, index, patch)}
           />
@@ -774,68 +881,98 @@ export default function SiteSectionEdit() {
       {!form && !error && <p className="state-note">Loading section…</p>}
 
       {form && (
-        <form
-          className="sec-editor"
-          noValidate
-          onSubmit={(e) => {
-            e.preventDefault();
-            void onSave();
-          }}
-        >
-          {config.fields.map((field) => renderField(field, form))}
-
-          {customised && (
-            <div className="sec-reset">
-              {confirming ? (
-                <>
-                  <p className="hint">
-                    This puts back the boutique&rsquo;s built-in copy for {config.title}.
-                  </p>
-                  <div className="sec-reset-actions">
-                    <button
-                      type="button"
-                      className="btn-outline fit danger"
-                      disabled={busy}
-                      onClick={() => void onReset()}
-                    >
-                      Yes, reset
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-outline fit"
-                      disabled={busy}
-                      onClick={() => setConfirming(false)}
-                    >
-                      Keep
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="btn-outline fit danger"
-                  onClick={() => setConfirming(true)}
-                >
-                  Reset to default
-                </button>
-              )}
+        <div className="sec-layout">
+          {/* The section as the storefront will render it, re-merged from the
+              form on every keystroke. Sticky: above the form on a phone,
+              beside it on a desktop. */}
+          <div className="editor-preview">
+            <div className="editor-preview-head">
+              <DeviceToggle device={device} onChange={setDevice} />
+              {uploads > 0 && <span className="uploading-chip">Photo uploading…</span>}
+              <button
+                type="button"
+                className="ulink preview-collapse"
+                aria-expanded={previewOpen}
+                onClick={() => setPreviewOpen((open) => !open)}
+              >
+                {previewOpen ? 'Hide preview' : 'Show preview'}
+              </button>
             </div>
-          )}
-
-          <div className="savebar">
-            <button
-              type="button"
-              className="btn-outline fit"
-              disabled={busy}
-              onClick={() => navigate('/site')}
-            >
-              Cancel
-            </button>
-            <button className="btn-buy gold" type="submit" disabled={busy || uploads > 0}>
-              {uploads > 0 ? 'Uploading photo…' : busy ? 'Saving…' : 'Save'}
-            </button>
+            {previewOpen && (
+              <div className="editor-preview-frame">
+                <SectionLivePreview
+                  sectionKey={config.key}
+                  body={payload(config, form)}
+                  coverStored={coverStored}
+                  device={device}
+                />
+              </div>
+            )}
           </div>
-        </form>
+
+          <form
+            className="sec-editor"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              void onSave();
+            }}
+          >
+            {config.fields.map((field) => renderField(field, form))}
+
+            {customised && (
+              <div className="sec-reset">
+                {confirming ? (
+                  <>
+                    <p className="hint">
+                      This puts back the boutique&rsquo;s built-in copy for {config.title}.
+                    </p>
+                    <div className="sec-reset-actions">
+                      <button
+                        type="button"
+                        className="btn-outline fit danger"
+                        disabled={busy}
+                        onClick={() => void onReset()}
+                      >
+                        Yes, reset
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-outline fit"
+                        disabled={busy}
+                        onClick={() => setConfirming(false)}
+                      >
+                        Keep
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-outline fit danger"
+                    onClick={() => setConfirming(true)}
+                  >
+                    Reset to default
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="savebar">
+              <button
+                type="button"
+                className="btn-outline fit"
+                disabled={busy}
+                onClick={() => navigate('/site')}
+              >
+                Cancel
+              </button>
+              <button className="btn-buy gold" type="submit" disabled={busy || uploads > 0}>
+                {uploads > 0 ? 'Uploading photo…' : busy ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </>
   );

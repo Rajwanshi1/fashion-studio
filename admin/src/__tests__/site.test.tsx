@@ -1,83 +1,139 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { render } from '@testing-library/react';
 import { mockFetch, renderApp, seedAdminAuth } from '../test/utils';
-import { sectionPreview } from '../lib/siteContent';
+import { effectiveContent } from '../lib/siteContent';
+import DeviceToggle from '../preview/DeviceToggle';
 
-describe('sectionPreview', () => {
-  it('truncates by code point, never through an emoji', () => {
-    const out = sectionPreview('hero', { title: `${'a'.repeat(78)}😀 more text` });
+/** All eight canvas tap targets, by their accessible edit-link names. */
+const EDIT_LINKS = [
+  'Hero',
+  'Marquee',
+  'Featured',
+  'Lookbook Cover',
+  'Trust',
+  'Footer',
+  'Lookbook',
+  'Announcement Bar',
+];
 
-    // slicing UTF-16 units at 79 would cut the emoji in half and leave a lone
-    // surrogate, which renders as a replacement glyph on the card
-    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(out)).toBe(false);
-    expect(out.endsWith('…')).toBe(true);
-    expect(out).toBe(`${'a'.repeat(78)}😀…`);
+function stubContent(sections: Record<string, unknown>) {
+  return mockFetch((url) => {
+    if (url.endsWith('/api/content')) return { json: { sections } };
+    return undefined;
   });
+}
 
-  it('leaves a summary inside the cap alone', () => {
-    expect(sectionPreview('hero', { title: 'Tanvi Agnihotry' })).toBe('Tanvi Agnihotry');
+describe('effectiveContent', () => {
+  it('merges stored sections over the built-in copy, blank losing', () => {
+    const site = effectiveContent({
+      hero: { title: 'Custom headline', eyebrow: '' },
+      ticker: { items: [] },
+    });
+    expect(site.hero.title).toBe('Custom headline');
+    // blank loses to the default, exactly as the storefront merges
+    expect(site.hero.eyebrow).toBe('The Verdant Edit · Indo-Western Couture');
+    expect(site.ticker.items[0]).toBe('Complimentary Made-to-Order Consultation');
+    // untouched sections arrive whole
+    expect(site.trust.items).toHaveLength(3);
+    expect(site.lookbook.looks).toHaveLength(7);
+    expect(site.hero.focusX).toBe(50);
   });
 });
 
-describe('site content list', () => {
-  it('shows a card per section with customised/default badges', async () => {
+describe('site canvas', () => {
+  it('renders every section as a tap target, chipped customised or default', async () => {
     seedAdminAuth();
-    mockFetch((url) => {
-      if (url.endsWith('/api/content')) {
-        return { json: { sections: { hero: { title: 'Custom headline' } } } };
-      }
-      return undefined;
-    });
+    stubContent({ hero: { title: 'Custom headline' } });
 
     renderApp('/site');
 
-    expect(await screen.findByText('Hero')).toBeInTheDocument();
-    expect(screen.getByText('Announcement Bar')).toBeInTheDocument();
-    expect(screen.getByText('Footer')).toBeInTheDocument();
-    // hero row is customised, the rest default
-    expect(screen.getAllByText('Customised')).toHaveLength(1);
-    expect(screen.getAllByText('Default').length).toBeGreaterThan(3);
-    // the customised value is what the card previews
-    expect(screen.getByText('Custom headline')).toBeInTheDocument();
-  });
-
-  it('previews the default when a stored field is blank', async () => {
-    seedAdminAuth();
-    mockFetch((url) => {
-      if (url.endsWith('/api/content')) {
-        // Cleared in the editor and saved: the site still shows its built-in
-        // copy, so the card has to preview that too — not an empty line.
-        return { json: { sections: { hero: { title: '' }, ticker: { items: [] } } } };
-      }
-      return undefined;
-    });
-
-    renderApp('/site');
-
-    expect(await screen.findByText('Tanvi Agnihotry', { selector: '.prev' })).toBeInTheDocument();
-    expect(
-      screen.getByText(/^Complimentary Made-to-Order Consultation · Worldwide Shipping/),
-    ).toBeInTheDocument();
-    // still flagged as customised — the section row does exist
-    expect(screen.getAllByText('Customised')).toHaveLength(2);
-  });
-
-  it('previews built-in defaults and links each card to its editor', async () => {
-    seedAdminAuth();
-    mockFetch((url) => {
-      if (url.endsWith('/api/content')) return { json: { sections: {} } };
-      return undefined;
-    });
-
-    renderApp('/site');
-
-    expect(await screen.findByText('Tanvi Agnihotry', { selector: '.prev' })).toBeInTheDocument();
-    // ticker preview joins its messages and truncates with an ellipsis
-    const ticker = screen.getByText(/^Complimentary Made-to-Order Consultation · Worldwide Shipping/);
-    expect(ticker).toHaveTextContent(/…$/);
-    expect(screen.getByRole('link', { name: /Hero/ })).toHaveAttribute('href', '/site/hero');
-    expect(screen.getByRole('link', { name: /Announcement Bar/ })).toHaveAttribute(
+    // one edit link per section, the whole preview being the target
+    for (const name of EDIT_LINKS) {
+      expect(
+        await screen.findByRole('link', { name: new RegExp(`^Edit ${name} —`) }),
+      ).toBeInTheDocument();
+    }
+    // the hero is the one customised section — said in its accessible name too
+    expect(screen.getByRole('link', { name: 'Edit Hero — customised' })).toHaveAttribute(
       'href',
-      '/site/ticker',
+      '/site/hero',
     );
+    expect(screen.getByRole('link', { name: 'Edit Marquee — default' })).toHaveAttribute(
+      'href',
+      '/site/marquee',
+    );
+    expect(screen.getAllByText('Customised')).toHaveLength(1);
+    expect(screen.getAllByText('Default')).toHaveLength(7);
+  });
+
+  it('keeps the fixed sections visible as ghosts, not links', async () => {
+    seedAdminAuth();
+    stubContent({});
+
+    renderApp('/site');
+    await screen.findByRole('link', { name: /^Edit Hero/ });
+
+    for (const label of ['Navigation', 'Shop by category', 'Bestsellers', 'Newsletter']) {
+      const ghost = screen.getByText(label).closest('.canvas-ghost');
+      expect(ghost).not.toBeNull();
+      expect(within(ghost as HTMLElement).queryByRole('link')).toBeNull();
+    }
+    // ghosts say where those sections ARE managed
+    expect(screen.getAllByText('Managed under Products')).toHaveLength(2);
+  });
+
+  it('tapping a section opens its editor', async () => {
+    seedAdminAuth();
+    stubContent({});
+
+    renderApp('/site');
+
+    await userEvent.click(await screen.findByRole('link', { name: /^Edit Hero/ }));
+    expect(await screen.findByRole('heading', { name: 'Hero' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Headline')).toHaveValue('Tanvi Agnihotry');
+  });
+
+  it('renders the section previews inside their own iframes', async () => {
+    seedAdminAuth();
+    stubContent({ hero: { title: 'Custom headline' } });
+
+    const { container } = renderApp('/site');
+    await screen.findByRole('link', { name: /^Edit Hero/ });
+
+    const frames = container.querySelectorAll('iframe');
+    expect(frames.length).toBeGreaterThanOrEqual(8);
+    // the hero preview lives in the first frame: storefront CSS + merged copy
+    const heroDoc = frames[0].contentDocument as Document;
+    expect(heroDoc.head.querySelector('style[data-storefront]')).not.toBeNull();
+    expect(within(heroDoc.body).getByText('Custom headline')).toBeInTheDocument();
+    // blank-loses: the untouched italic line previews the built-in copy
+    expect(within(heroDoc.body).getByText('heritage, made to move.')).toBeInTheDocument();
+  });
+
+  it('shows loading, then an error when the fetch fails', async () => {
+    seedAdminAuth();
+    mockFetch((url) => {
+      if (url.endsWith('/api/content')) return { status: 500, json: { error: 'Sections are away' } };
+      return undefined;
+    });
+
+    renderApp('/site');
+
+    expect(await screen.findByText('Sections are away')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Edit Hero/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('device toggle', () => {
+  it('flips aria-pressed between phone and desktop', async () => {
+    const onChange = vi.fn();
+    render(<DeviceToggle device="phone" onChange={onChange} />);
+
+    expect(screen.getByRole('button', { name: 'Phone' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Desktop' })).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Desktop' }));
+    expect(onChange).toHaveBeenCalledWith('desktop');
   });
 });

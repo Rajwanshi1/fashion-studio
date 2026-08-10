@@ -17,7 +17,11 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       globals: true,
       setupFiles: './src/test/setup.ts',
-      css: false,
+      // Not a plain `css: false`: vitest's css matcher ignores the ?raw query,
+      // so that would also blank the `storefront.css?raw` string PreviewFrame
+      // injects into its iframes. Including only the preview mirror leaves it
+      // to vite's raw-asset path; every other stylesheet still loads as empty.
+      css: { include: [/preview\/storefront\.css/] },
     },
   };
 });

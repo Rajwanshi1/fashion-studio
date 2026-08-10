@@ -1,3 +1,4 @@
+/* Mirrored (subset) in admin/src/preview/storefront.css — keep in sync */
 /* Lookbook — ported from Lookbook.html inline styles */
 .page-lookbook { background: var(--forest-800); color: var(--celadon-100); min-height: 100vh; }
 .page-lookbook .lb-cover { position: relative; height: min(94vh, 900px); overflow: hidden; display: grid; place-items: center; text-align: center; }

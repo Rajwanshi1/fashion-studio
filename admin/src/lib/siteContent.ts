@@ -276,47 +276,100 @@ export function sectionValue(
   return mergeRecord(stored ?? {}, SECTION_DEFAULTS[key]);
 }
 
-/** Values arrive from the API as `unknown` — read them defensively. */
-function text(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function textList(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(text).filter(Boolean) : [];
-}
-
-function titles(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => (item && typeof item === 'object' ? text((item as Record<string, unknown>).title) : ''))
-    .filter(Boolean);
-}
-
-const PREVIEWS: Record<SectionKey, (value: Record<string, unknown>) => string> = {
-  hero: (v) => text(v.title),
-  featured: (v) => [text(v.title), text(v.titleEm)].filter(Boolean).join(' '),
-  marquee: (v) => textList(v.items).join(' · '),
-  trust: (v) => titles(v.items).join(' · '),
-  lookbookCover: (v) => [text(v.masthead), ...textList(v.subItems)].filter(Boolean).join(' · '),
-  lookbook: (v) => text(v.quote),
-  ticker: (v) => textList(v.items).join(' · '),
-  footer: (v) => text(v.blurb),
-};
-
-const PREVIEW_MAX = 80;
+/* ---- Effective content, typed — what the preview components render ---- */
 
 /**
- * One-line summary of a section's effective content, for its card.
- *
- * Counted and cut by code point, not by UTF-16 unit: an emoji or a joined
- * Devanagari cluster sits astride the 80th unit often enough, and slicing
- * through one leaves a lone surrogate that renders as a replacement glyph.
+ * Hand-mirror of the storefront's SiteContent (frontend/src/lib/content.tsx).
+ * SECTION_DEFAULTS carries every key of every section, and sectionValue merges
+ * stored values over those defaults per field, so the merged records match
+ * these shapes structurally — the casts below lean on that.
  */
-export function sectionPreview(key: SectionKey, value: Record<string, unknown>): string {
-  const preview = PREVIEWS[key];
-  const summary = preview ? preview(value ?? {}) : '';
-  const chars = [...summary];
-  return chars.length > PREVIEW_MAX
-    ? `${chars.slice(0, PREVIEW_MAX - 1).join('').trimEnd()}…`
-    : summary;
+export interface TrustItemContent {
+  title: string;
+  detail: string;
+}
+
+export interface LookContent {
+  imageUrl: string | null;
+  focusX: number;
+  focusY: number;
+  lookNo: string;
+  title: string;
+  copy: string;
+  ctaHref: string;
+}
+
+export interface HeroContent {
+  imageUrl: string | null;
+  focusX: number;
+  focusY: number;
+  seasonLabel: string;
+  eyebrow: string;
+  title: string;
+  titleItalic: string;
+  ctaPrimary: string;
+  ctaSecondary: string;
+  edgeLeft: string;
+  edgeRight: string;
+}
+
+export interface FeaturedContent {
+  imageUrl: string | null;
+  focusX: number;
+  focusY: number;
+  eyebrow: string;
+  title: string;
+  titleEm: string;
+  copy: string;
+  ctaLabel: string;
+  ctaHref: string;
+}
+
+export interface LookbookCoverContent {
+  imageUrl: string | null;
+  focusX: number;
+  focusY: number;
+  masthead: string;
+  subItems: string[];
+}
+
+export interface LookbookContent {
+  looks: LookContent[];
+  quote: string;
+  quoteCite: string;
+}
+
+export interface FooterContent {
+  blurb: string;
+  instagramUrl: string;
+  pinterestUrl: string;
+  whatsappUrl: string;
+}
+
+export interface EffectiveContent {
+  hero: HeroContent;
+  featured: FeaturedContent;
+  marquee: { items: string[] };
+  trust: { items: TrustItemContent[] };
+  lookbookCover: LookbookCoverContent;
+  lookbook: LookbookContent;
+  ticker: { items: string[] };
+  footer: FooterContent;
+}
+
+/** Every section's effective content in one typed bundle, for the canvas. */
+export function effectiveContent(
+  sections: Record<string, Record<string, unknown> | null | undefined>,
+): EffectiveContent {
+  const value = (key: SectionKey) => sectionValue(key, sections[key] ?? null);
+  return {
+    hero: value('hero') as unknown as HeroContent,
+    featured: value('featured') as unknown as FeaturedContent,
+    marquee: value('marquee') as unknown as { items: string[] },
+    trust: value('trust') as unknown as { items: TrustItemContent[] },
+    lookbookCover: value('lookbookCover') as unknown as LookbookCoverContent,
+    lookbook: value('lookbook') as unknown as LookbookContent,
+    ticker: value('ticker') as unknown as { items: string[] },
+    footer: value('footer') as unknown as FooterContent,
+  };
 }

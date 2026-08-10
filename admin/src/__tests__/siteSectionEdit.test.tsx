@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mockFetch, renderApp, seedAdminAuth } from '../test/utils';
 import { uploadProductImage } from '../lib/uploads';
@@ -433,6 +433,107 @@ describe('site section editor', () => {
     ).toBeInTheDocument();
     // still on the editor, edits intact
     expect(screen.getByRole('heading', { name: 'Hero' })).toBeInTheDocument();
+  });
+
+  it('re-renders the live preview on every keystroke, blank falling to default', async () => {
+    seedAdminAuth();
+    stubContent({});
+
+    const { container } = renderApp('/site/hero');
+    const title = await screen.findByLabelText('Headline');
+
+    const preview = () => {
+      const doc = (container.querySelector('iframe') as HTMLIFrameElement).contentDocument;
+      return within((doc as Document).body);
+    };
+    expect(preview().getByText('Tanvi Agnihotry')).toBeInTheDocument();
+
+    await userEvent.clear(title);
+    await userEvent.type(title, 'A New Season');
+    expect(preview().getByText('A New Season')).toBeInTheDocument();
+
+    // cleared → the preview shows what the site would actually fall back to
+    await userEvent.clear(title);
+    expect(preview().getByText('Tanvi Agnihotry')).toBeInTheDocument();
+  });
+
+  it('sets the focal point from a tap on the photo and saves it', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({ hero: { imageUrl: 'https://cdn.example/h.jpg' } });
+
+    renderApp('/site/hero');
+    await screen.findByLabelText('Headline');
+
+    const pick = screen.getByRole('button', { name: /^Focal point for photo/ });
+    // a photo saved before focal points existed opens centred
+    expect(pick).toHaveAccessibleName(/50% across, 50% down/);
+
+    pick.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 100, height: 200, right: 100, bottom: 200, x: 0, y: 0 }) as DOMRect;
+    fireEvent.click(pick, { clientX: 42, clientY: 33 });
+    expect(
+      screen.getByRole('button', { name: /17% down/ }),
+    ).toHaveAccessibleName(/42% across/);
+
+    // arrow keys nudge in 5% steps
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Focal point for photo/ }), {
+      key: 'ArrowRight',
+    });
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Focal point for photo/ }), {
+      key: 'ArrowUp',
+    });
+    expect(
+      screen.getByRole('button', { name: /^Focal point for photo/ }),
+    ).toHaveAccessibleName(/47% across, 12% down/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const body = calls.find((c) => c.method === 'PUT')?.body as {
+      focusX: number;
+      focusY: number;
+    };
+    expect(body.focusX).toBe(47);
+    expect(body.focusY).toBe(12);
+  });
+
+  it('keeps a look-level focal tap out of the other looks', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({
+      lookbook: {
+        looks: [
+          { imageUrl: 'https://cdn.example/l1.jpg' },
+          { imageUrl: 'https://cdn.example/l2.jpg' },
+        ],
+      },
+    });
+
+    renderApp('/site/lookbook');
+    await screen.findByLabelText('Look 1 title');
+
+    const pick = screen.getByRole('button', { name: /^Focal point for look 1 photo/ });
+    pick.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0 }) as DOMRect;
+    fireEvent.click(pick, { clientX: 10, clientY: 90 });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const looks = (
+      calls.find((c) => c.method === 'PUT')?.body as { looks: Record<string, unknown>[] }
+    ).looks;
+    expect(looks[0].focusX).toBe(10);
+    expect(looks[0].focusY).toBe(90);
+    // the neighbour keeps its centred default
+    expect(looks[1].focusX).toBe(50);
+    expect(looks[1].focusY).toBe(50);
+  });
+
+  it('offers no focal control before a photo exists', async () => {
+    seedAdminAuth();
+    stubContent({});
+
+    renderApp('/site/hero');
+    await screen.findByLabelText('Headline');
+
+    // nothing to aim at yet — the control appears with the first photo
+    expect(screen.queryByRole('button', { name: /^Focal point/ })).not.toBeInTheDocument();
   });
 
   it('renders an editor for every section without crashing', async () => {
