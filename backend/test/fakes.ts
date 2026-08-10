@@ -8,7 +8,7 @@ import type {
   OrdersRepo,
 } from '../src/data/orders.repo';
 import type { CreateReceiptInput, ReceiptsRepo } from '../src/data/receipts.repo';
-import type { AdminPayment, CreatePaymentInput, PaymentsRepo } from '../src/data/payments.repo';
+import type { CreatePaymentInput, LedgerEntry, PaymentsRepo } from '../src/data/payments.repo';
 import type {
   AdminProduct,
   BulkDeleteResult,
@@ -832,13 +832,49 @@ export class FakePaymentsRepo implements PaymentsRepo {
     return { ...p };
   }
 
-  async listAdmin(): Promise<AdminPayment[]> {
-    return [...this.payments]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map((p) => ({
-        ...p,
+  async listLedger(): Promise<LedgerEntry[]> {
+    const gateway = this.payments.map((p) => ({
+      entry: {
+        id: p.id,
+        source: 'gateway' as const,
+        orderId: p.orderId,
         orderNumber: this.ordersRepo.orders.find((o) => o.id === p.orderId)?.orderNumber ?? '',
-      }));
+        amount: p.amount,
+        mode: p.method,
+        status: p.status,
+        // IST business date, mirroring the real repo's AT TIME ZONE conversion.
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(
+          new Date(p.createdAt),
+        ),
+        provider: p.provider,
+        providerOrderId: p.providerOrderId,
+        providerPaymentId: p.providerPaymentId,
+        note: '',
+      },
+      sortKey: p.createdAt,
+    }));
+    const manual = this.ordersRepo.orders.flatMap((o) =>
+      o.receipts.map((r) => ({
+        entry: {
+          id: r.id,
+          source: 'manual' as const,
+          orderId: o.id,
+          orderNumber: o.orderNumber,
+          amount: r.amount,
+          mode: r.mode,
+          status: 'received' as const,
+          date: r.receivedAt,
+          provider: null,
+          providerOrderId: null,
+          providerPaymentId: null,
+          note: r.note ?? '',
+        },
+        sortKey: r.createdAt,
+      })),
+    );
+    return [...gateway, ...manual]
+      .sort((a, b) => b.entry.date.localeCompare(a.entry.date) || b.sortKey.localeCompare(a.sortKey))
+      .map((x) => x.entry);
   }
 
   async getByOrderId(orderId: string): Promise<Payment[]> {

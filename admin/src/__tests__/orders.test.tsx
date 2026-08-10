@@ -171,7 +171,8 @@ describe('Orders', () => {
     await userEvent.click(cell);
     expect(screen.getByText(/Bill GST-7/)).toBeInTheDocument();
     expect(screen.getByText(/Blouse to be altered/)).toBeInTheDocument();
-    expect(screen.getByText(/2026-07-10 · Cash · Advance/)).toBeInTheDocument();
+    // Receipt dates render like every other date in the app, not raw ISO.
+    expect(screen.getByText(/10 Jul 2026 · Cash · Advance/)).toBeInTheDocument();
     const wa = screen.getByRole('link', { name: 'Send WhatsApp update' });
     expect(wa.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/919820000000\?text=/);
     expect(wa.getAttribute('href')).toContain(encodeURIComponent('TA-2026-04817'));

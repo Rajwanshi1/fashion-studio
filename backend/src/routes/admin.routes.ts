@@ -80,9 +80,18 @@ const createOfflineOrderSchema = z.object({
   advance: z.object({ amount: z.number().int().positive(), mode: z.enum(RECEIPT_MODES) }).optional(),
   deliveryDueDate: z.string().regex(DATE_RE).optional(),
   notes: z.string().optional(),
-  initialStatus: z.enum(['in_atelier', 'delivered']).optional(),
+  initialStatus: z.enum(['in_atelier', 'quality_check', 'dispatched', 'delivered']).optional(),
   documentIds: z.array(z.string().min(1)).optional(),
   measurementSets: z.array(measurementSetSchema).optional(),
+}).superRefine((v, ctx) => {
+  // A GST invoice without a number is a compliance problem, not a draft.
+  if (v.billType === 'gst_invoice' && !v.billNumber?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['billNumber'],
+      message: 'A GST invoice needs a bill number',
+    });
+  }
 });
 
 const receiptSchema = z.object({
@@ -256,7 +265,7 @@ export function adminRoutes(deps: AdminDeps) {
       .flatMap((p) =>
         p.variants
           .filter((v) => v.size !== 'Custom' && v.stock <= 2)
-          .map((v) => ({ productId: p.id, productName: p.name, size: v.size, stock: v.stock })),
+          .map((v) => ({ productId: p.id, variantId: v.id, productName: p.name, size: v.size, stock: v.stock })),
       );
     // listAdmin returns newest first.
     const recentOrders = orders.slice(0, 8).map((o) => ({
@@ -276,13 +285,27 @@ export function adminRoutes(deps: AdminDeps) {
       revenueByChannel[o.channel] = (revenueByChannel[o.channel] ?? 0) + o.total;
       if (o.billType) revenueByBillType[o.billType] = (revenueByBillType[o.billType] ?? 0) + o.total;
     }
-    const pendingToCollect = orders
-      .filter((o) => o.channel !== 'online' && o.status !== 'cancelled' && o.status !== 'delivered')
-      .reduce((sum, o) => sum + (o.total - o.advancePaid), 0);
+    // Money actually in hand, not billed value: every receipt ever taken
+    // (cancelled orders included — their cash was never refunded), plus online
+    // orders once the gateway captured them (gateway money never writes
+    // receipts).
+    const revenue =
+      orders.reduce((sum, o) => sum + o.advancePaid, 0) +
+      orders
+        .filter((o) => o.channel === 'online' && paidOrLater.includes(o.status))
+        .reduce((sum, o) => sum + o.total, 0);
+    // One population for both halves of the "To Collect" card — the count must
+    // caption the same orders the rupee figure sums. Online pending_payment
+    // orders are excluded: nothing is collectible at the counter for them, and
+    // abandoned checkouts would inflate the count forever.
+    const owing = orders.filter(
+      (o) => o.channel !== 'online' && o.status !== 'cancelled' && o.balance > 0,
+    );
+    const pendingToCollect = owing.reduce((sum, o) => sum + o.balance, 0);
     return c.json({
       activeOrders: orders.filter((o) => ACTIVE_ORDER_STATUSES.includes(o.status)).length,
-      revenue: revenueOrders.reduce((sum, o) => sum + o.total, 0),
-      pendingPayments: orders.filter((o) => o.status === 'pending_payment').length,
+      revenue,
+      pendingPayments: owing.length,
       revenueByChannel,
       revenueByBillType,
       pendingToCollect,
@@ -530,7 +553,7 @@ export function adminRoutes(deps: AdminDeps) {
     },
   );
 
-  r.get('/payments', async (c) => c.json(await deps.payments.listAdmin()));
+  r.get('/payments', async (c) => c.json(await deps.payments.listLedger()));
 
   r.get('/users', async (c) => c.json(await deps.users.listAdmin()));
 

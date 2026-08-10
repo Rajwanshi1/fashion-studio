@@ -28,7 +28,7 @@ describe('OrderIntake', () => {
     expect(screen.getByLabelText('Phone')).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Order channel' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Bill type' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Bill Number')).toBeInTheDocument();
+    expect(screen.getByLabelText('Bill Number (required for GST)')).toBeInTheDocument();
     expect(screen.getByLabelText('GST (₹ rupees)')).toBeInTheDocument(); // gst_invoice default
     expect(screen.getByLabelText('Description')).toBeInTheDocument();
     expect(screen.getByLabelText('Bill Total (₹ rupees)')).toBeInTheDocument();
@@ -56,6 +56,7 @@ describe('OrderIntake', () => {
 
     await userEvent.type(screen.getByLabelText('First Name'), 'Rhea');
     await userEvent.type(screen.getByLabelText('Phone'), '98200 11223');
+    await userEvent.type(screen.getByLabelText('Bill Number (required for GST)'), 'GST-9');
     await userEvent.type(screen.getByLabelText('Description'), 'Custom lehenga, bridal fit');
     await userEvent.type(screen.getByLabelText('Unit ₹'), '120000');
     await userEvent.click(screen.getByRole('button', { name: 'Instagram' }));
@@ -74,6 +75,7 @@ describe('OrderIntake', () => {
     expect(post?.body).toEqual({
       channel: 'instagram',
       billType: 'gst_invoice',
+      billNumber: 'GST-9',
       customer: { action: 'create', firstName: 'Rhea', phone: '98200 11223' },
       items: [{ description: 'Custom lehenga, bridal fit', quantity: 1, unitPrice: 12000000 }],
       gstAmount: 750000,
@@ -131,6 +133,8 @@ describe('OrderIntake', () => {
     expect(screen.queryByText(/check item prices or GST/)).not.toBeInTheDocument();
 
     // typed address fields land in the create-customer payload
+    // (Cash Memo: this test exercises addresses, not the GST bill-number rule)
+    await userEvent.click(screen.getByRole('button', { name: 'Cash Memo' }));
     await userEvent.type(screen.getByLabelText('First Name'), 'Rhea');
     await userEvent.type(screen.getByLabelText('Phone'), '98200 11223');
     await userEvent.type(screen.getByLabelText('Address (optional)'), '12 Marine Drive');

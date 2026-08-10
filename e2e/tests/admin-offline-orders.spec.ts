@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN_URL, adminLogin } from './helpers';
+import { ADMIN_URL, API, adminLogin, adminToken } from './helpers';
 
 /** Unique 10-digit Indian mobile per run so customer upserts never collide. */
 function uniquePhone(): string {
@@ -8,6 +8,7 @@ function uniquePhone(): string {
 
 test('offline order: intake → appears in Orders → record payment → advance status @mobile', async ({
   page,
+  request,
 }) => {
   await adminLogin(page);
   await page.goto(`${ADMIN_URL}/orders/new`);
@@ -32,25 +33,32 @@ test('offline order: intake → appears in Orders → record payment → advance
   await page.getByRole('group', { name: 'Quick due date' }).getByRole('button', { name: '+14 days' }).click();
 
   await page.getByRole('button', { name: 'Record Order' }).click();
-  await expect(page).toHaveURL(/\/orders/);
+  // Intake deep-links back as /orders?focus=<id>, and that order auto-expands.
+  await expect(page).toHaveURL(/\/orders\?focus=/);
+  const focusId = new URL(page.url()).searchParams.get('focus')!;
 
-  // The new order shows up in production with its cash-memo badge and open balance.
-  const row = page
-    .getByRole('row')
-    .filter({ hasText: 'Meera Shah' })
-    .filter({ hasText: 'In the Atelier' })
-    .first();
+  // Resolve this run's order number — a reused database keeps identical
+  // "Meera Shah" rows from earlier runs, so the name cannot identify the row.
+  const token = await adminToken(request);
+  const listRes = await request.get(`${API}/api/admin/orders`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const created = ((await listRes.json()) as { id: string; orderNumber: string }[]).find(
+    (o) => o.id === focusId,
+  );
+  if (!created) throw new Error(`created order ${focusId} not in the admin list`);
+
+  const row = page.getByRole('row').filter({ hasText: created.orderNumber }).first();
   await expect(row).toBeVisible();
   await expect(row.getByText('Cash Memo')).toBeVisible();
   await expect(row).toContainText('25,000'); // balance = 45,000 − 20,000
 
-  // Expand → record the remaining ₹25,000 in cash → balance clears.
-  await row.click();
-  await page.locator('input[id^="pay-"]').first().fill('25000');
+  // Already expanded via the focus deep link — record the remaining ₹25,000.
+  await page.locator(`#pay-${focusId}`).fill('25000');
   await page.getByRole('button', { name: 'Record payment' }).click();
   await expect(row).not.toContainText('25,000');
 
   // Advance the offline machine one step: In the Atelier → Quality Check.
-  await page.locator('select[id^="status-"]').first().selectOption({ label: 'Quality Check' });
+  await page.locator(`#status-${focusId}`).selectOption({ label: 'Quality Check' });
   await expect(row.getByText('Quality Check')).toBeVisible();
 });

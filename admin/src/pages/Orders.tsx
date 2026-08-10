@@ -60,10 +60,18 @@ const columns: Column<Order>[] = [
 interface ExpandedProps {
   order: Order;
   onUpdated: (order: Order, message?: string) => void;
-  onError: (message: string) => void;
 }
 
-function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
+function ExpandedOrder({ order, onUpdated: onUpdatedProp }: ExpandedProps) {
+  // Errors live inside this panel, next to the action that caused them, and
+  // clear the moment any later action succeeds — a red banner surviving a
+  // successful payment reads as "the payment failed".
+  const [panelError, setPanelError] = useState<string | null>(null);
+  const onError = (message: string) => setPanelError(message);
+  const onUpdated = (updated: Order, message?: string) => {
+    setPanelError(null);
+    onUpdatedProp(updated, message);
+  };
   const [amount, setAmount] = useState('');
   const [mode, setMode] = useState<ReceiptMode>('cash');
   const [busy, setBusy] = useState(false);
@@ -166,6 +174,7 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
 
   const recordPayment = async (e: FormEvent) => {
     e.preventDefault();
+    setPanelError(null);
     const paise = Math.round(Number(amount) * 100);
     if (!Number.isFinite(paise) || paise <= 0) {
       onError('Enter the received amount in rupees');
@@ -175,6 +184,8 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
     try {
       const updated = await api<Order>(`/api/admin/orders/${order.id}/receipts`, {
         method: 'POST',
+        // No receivedAt: the server stamps today in IST. The device clock is
+        // not trusted for ledger dates.
         body: { amount: paise, mode },
       });
       setAmount('');
@@ -188,6 +199,11 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
 
   return (
     <div className="odetail">
+      {panelError && (
+        <div className="form-err" role="alert">
+          {panelError}
+        </div>
+      )}
       <div>
         <h4>Items</h4>
         {order.items.map((it) => (
@@ -349,7 +365,7 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
               order.receipts.map((r) => (
                 <div className="oitem" key={r.id}>
                   <div className="x">
-                    {r.receivedAt} · {r.mode === 'cash' ? 'Cash' : 'Online'}
+                    {formatDate(r.receivedAt)} · {r.mode === 'cash' ? 'Cash' : 'Online'}
                     {r.note ? ` · ${r.note}` : ''}
                   </div>
                   <div>{formatINR(r.amount)}</div>
@@ -583,7 +599,7 @@ export default function Orders() {
           empty="No orders in this state."
           initialExpandedKey={focusId}
           renderExpanded={(order) => (
-            <ExpandedOrder order={order} onUpdated={replaceOrder} onError={setError} />
+            <ExpandedOrder order={order} onUpdated={replaceOrder} />
           )}
         />
       )}

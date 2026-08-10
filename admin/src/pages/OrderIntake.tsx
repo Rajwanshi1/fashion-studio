@@ -175,6 +175,10 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
       setError('Advance cannot exceed the total');
       return;
     }
+    if (form.billType === 'gst_invoice' && !form.billNumber.trim()) {
+      setError('A GST invoice needs a bill number — enter it, or switch to Cash Memo');
+      return;
+    }
 
     let customer;
     if (linked) {
@@ -440,13 +444,14 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
         <div className="grid2">
           <div className="field">
             <label className="lab" htmlFor="oi-billno">
-              Bill Number
+              Bill Number{form.billType === 'gst_invoice' ? ' (required for GST)' : ''}
             </label>
             <input
               id="oi-billno"
               className="inp"
               value={form.billNumber}
               onChange={(e) => set('billNumber', e.target.value)}
+              required={form.billType === 'gst_invoice'}
             />
           </div>
           {form.billType === 'gst_invoice' && (

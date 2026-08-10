@@ -7,7 +7,11 @@ function uniquePhone(): string {
 }
 
 function plusDays(n: number): string {
-  return new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+  // IST, matching the board's todayIST() — a UTC date here is yesterday's
+  // date in the boutique until 05:30 IST and flips the bucket assertions.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(
+    new Date(Date.now() + n * 86_400_000),
+  );
 }
 
 test('deliveries board: an offline order lands in Next 7 days with its balance @mobile', async ({
@@ -32,11 +36,15 @@ test('deliveries board: an offline order lands in Next 7 days with its balance @
 
   await adminLogin(page);
   await page.goto(`${ADMIN_URL}/deliveries`);
-  await expect(page.getByText('To collect')).toBeVisible();
+  // exact: the KPI card label only — every order card also says "to collect".
+  await expect(page.getByText('To collect', { exact: true })).toBeVisible();
 
+  // Scope to this run's card by its order number — earlier runs leave
+  // same-shaped cards behind on a reused database.
   const bucket = page.locator('details.dl-bucket').filter({ hasText: 'Next 7 days' });
-  await expect(bucket.getByText(order.orderNumber)).toBeVisible();
-  await expect(bucket.getByText('₹25,000')).toBeVisible(); // 40,000 − 15,000 advance
+  const card = bucket.locator('.dl-card').filter({ hasText: order.orderNumber });
+  await expect(card).toBeVisible();
+  await expect(card.getByText('₹25,000')).toBeVisible(); // 40,000 − 15,000 advance
 });
 
 test('customers.vcf export answers with vCards for phone customers', async ({ request }) => {

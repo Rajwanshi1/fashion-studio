@@ -11,6 +11,7 @@ describe('Dashboard', () => {
             activeOrders: 12,
             revenue: 32600000,
             pendingPayments: 3,
+            pendingToCollect: 150000,
             lowStock: [
               {
                 variantId: 'v9',
@@ -38,10 +39,12 @@ describe('Dashboard', () => {
 
     expect(await screen.findByText('Active Orders')).toBeInTheDocument();
     expect(screen.getByText('12')).toBeInTheDocument();
-    expect(screen.getByText('Revenue')).toBeInTheDocument();
+    // Money cards report what was actually received and what is still owed.
+    expect(screen.getByText('Collected')).toBeInTheDocument();
     expect(screen.getByText('₹3,26,000')).toBeInTheDocument();
-    expect(screen.getByText('Pending Payments')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('To Collect')).toBeInTheDocument();
+    expect(screen.getByText('₹1,500')).toBeInTheDocument();
+    expect(screen.getByText('3 orders with balance due')).toBeInTheDocument();
     expect(screen.getByText('Low Stock')).toBeInTheDocument();
     // low stock count card = 2 items
     expect(screen.getByText('2', { selector: '.stat .v' })).toBeInTheDocument();
