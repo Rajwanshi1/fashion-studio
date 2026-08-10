@@ -198,6 +198,27 @@ export interface Payment {
   createdAt: string;
 }
 
+/**
+ * One row of money in, from either source — mirrors GET /api/admin/payments.
+ * Gateway rows carry provider ids; manual receipts carry a note and are
+ * always status 'received'.
+ */
+export interface LedgerEntry {
+  id: string;
+  source: 'gateway' | 'manual';
+  orderId: string;
+  orderNumber: string;
+  amount: number;
+  mode: string;
+  status: PaymentStatus | 'received';
+  /** Business date (IST), YYYY-MM-DD. */
+  date: string;
+  provider: string | null;
+  providerOrderId: string | null;
+  providerPaymentId: string | null;
+  note: string;
+}
+
 export type DocumentKind = 'bill' | 'measurement' | 'shipping_receipt';
 
 export type DocumentStatus = 'uploaded' | 'parsed' | 'confirmed' | 'discarded';
@@ -238,11 +259,13 @@ export interface LowStockItem {
 
 export interface AdminSummary {
   activeOrders: number;
+  /** Money actually received (receipts + captured online orders), paise. */
   revenue: number;
+  /** Count of orders with money genuinely outstanding. */
   pendingPayments: number;
   revenueByChannel: Partial<Record<OrderChannel, number>>;
   revenueByBillType: Partial<Record<BillType, number>>;
-  /** SUM(total − advancePaid) over open offline orders, paise. */
+  /** SUM(balance) over live offline orders that still owe money, paise. */
   pendingToCollect: number;
   lowStock: LowStockItem[];
   recentOrders: Order[];

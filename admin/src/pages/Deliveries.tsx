@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { bucketDeliveries, relativeDue, type DeliveryBuckets } from '../lib/deliveries';
-import { formatDate, formatINR } from '../lib/format';
+import { formatDate, formatINR, todayIST } from '../lib/format';
 import type { Order, OrderStatus } from '../lib/types';
 import { BILL_TYPE_LABELS, CHANNEL_LABELS, ORDER_STATUS_LABELS, transitionsFor } from '../lib/types';
 import { STATUS_MESSAGES, waLink } from '../lib/whatsapp';
@@ -102,7 +102,8 @@ export default function Deliveries() {
   const toast = useToast();
   const [data, setData] = useState<DeliveriesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const today = new Date().toISOString().slice(0, 10);
+  // The boutique's "today" (IST) — UTC would flip the board's buckets at 05:30.
+  const today = todayIST();
 
   useEffect(() => {
     let live = true;

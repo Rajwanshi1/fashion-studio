@@ -242,6 +242,7 @@ export class DomainError extends Error {
       | 'INVALID_STATUS_TRANSITION'
       | 'OVER_COLLECTION'
       | 'ORDER_CANCELLED'
+      | 'BILL_NUMBER_REQUIRED'
       | 'PAYMENT_ALREADY_FINAL'
       | 'NOT_CONFIGURED'
       | 'INVALID_SOURCE'

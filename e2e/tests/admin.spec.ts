@@ -36,9 +36,12 @@ test('dashboard renders the stat cards', async ({ page }) => {
   await adminLogin(page);
   const activeOrders = page.locator('.stat').filter({ hasText: 'Active Orders' });
   await expect(activeOrders).toBeVisible();
-  const revenue = page.locator('.stat').filter({ hasText: 'Revenue' });
-  await expect(revenue).toBeVisible();
-  await expect(revenue).toContainText('₹');
+  const collected = page.locator('.stat').filter({ hasText: 'Collected' }).first();
+  await expect(collected).toBeVisible();
+  await expect(collected).toContainText('₹');
+  const toCollect = page.locator('.stat').filter({ hasText: 'To Collect' });
+  await expect(toCollect).toBeVisible();
+  await expect(toCollect).toContainText('balance due');
   await expect(page.getByText('Recent orders')).toBeVisible();
 });
 

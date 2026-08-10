@@ -54,11 +54,15 @@ export default function Dashboard() {
         <>
           <div className="stats">
             <StatCard label="Active Orders" value={summary.activeOrders} hint="In progress" />
-            <StatCard label="Revenue" value={formatINR(summary.revenue)} hint="Captured to date" />
             <StatCard
-              label="Pending Payments"
-              value={summary.pendingPayments}
-              hint="Awaiting capture"
+              label="Collected"
+              value={formatINR(summary.revenue)}
+              hint="Money received to date"
+            />
+            <StatCard
+              label="To Collect"
+              value={formatINR(summary.pendingToCollect)}
+              hint={`${summary.pendingPayments} ${summary.pendingPayments === 1 ? 'order' : 'orders'} with balance due`}
             />
             <StatCard
               label="Low Stock"

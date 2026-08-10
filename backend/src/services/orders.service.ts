@@ -69,7 +69,8 @@ export interface CreateOfflineOrderInput {
   deliveryDueDate?: string;
   notes?: string;
   /** Default in_atelier; delivered = exhibition spot sale. */
-  initialStatus?: 'in_atelier' | 'delivered';
+  /** Any state a bill can arrive in — old bills are often entered after the fact. */
+  initialStatus?: 'in_atelier' | 'quality_check' | 'dispatched' | 'delivered';
   /** Uploaded bill/measurement photos — confirmed + linked in the same transaction. */
   documentIds?: string[];
   /** Reviewed measurement sets, saved against the linked/created customer. */
@@ -382,6 +383,17 @@ export function createOrdersService(deps: {
     },
 
     async updateOrderDetails(orderId, patch) {
+      // A patch may change the bill type and number independently — the pair
+      // that would result must never be a GST invoice with a blank number.
+      if (patch.billNumber !== undefined || patch.billType !== undefined) {
+        const current = await deps.orders.getById(orderId);
+        if (!current) throw new DomainError('NOT_FOUND', 'Order not found');
+        const billType = patch.billType === undefined ? current.billType : patch.billType;
+        const billNumber = patch.billNumber === undefined ? current.billNumber : patch.billNumber;
+        if (billType === 'gst_invoice' && !billNumber?.trim()) {
+          throw new DomainError('BILL_NUMBER_REQUIRED', 'A GST invoice needs a bill number');
+        }
+      }
       const order = await deps.orders.updateDetails(orderId, patch);
       if (!order) throw new DomainError('NOT_FOUND', 'Order not found');
       return order;

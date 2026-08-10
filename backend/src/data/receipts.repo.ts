@@ -37,8 +37,10 @@ export function createReceiptsRepo(pool: Pool): ReceiptsRepo {
     async create({ orderId, amount, mode, receivedAt, note }, tx) {
       const client = (tx as PoolClient) ?? pool;
       const { rows } = await client.query(
+        // The default is today's date IN IST, not the DB server's (UTC) day —
+        // a payment taken before 05:30 IST used to be stamped yesterday.
         `INSERT INTO order_receipts (order_id, amount, mode, received_at, note)
-         VALUES ($1, $2, $3, COALESCE($4::date, CURRENT_DATE), $5)
+         VALUES ($1, $2, $3, COALESCE($4::date, (now() AT TIME ZONE 'Asia/Kolkata')::date), $5)
          RETURNING ${COLUMNS}`,
         [orderId, amount, mode, receivedAt ?? null, note ?? ''],
       );
