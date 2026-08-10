@@ -321,11 +321,16 @@ describe('ProductEdit', () => {
     );
 
     await screen.findByAltText('Product photo 1 — front');
-    // first photo cannot move up, last cannot move down
-    expect(screen.getByRole('button', { name: 'Move image 1 up' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Move image 3 down' })).toBeDisabled();
+    // the old arrow buttons are gone — reorder is drag-and-drop with a keyboard path
+    expect(screen.queryByRole('button', { name: 'Move image 1 up' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Move image 1 down' })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Move image 1 down' }));
+    // arrow keys on a focused grip move the photo one slot; focus follows it
+    screen.getByRole('button', { name: 'Reorder image 1 of 3' }).focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(screen.getByRole('button', { name: 'Reorder image 2 of 3' })).toHaveFocus();
+    expect(screen.getByText('Photo moved to position 2 of 3')).toBeInTheDocument();
+
     await userEvent.click(screen.getByRole('button', { name: 'Remove image 3' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save Piece' }));
 

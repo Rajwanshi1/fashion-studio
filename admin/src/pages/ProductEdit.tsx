@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
+import { moveItem } from '../lib/reorder';
 import { uploadProductImage } from '../lib/uploads';
 import type { AdminProduct, Category, ProductImage, Variant } from '../lib/types';
+import { ThumbStrip } from '../components/ThumbStrip';
 import { useToast } from '../components/Toast';
 
 const NEW_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'Custom'];
@@ -212,14 +214,8 @@ export default function ProductEdit() {
   const onFabricChip = (fabric: string) =>
     setForm((f) => ({ ...f, fabric: f.fabric === fabric ? '' : fabric }));
 
-  const moveImage = (index: number, delta: -1 | 1) =>
-    setForm((f) => {
-      const to = index + delta;
-      if (to < 0 || to >= f.images.length) return f;
-      const images = [...f.images];
-      [images[index], images[to]] = [images[to], images[index]];
-      return { ...f, images };
-    });
+  const reorderImage = (from: number, to: number) =>
+    setForm((f) => ({ ...f, images: moveItem(f.images, from, to) }));
 
   const removeImage = (index: number) =>
     setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== index) }));
@@ -363,7 +359,6 @@ export default function ProductEdit() {
     : variants.map((v) => ({ key: v.id, label: v.size }));
 
   const legacyFabric = form.fabric !== '' && !FABRICS.includes(form.fabric) ? form.fabric : null;
-  const lastImage = form.images.length - 1;
 
   return (
     <>
@@ -670,47 +665,7 @@ export default function ProductEdit() {
                   : 'Upload photos'}
             </button>
           </div>
-          {form.images.length > 0 && (
-            <div className="thumb-strip">
-              {form.images.map((img, i) => (
-                <figure className="thumb" key={`${img.url}#${i}`}>
-                  <img
-                    src={img.url}
-                    alt={img.pose ? `Product photo ${i + 1} — ${img.pose}` : `Product photo ${i + 1}`}
-                  />
-                  <figcaption>{img.pose || `Photo ${i + 1}`}</figcaption>
-                  <div className="thumb-actions">
-                    <button
-                      type="button"
-                      className="ulink"
-                      aria-label={`Move image ${i + 1} up`}
-                      disabled={i === 0}
-                      onClick={() => moveImage(i, -1)}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="ulink"
-                      aria-label={`Move image ${i + 1} down`}
-                      disabled={i === lastImage}
-                      onClick={() => moveImage(i, 1)}
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      className="ulink"
-                      aria-label={`Remove image ${i + 1}`}
-                      onClick={() => removeImage(i)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </figure>
-              ))}
-            </div>
-          )}
+          <ThumbStrip images={form.images} onReorder={reorderImage} onRemove={removeImage} />
         </div>
         <div className="field">
           <label className="lab" htmlFor="p-image">

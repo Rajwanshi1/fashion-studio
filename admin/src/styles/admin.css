@@ -402,6 +402,7 @@ select.inp {
 @media (pointer: coarse) {
   .chip { min-height: 44px; padding-inline: 1.2em; }
   .ulink { min-height: 44px; display: inline-flex; align-items: center; }
+  .drag-handle { min-height: 44px; min-width: 44px; justify-content: center; }
 }
 
 /* ---- Toast (identical to shop.css) ---- */
@@ -478,11 +479,21 @@ select.inp {
   border-radius: var(--edge);
   display: block;
 }
-/* Product gallery strip — ordered thumbnails with ↑ ↓ ✕ under each */
+/* Product gallery strip — ordered thumbnails; drag the grip (or arrow-key a
+   focused grip) to reorder, ✕ removes */
 .thumb-strip { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .thumb-actions { display: flex; gap: 0.25rem; justify-content: center; margin-top: 0.25rem; }
 .thumb-strip .thumb img { width: 96px; height: 128px; object-fit: cover; }
 .thumb-actions .ulink:disabled { opacity: 0.35; cursor: default; }
+.thumb-strip .thumb { position: relative; }
+.drag-handle { background: none; border: 1px solid var(--hairline); border-radius: var(--edge); color: var(--fg-muted); cursor: grab; padding: 0.2em 0.5em; touch-action: none; display: inline-flex; align-items: center; }
+.drag-handle:hover { color: var(--forest-700); border-color: var(--hairline-gold); }
+.thumb.dragging { opacity: 0.35; }
+/* Gold insertion line — sits in the middle of the 0.75rem strip gap */
+.thumb.drop-before::before { content: ''; position: absolute; left: -0.45rem; top: 0; bottom: 0; width: 2px; background: var(--gold); }
+.thumb-strip.drop-end::after { content: ''; width: 2px; align-self: stretch; background: var(--gold); }
+.thumb-ghost { position: fixed; left: 0; top: 0; z-index: 300; pointer-events: none; margin: 0; opacity: 0.9; box-shadow: 0 8px 24px rgba(30, 38, 32, 0.25); }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .form-card {
   background: var(--surface);
