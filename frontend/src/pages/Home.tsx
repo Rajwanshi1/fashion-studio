@@ -104,6 +104,8 @@ export default function Home() {
           src={site.hero.imageUrl}
           label="Drop campaign image — full bleed editorial"
           alt={site.hero.title}
+          focusX={site.hero.focusX}
+          focusY={site.hero.focusY}
         />
         <div className="veil"></div>
         <div className="side-label">{site.hero.seasonLabel}</div>
@@ -169,6 +171,8 @@ export default function Home() {
             src={site.featured.imageUrl}
             label="Featured collection — editorial portrait"
             alt={site.featured.title}
+            focusX={site.featured.focusX}
+            focusY={site.featured.focusY}
           />
           <div className="feat-text">
             <span className="eyebrow">{site.featured.eyebrow}</span>
@@ -222,6 +226,8 @@ export default function Home() {
           src={site.lookbookCover.imageUrl}
           label="Lookbook cover — full bleed"
           alt={site.lookbookCover.masthead}
+          focusX={site.lookbookCover.focusX}
+          focusY={site.lookbookCover.focusY}
         />
         <div className="look-cover">
           <div className="masthead">{site.lookbookCover.masthead}</div>

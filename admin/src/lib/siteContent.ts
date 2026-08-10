@@ -9,6 +9,9 @@
  * storefront's current built-in copy, verbatim — a section the admin has never
  * touched is absent from GET /api/content, so what we show as "Default" has to
  * be exactly what the site renders.
+ *
+ * Photos with `focus: true` carry sibling focusX/focusY fields (integer percent
+ * of the source image, 50/50 = centred) — the storefront's object-position.
  */
 
 export type SectionKey =
@@ -28,6 +31,8 @@ export interface FieldConfig {
   label: string;
   type: FieldType;
   hint?: string;
+  /** Image fields (and each look's photo) that carry focusX/focusY siblings. */
+  focus?: boolean;
 }
 
 export interface SectionConfig {
@@ -44,7 +49,7 @@ export const SECTIONS: SectionConfig[] = [
     title: 'Hero',
     blurb: 'Home · opening image & headline',
     fields: [
-      { name: 'imageUrl', label: 'Photo', type: 'image', hint: 'Full-bleed campaign image.' },
+      { name: 'imageUrl', label: 'Photo', type: 'image', hint: 'Full-bleed campaign image.', focus: true },
       { name: 'seasonLabel', label: 'Season label', type: 'text', hint: 'Sideways text on the left edge.' },
       { name: 'eyebrow', label: 'Eyebrow', type: 'text' },
       { name: 'title', label: 'Headline', type: 'text' },
@@ -60,7 +65,7 @@ export const SECTIONS: SectionConfig[] = [
     title: 'Featured',
     blurb: 'Home · new-collection feature',
     fields: [
-      { name: 'imageUrl', label: 'Photo', type: 'image', hint: 'Editorial portrait beside the text.' },
+      { name: 'imageUrl', label: 'Photo', type: 'image', hint: 'Editorial portrait beside the text.', focus: true },
       { name: 'eyebrow', label: 'Eyebrow', type: 'text' },
       { name: 'title', label: 'Title', type: 'text' },
       { name: 'titleEm', label: 'Title italic word', type: 'text' },
@@ -90,7 +95,7 @@ export const SECTIONS: SectionConfig[] = [
     title: 'Lookbook Cover',
     blurb: 'Home & lookbook cover',
     fields: [
-      { name: 'imageUrl', label: 'Photo', type: 'image', hint: 'Full-bleed cover image.' },
+      { name: 'imageUrl', label: 'Photo', type: 'image', hint: 'Full-bleed cover image.', focus: true },
       { name: 'masthead', label: 'Masthead', type: 'text' },
       { name: 'subItems', label: 'Sub-line', type: 'stringList', hint: 'Up to 4 — shown separated by ·' },
     ],
@@ -100,7 +105,7 @@ export const SECTIONS: SectionConfig[] = [
     title: 'Lookbook',
     blurb: 'The 7 looks & pull-quote',
     fields: [
-      { name: 'looks', label: 'Looks', type: 'looks', hint: 'Seven spreads. Looks 1 and 4 also show their caption.' },
+      { name: 'looks', label: 'Looks', type: 'looks', hint: 'Seven spreads. Looks 1 and 4 also show their caption.', focus: true },
       { name: 'quote', label: 'Pull-quote', type: 'textarea' },
       { name: 'quoteCite', label: 'Quote credit', type: 'text' },
     ],
@@ -134,6 +139,8 @@ export const SECTIONS: SectionConfig[] = [
 export const SECTION_DEFAULTS: Record<SectionKey, Record<string, unknown>> = {
   hero: {
     imageUrl: null,
+    focusX: 50,
+    focusY: 50,
     seasonLabel: 'Spring / Summer 2026',
     eyebrow: 'The Verdant Edit · Indo-Western Couture',
     title: 'Tanvi Agnihotry',
@@ -145,6 +152,8 @@ export const SECTION_DEFAULTS: Record<SectionKey, Record<string, unknown>> = {
   },
   featured: {
     imageUrl: null,
+    focusX: 50,
+    focusY: 50,
     eyebrow: 'The New Collection',
     title: 'Rang',
     titleEm: 'Mehfil',
@@ -164,6 +173,8 @@ export const SECTION_DEFAULTS: Record<SectionKey, Record<string, unknown>> = {
   },
   lookbookCover: {
     imageUrl: null,
+    focusX: 50,
+    focusY: 50,
     masthead: 'The Edit',
     subItems: ['Volume 01', 'Spring 2026', '32 Looks'],
   },
@@ -171,23 +182,27 @@ export const SECTION_DEFAULTS: Record<SectionKey, Record<string, unknown>> = {
     looks: [
       {
         imageUrl: null,
+        focusX: 50,
+        focusY: 50,
         lookNo: 'Look 01',
         title: 'The garden, after rain.',
         copy: 'Sage sequin jacket lehenga with a hand-draped dupatta. Structured shoulder, fluid hem.',
         ctaHref: '/collection/lehenga',
       },
-      { imageUrl: null, lookNo: 'Look 02', title: '', copy: '', ctaHref: '' },
-      { imageUrl: null, lookNo: 'Look 03', title: '', copy: '', ctaHref: '' },
+      { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 02', title: '', copy: '', ctaHref: '' },
+      { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 03', title: '', copy: '', ctaHref: '' },
       {
         imageUrl: null,
+        focusX: 50,
+        focusY: 50,
         lookNo: 'Look 04',
         title: 'Moss & mirror.',
         copy: 'A tissue draped gown caught with mirror-work — light moving as you do.',
         ctaHref: '/collection/kaftan',
       },
-      { imageUrl: null, lookNo: 'Look 05', title: '', copy: '', ctaHref: '' },
-      { imageUrl: null, lookNo: 'Look 06', title: '', copy: '', ctaHref: '' },
-      { imageUrl: null, lookNo: 'Look 07', title: '', copy: '', ctaHref: '' },
+      { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 05', title: '', copy: '', ctaHref: '' },
+      { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 06', title: '', copy: '', ctaHref: '' },
+      { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 07', title: '', copy: '', ctaHref: '' },
     ],
     quote: '"She does not choose between heritage and the present. She wears both, at once."',
     quoteCite: '— The Verdant Edit',

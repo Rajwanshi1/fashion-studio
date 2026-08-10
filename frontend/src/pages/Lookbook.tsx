@@ -39,7 +39,14 @@ function LookSlot({
   className: string;
 }) {
   return (
-    <ImageSlot className={className} src={look.imageUrl} label={label} alt={look.title || label} />
+    <ImageSlot
+      className={className}
+      src={look.imageUrl}
+      label={label}
+      alt={look.title || label}
+      focusX={look.focusX}
+      focusY={look.focusY}
+    />
   );
 }
 
@@ -55,6 +62,8 @@ export default function Lookbook() {
           src={lookbookCover.imageUrl}
           label="Lookbook cover — full bleed editorial"
           alt={lookbookCover.masthead}
+          focusX={lookbookCover.focusX}
+          focusY={lookbookCover.focusY}
         />
         <div className="cc">
           <div className="masthead">{lookbookCover.masthead}</div>

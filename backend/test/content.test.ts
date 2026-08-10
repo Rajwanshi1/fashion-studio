@@ -14,12 +14,12 @@ const jsonReq = (method: string, body?: unknown, token?: string) => ({
 
 /** Smallest body each section accepts — one per key, so the round-trip test covers all 8. */
 const MINIMAL_BODIES: Record<string, Record<string, unknown>> = {
-  hero: { title: 'New season', imageUrl: '/img/hero.jpg' },
-  featured: { title: 'The edit', ctaHref: '/shop/lehengas' },
+  hero: { title: 'New season', imageUrl: '/img/hero.jpg', focusX: 50, focusY: 20 },
+  featured: { title: 'The edit', ctaHref: '/shop/lehengas', focusX: 0, focusY: 100 },
   marquee: { items: ['Handcrafted'] },
   trust: { items: [{ title: 'a', detail: 'b' }, { title: 'c', detail: 'd' }, { title: 'e', detail: 'f' }] },
-  lookbookCover: { masthead: 'Lookbook', subItems: ['Vol. I'] },
-  lookbook: { looks: [{ lookNo: '01', title: 'Verdant', ctaHref: '/shop' }], quote: 'Cloth remembers.' },
+  lookbookCover: { masthead: 'Lookbook', subItems: ['Vol. I'], focusX: 35, focusY: 65 },
+  lookbook: { looks: [{ lookNo: '01', title: 'Verdant', ctaHref: '/shop', focusX: 42, focusY: 18 }], quote: 'Cloth remembers.' },
   ticker: { items: ['Made to order'] },
   footer: { blurb: 'Studio notes', instagramUrl: 'https://instagram.com/tanvi' },
 };
@@ -109,6 +109,49 @@ describe('site content API', () => {
     expect((await res.json()).error).toMatch(/too large/i);
     const { sections } = await (await app.request('/api/content')).json();
     expect(sections.lookbook).toBeUndefined();
+  });
+
+  it('PUT accepts focal-point fields only as integer percentages', async () => {
+    // Bounds are inclusive; the storefront maps them straight to object-position.
+    const edges = await app.request(
+      '/api/admin/content/hero',
+      jsonReq('PUT', { imageUrl: '/img/hero.jpg', focusX: 0, focusY: 100 }, adminToken),
+    );
+    expect(edges.status).toBe(204);
+    for (const bad of [101, -1, 3.5, '50', null]) {
+      const res = await app.request('/api/admin/content/hero', jsonReq('PUT', { focusX: bad }, adminToken));
+      expect(res.status, `focusX: ${JSON.stringify(bad)}`).toBe(400);
+    }
+    // Per-look focus rides inside the looks array.
+    const look = await app.request(
+      '/api/admin/content/lookbook',
+      jsonReq('PUT', { looks: [{ title: 'Verdant', focusX: 30, focusY: 70 }] }, adminToken),
+    );
+    expect(look.status).toBe(204);
+    const badLook = await app.request(
+      '/api/admin/content/lookbook',
+      jsonReq('PUT', { looks: [{ title: 'Verdant', focusY: 120 }] }, adminToken),
+    );
+    expect(badLook.status).toBe(400);
+  });
+
+  it('a realistic full lookbook with focus on every look stays inside the byte budget', async () => {
+    // Focus adds at most 26 bytes per image (`,"focusX":100,"focusY":100`);
+    // the budget headroom must absorb 7 of those on a heavy-but-real payload.
+    const look = (i: number) => ({
+      imageUrl: `https://tanvi-agnihotry-prod.s3.ap-south-1.amazonaws.com/products/2026/08/${'d'.repeat(36)}.jpg`,
+      focusX: 100,
+      focusY: 100,
+      lookNo: `0${i + 1}`,
+      title: 'The Verdant Bride in Hand-Embroidered Celadon Silk',
+      copy: 'C'.repeat(240),
+      ctaHref: '/collection/the-verdant-edit',
+    });
+    const res = await app.request(
+      '/api/admin/content/lookbook',
+      jsonReq('PUT', { looks: Array.from({ length: 7 }, (_, i) => look(i)), quote: 'Q'.repeat(300), quoteCite: 'Tanvi Agnihotry' }, adminToken),
+    );
+    expect(res.status).toBe(204);
   });
 
   it('PUT rejects a link field that is not http(s)/path/mailto/tel', async () => {
