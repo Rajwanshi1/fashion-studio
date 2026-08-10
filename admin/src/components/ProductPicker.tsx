@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { formatINR } from '../lib/format';
+import { effectivePrice } from '../lib/productFilter';
 import type { AdminProduct } from '../lib/types';
 
 export interface PickedItem {
@@ -15,10 +16,6 @@ interface Props {
   products: AdminProduct[];
   onPick: (item: PickedItem) => void;
 }
-
-/** Sale price wins while a sale flag is on — mirrors the storefront. */
-const effectivePaise = (p: AdminProduct) =>
-  p.flag === 'sale' && p.salePrice != null ? p.salePrice : p.price;
 
 /**
  * Search-and-pick against the catalogue for order lines: choosing a size
@@ -46,7 +43,7 @@ export default function ProductPicker({ products, onPick }: Props) {
       productId: p.id,
       variantId,
       description: `${p.name}${p.color ? ` — ${p.color}` : ''} (${size})`,
-      unitRupees: String(effectivePaise(p) / 100),
+      unitRupees: String(effectivePrice(p) / 100),
       size,
       stock,
     });
@@ -85,7 +82,7 @@ export default function ProductPicker({ products, onPick }: Props) {
                 <span className="dim">
                   {[p.color, p.collection].filter(Boolean).join(' · ') || '—'}
                 </span>
-                <span>{formatINR(effectivePaise(p))}</span>
+                <span>{formatINR(effectivePrice(p))}</span>
               </button>
               {openId === p.id && (
                 <div className="chips picker-sizes" role="group" aria-label={`Sizes for ${p.name}`}>
