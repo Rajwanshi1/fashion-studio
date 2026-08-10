@@ -259,6 +259,24 @@ describe('API', () => {
       expect(paged).toMatchObject({ page: 2, pages: 2, total: 3 });
     });
 
+    it('search ANDs tokens across name, craft, fabric and category name', async () => {
+      // Two tokens: "sage" (name) + "lehenga" (name/category) — the other
+      // Lehenga Sets pieces must not ride along on the category hit alone.
+      const tokened = await (await app.request('/api/products?search=sage%20lehenga')).json();
+      expect(tokened.items.map((p: any) => p.slug)).toEqual(['sage-sequin-jacket-lehenga']);
+
+      // Craft/fabric hits — neither word appears in name/description/color.
+      await f.products.updateProduct(seeded.plain.id, { craft: 'Aari', fabric: 'Organza' });
+      const craft = await (await app.request('/api/products?search=aari')).json();
+      expect(craft.items.map((p: any) => p.slug)).toEqual(['celadon-tissue-draped-lehenga']);
+      const fabric = await (await app.request('/api/products?search=organza')).json();
+      expect(fabric.items.map((p: any) => p.slug)).toEqual(['celadon-tissue-draped-lehenga']);
+
+      // Category-name hit: "gowns" only exists on the category, never the piece.
+      const catName = await (await app.request('/api/products?search=gowns')).json();
+      expect(catName.items.map((p: any) => p.slug)).toEqual(['moss-tissue-draped-gown']);
+    });
+
     it('rejects an invalid sort with 400', async () => {
       expect((await app.request('/api/products?sort=zalgo')).status).toBe(400);
     });

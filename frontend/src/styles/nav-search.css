@@ -1,0 +1,30 @@
+/* ============================================================
+   TANVI AGNIHOTRY — Inline nav search dropdown
+   Anchored under .nav / .nav-home; carries its own solid ground
+   (same treatment as the solid nav) so it reads over the hero.
+   ============================================================ */
+.nav-search { position: absolute; top: 100%; left: 0; right: 0; background: rgba(30,38,32,0.97); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(230,215,184,0.14); padding: 0.9rem var(--gutter) 1.1rem; color: var(--celadon-100); animation: nvs-in 0.25s var(--ease); }
+@keyframes nvs-in { from { opacity: 0; transform: translateY(-6px); } }
+
+.nav-search-bar { display: flex; align-items: center; gap: 0.7rem; max-width: 720px; margin: 0 auto; border-bottom: 1px solid rgba(230,215,184,0.3); padding-bottom: 0.5rem; }
+.nav-search-bar .ic { color: var(--gold-soft); font-size: 1.3rem; }
+.nav-search-bar input { flex: 1; background: none; border: 0; outline: none; color: var(--celadon-50); font-family: var(--serif-soft); font-size: 1.05rem; }
+.nav-search-bar input::placeholder { color: var(--sage-500); }
+.nav-search-bar .x { background: none; border: 0; color: var(--celadon-100); cursor: pointer; }
+.nav-search-bar .x:hover { color: var(--gold-soft); }
+
+.nav-search-results { max-width: 720px; margin: 0.6rem auto 0; max-height: min(60vh, 420px); overflow-y: auto; }
+.nav-search-results .note { margin: 0; padding: 0.8rem 0 0.2rem; text-align: center; font-size: var(--t-sm); color: var(--sage-500); }
+.nav-search-results .hit { display: grid; grid-template-columns: 44px 1fr auto; gap: 0.8rem; align-items: center; padding: 0.55rem 0; color: var(--celadon-100); }
+.nav-search-results .hit:hover { color: var(--gold-pale); }
+.nav-search-results .hit .img-slot { width: 44px; aspect-ratio: 3/4; }
+.nav-search-results .hit .nm { font-family: var(--serif-display); font-size: 0.95rem; line-height: 1.25; }
+.nav-search-results .hit .pr { font-family: var(--serif-soft); font-size: 0.95rem; color: var(--gold-pale); white-space: nowrap; }
+.nav-search-results .hit .was { text-decoration: line-through; opacity: .55; margin-right: .5em; }
+.nav-search-results .all { display: block; text-align: center; padding: 0.8rem 0 0.2rem; font-size: 0.68rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold-soft); }
+.nav-search-results .all:hover { color: var(--gold-pale); }
+
+/* Mobile trigger — the Search anchor is hidden ≤820px (mobile-nav.css keeps
+   only the Bag anchor), so a glyph button survives the a-only hiding rule. */
+.nav-search-toggle { display: none; background: none; border: 0; color: inherit; cursor: pointer; font-size: 1.05rem; padding: 6px; }
+@media (max-width: 820px){ .nav-search-toggle { display: inline-flex; } }

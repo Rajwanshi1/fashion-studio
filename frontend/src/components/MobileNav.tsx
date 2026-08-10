@@ -17,7 +17,16 @@ const SUB = [
 ];
 
 /** Full-screen forest overlay menu (replicates mobile-nav.js). */
-export default function MobileNav({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function MobileNav({
+  open,
+  onClose,
+  onSearch,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Opens the inline nav search bar instead of navigating to /search. */
+  onSearch?: () => void;
+}) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -58,11 +67,27 @@ export default function MobileNav({ open, onClose }: { open: boolean; onClose: (
           ))}
         </nav>
         <div className="mnav-sub">
-          {SUB.map((l) => (
-            <Link key={l.t} to={l.h} onClick={onClose}>
-              {l.t}
-            </Link>
-          ))}
+          {SUB.map((l) =>
+            l.t === 'Search' ? (
+              // Opens the inline nav bar; /search stays the no-JS fallback.
+              <a
+                key={l.t}
+                href={l.h}
+                onClick={(e) => {
+                  if (onSearch) {
+                    e.preventDefault();
+                    onSearch();
+                  }
+                }}
+              >
+                {l.t}
+              </a>
+            ) : (
+              <Link key={l.t} to={l.h} onClick={onClose}>
+                {l.t}
+              </Link>
+            ),
+          )}
         </div>
         <div className="mnav-social">
           <a href="#">Instagram</a>
