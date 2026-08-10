@@ -154,10 +154,22 @@ const productBaseSchema = z.object({
   // Optional: omitted → derived from name + colour (see the create route).
   slug: z.string().min(1).optional(),
   name: z.string().min(1),
-  // Bounded so a product write can never outgrow the WAF's edge cap on
-  // request size (32KB) — 10k chars of prose is far beyond any real listing.
-  description: z.string().max(10_000).optional(),
-  details: z.string().max(10_000).optional(),
+  // Bounded in BYTES so a product write can never outgrow the WAF's edge cap
+  // on request size (32KB): the cap counts UTF-8 bytes, and Devanagari prose
+  // runs ~3 bytes per char, so a char-count limit would not actually bound
+  // the body. 10KB of prose is far beyond any real listing.
+  description: z
+    .string()
+    .refine((s) => Buffer.byteLength(s, 'utf8') <= 10_000, {
+      message: 'Description is too long — keep it under 10KB of text',
+    })
+    .optional(),
+  details: z
+    .string()
+    .refine((s) => Buffer.byteLength(s, 'utf8') <= 10_000, {
+      message: 'Details are too long — keep them under 10KB of text',
+    })
+    .optional(),
   price: z.number().int().min(0),
   color: z.string().optional(),
   flag: flagSchema.optional(),
@@ -284,24 +296,24 @@ export function adminRoutes(deps: AdminDeps) {
     // Money actually in hand, not billed value: every receipt ever taken
     // (cancelled orders included — their cash was never refunded), plus online
     // orders once the gateway captured them (gateway money never writes
-    // receipts). Offline "outstanding" is any live order with a balance;
-    // online orders owe nothing outside pending_payment.
+    // receipts).
     const revenue =
       orders.reduce((sum, o) => sum + o.advancePaid, 0) +
       orders
         .filter((o) => o.channel === 'online' && paidOrLater.includes(o.status))
         .reduce((sum, o) => sum + o.total, 0);
-    const outstanding = (o: (typeof orders)[number]) =>
-      o.channel === 'online'
-        ? o.status === 'pending_payment'
-        : o.status !== 'cancelled' && o.balance > 0;
-    const pendingToCollect = orders
-      .filter((o) => o.channel !== 'online' && o.status !== 'cancelled' && o.balance > 0)
-      .reduce((sum, o) => sum + o.balance, 0);
+    // One population for both halves of the "To Collect" card — the count must
+    // caption the same orders the rupee figure sums. Online pending_payment
+    // orders are excluded: nothing is collectible at the counter for them, and
+    // abandoned checkouts would inflate the count forever.
+    const owing = orders.filter(
+      (o) => o.channel !== 'online' && o.status !== 'cancelled' && o.balance > 0,
+    );
+    const pendingToCollect = owing.reduce((sum, o) => sum + o.balance, 0);
     return c.json({
       activeOrders: orders.filter((o) => ACTIVE_ORDER_STATUSES.includes(o.status)).length,
       revenue,
-      pendingPayments: orders.filter(outstanding).length,
+      pendingPayments: owing.length,
       revenueByChannel,
       revenueByBillType,
       pendingToCollect,

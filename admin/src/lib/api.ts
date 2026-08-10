@@ -36,7 +36,11 @@ interface RequestOptions {
   timeoutMs?: number;
 }
 
-const DEFAULT_TIMEOUT_MS = 20_000;
+const READ_TIMEOUT_MS = 20_000;
+// Mutations get much longer: the server has no idempotency keys, so aborting
+// a write that eventually succeeds invites a duplicate on retry. The timeout
+// exists to surface a truly dead connection, not to race a slow one.
+const WRITE_TIMEOUT_MS = 90_000;
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {};
@@ -47,7 +51,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   const controller = new AbortController();
   const timer = window.setTimeout(
     () => controller.abort(),
-    options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    options.timeoutMs ?? ((options.method ?? 'GET') === 'GET' ? READ_TIMEOUT_MS : WRITE_TIMEOUT_MS),
   );
   let res: Response;
   try {
@@ -61,7 +65,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     // A hung request or a dead connection must never look like success —
     // surface it as a readable failure instead of a raw TypeError.
     if (controller.signal.aborted) {
-      throw new ApiError(0, 'The request timed out — the change may not have been saved. Check your connection and try again.');
+      throw new ApiError(0, 'The request timed out — check whether the change was saved before trying again.');
     }
     throw new ApiError(0, 'Network error — the change was not saved. Check your connection and try again.');
   } finally {

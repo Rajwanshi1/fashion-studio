@@ -847,7 +847,10 @@ export class FakePaymentsRepo implements PaymentsRepo {
         amount: p.amount,
         mode: p.method,
         status: p.status,
-        date: p.createdAt.slice(0, 10),
+        // IST business date, mirroring the real repo's AT TIME ZONE conversion.
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(
+          new Date(p.createdAt),
+        ),
         provider: p.provider,
         providerOrderId: p.providerOrderId,
         providerPaymentId: p.providerPaymentId,
