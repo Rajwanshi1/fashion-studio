@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDate, formatINR } from '../lib/format';
 import type { BillType, DocumentSummary, Order, OrderChannel, OrderStatus, ReceiptMode } from '../lib/types';
@@ -16,6 +16,7 @@ import {
 import type { ShippingReceiptDraft } from '../lib/uploads';
 import { fetchDocumentImage, parseDocument, uploadDocument } from '../lib/uploads';
 import { STATUS_MESSAGES, waLink } from '../lib/whatsapp';
+import ConfirmModal from '../components/ConfirmModal';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { InvoiceActions } from '../components/InvoiceActions';
@@ -59,10 +60,18 @@ const columns: Column<Order>[] = [
 interface ExpandedProps {
   order: Order;
   onUpdated: (order: Order, message?: string) => void;
-  onError: (message: string) => void;
 }
 
-function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
+function ExpandedOrder({ order, onUpdated: onUpdatedProp }: ExpandedProps) {
+  // Errors live inside this panel, next to the action that caused them, and
+  // clear the moment any later action succeeds — a red banner surviving a
+  // successful payment reads as "the payment failed".
+  const [panelError, setPanelError] = useState<string | null>(null);
+  const onError = (message: string) => setPanelError(message);
+  const onUpdated = (updated: Order, message?: string) => {
+    setPanelError(null);
+    onUpdatedProp(updated, message);
+  };
   const [amount, setAmount] = useState('');
   const [mode, setMode] = useState<ReceiptMode>('cash');
   const [busy, setBusy] = useState(false);
@@ -70,6 +79,7 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
   const [docImages, setDocImages] = useState<Record<string, string>>({});
   const [receipt, setReceipt] = useState<{ documentId: string; carrier: string; awb: string } | null>(null);
   const [receiptBusy, setReceiptBusy] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const receiptInput = useRef<HTMLInputElement>(null);
   const nexts = transitionsFor(order);
   const message = STATUS_MESSAGES[order.status]?.(order);
@@ -164,6 +174,7 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
 
   const recordPayment = async (e: FormEvent) => {
     e.preventDefault();
+    setPanelError(null);
     const paise = Math.round(Number(amount) * 100);
     if (!Number.isFinite(paise) || paise <= 0) {
       onError('Enter the received amount in rupees');
@@ -173,6 +184,8 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
     try {
       const updated = await api<Order>(`/api/admin/orders/${order.id}/receipts`, {
         method: 'POST',
+        // No receivedAt: the server stamps today in IST. The device clock is
+        // not trusted for ledger dates.
         body: { amount: paise, mode },
       });
       setAmount('');
@@ -186,6 +199,11 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
 
   return (
     <div className="odetail">
+      {panelError && (
+        <div className="form-err" role="alert">
+          {panelError}
+        </div>
+      )}
       <div>
         <h4>Items</h4>
         {order.items.map((it) => (
@@ -347,7 +365,7 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
               order.receipts.map((r) => (
                 <div className="oitem" key={r.id}>
                   <div className="x">
-                    {r.receivedAt} · {r.mode === 'cash' ? 'Cash' : 'Online'}
+                    {formatDate(r.receivedAt)} · {r.mode === 'cash' ? 'Cash' : 'Online'}
                     {r.note ? ` · ${r.note}` : ''}
                   </div>
                   <div>{formatINR(r.amount)}</div>
@@ -360,7 +378,7 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
             </div>
           </>
         )}
-        {order.channel !== 'online' && order.balance > 0 && (
+        {order.channel !== 'online' && order.status !== 'cancelled' && order.balance > 0 && (
           <form className="pay-form" onSubmit={recordPayment}>
             <div className="field">
               <label className="lab" htmlFor={`pay-${order.id}`}>
@@ -424,7 +442,10 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
               value={order.status}
               onChange={(e) => {
                 const next = e.target.value as OrderStatus;
-                if (next !== order.status) void moveOrder(next);
+                if (next === order.status) return;
+                // Cancelling is terminal — never one stray click on a dropdown.
+                if (next === 'cancelled') setConfirmCancel(true);
+                else void moveOrder(next);
               }}
             >
               <option value={order.status} disabled>
@@ -437,6 +458,27 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
               ))}
             </select>
           </div>
+        )}
+        {confirmCancel && (
+          <ConfirmModal
+            title={`Cancel order ${order.orderNumber}?`}
+            confirmLabel="Cancel order"
+            cancelLabel="Keep order"
+            tone="danger"
+            onCancel={() => setConfirmCancel(false)}
+            onConfirm={() => {
+              setConfirmCancel(false);
+              void moveOrder('cancelled');
+            }}
+          >
+            <p>
+              A cancelled order cannot be reopened
+              {order.advancePaid > 0
+                ? `, and the ${formatINR(order.advancePaid)} already received stays on the books`
+                : ''}
+              .
+            </p>
+          </ConfirmModal>
         )}
       </div>
     </div>
@@ -554,10 +596,19 @@ export default function Orders() {
           columns={columns}
           rows={orders}
           rowKey={(o) => o.id}
-          empty="No orders in this state."
+          empty={
+            <>
+              {filter === 'all'
+                ? 'No orders yet.'
+                : `No ${ORDER_STATUS_LABELS[filter].toLowerCase()} orders.`}{' '}
+              <Link className="ulink" to="/orders/new">
+                Record an order
+              </Link>
+            </>
+          }
           initialExpandedKey={focusId}
           renderExpanded={(order) => (
-            <ExpandedOrder order={order} onUpdated={replaceOrder} onError={setError} />
+            <ExpandedOrder order={order} onUpdated={replaceOrder} />
           )}
         />
       )}

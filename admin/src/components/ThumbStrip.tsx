@@ -4,11 +4,14 @@ import type { ProductImage } from '../lib/types';
 import { dropIndexForPoint, slotToIndex } from '../lib/reorder';
 import type { Rect } from '../lib/reorder';
 
+const POSE_OPTIONS = ['front', 'back', 'side', 'detail'];
+
 interface ThumbStripProps {
   images: ProductImage[];
   /** Splice-move: item leaves `from`, lands at `to`. */
   onReorder: (from: number, to: number) => void;
   onRemove: (index: number) => void;
+  onPoseChange: (index: number, pose: string) => void;
 }
 
 /** Everything the render needs while a pointer drag is live. */
@@ -47,7 +50,7 @@ const DRAG_THRESHOLD_PX = 4;
  * arrow keys on a focused handle move the photo one slot.
  * No autoscroll: at MAX_IMAGES=12 the strip fits the viewport.
  */
-export function ThumbStrip({ images, onReorder, onRemove }: ThumbStripProps) {
+export function ThumbStrip({ images, onReorder, onRemove, onPoseChange }: ThumbStripProps) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [announce, setAnnounce] = useState('');
   const gestureRef = useRef<Gesture | null>(null);
@@ -169,7 +172,23 @@ export function ThumbStrip({ images, onReorder, onRemove }: ThumbStripProps) {
             src={img.url}
             alt={img.pose ? `Product photo ${i + 1} — ${img.pose}` : `Product photo ${i + 1}`}
           />
-          <figcaption>{img.pose || `Photo ${i + 1}`}</figcaption>
+          {/* The AI naming call guesses the pose; guesses must be correctable. */}
+          <select
+            className="inp thumb-pose"
+            aria-label={`Pose tag for photo ${i + 1}`}
+            value={img.pose}
+            onChange={(e) => onPoseChange(i, e.target.value)}
+          >
+            <option value="">No tag</option>
+            {POSE_OPTIONS.map((p) => (
+              <option key={p} value={p}>
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </option>
+            ))}
+            {img.pose && !POSE_OPTIONS.includes(img.pose) && (
+              <option value={img.pose}>{img.pose}</option>
+            )}
+          </select>
           <div className="thumb-actions">
             <button
               type="button"
@@ -207,13 +226,12 @@ export function ThumbStrip({ images, onReorder, onRemove }: ThumbStripProps) {
           aria-hidden="true"
         >
           <img src={drag.url} alt="" />
-          <figcaption>{drag.pose || 'Photo'}</figcaption>
         </figure>
       )}
-      <span id="thumb-reorder-hint" className="vh">
+      <span id="thumb-reorder-hint" className="sr-only">
         Arrow keys move this photo; drag to reorder.
       </span>
-      <div role="status" aria-live="polite" className="vh">
+      <div role="status" aria-live="polite" className="sr-only">
         {announce}
       </div>
     </div>

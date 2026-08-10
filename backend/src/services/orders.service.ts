@@ -1,7 +1,7 @@
 import type { DocumentsRepo } from '../data/documents.repo';
 import type { MeasurementsRepo } from '../data/measurements.repo';
 import type { OrderDetailsPatch, OrdersRepo } from '../data/orders.repo';
-import type { ProductsRepo } from '../data/products.repo';
+import type { ProductsRepo, VariantForOrder } from '../data/products.repo';
 import type { ReceiptsRepo } from '../data/receipts.repo';
 import type { UsersRepo } from '../data/users.repo';
 import { normalizePhone } from '../lib/phone';
@@ -62,7 +62,14 @@ export interface CreateOfflineOrderInput {
         state?: string;
         pincode?: string;
       };
-  items: { description: string; quantity: number; unitPrice: number }[];
+  items: {
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    /** Optional catalogue link — sent together, reserves stock on creation. */
+    productId?: string;
+    variantId?: string;
+  }[];
   gstAmount?: number;
   /** Paise — the stated total wins (handwritten bills rarely sum exactly). */
   total: number;
@@ -71,7 +78,8 @@ export interface CreateOfflineOrderInput {
   deliveryDueDate?: string;
   notes?: string;
   /** Default in_atelier; delivered = exhibition spot sale. */
-  initialStatus?: 'in_atelier' | 'delivered';
+  /** Any state a bill can arrive in — old bills are often entered after the fact. */
+  initialStatus?: 'in_atelier' | 'quality_check' | 'dispatched' | 'delivered';
   /** Uploaded bill/measurement photos — confirmed + linked in the same transaction. */
   documentIds?: string[];
   /** Reviewed measurement sets, saved against the linked/created customer. */
@@ -251,7 +259,38 @@ export function createOrdersService(deps: {
         throw new DomainError('OVER_COLLECTION', 'Advance cannot exceed the order total');
       }
 
+      // Aggregate linked lines per variant — stock is checked and decremented
+      // per variant, exactly like the online checkout.
+      const linkedQuantities = new Map<string, number>();
+      for (const it of input.items) {
+        if (it.variantId) {
+          linkedQuantities.set(it.variantId, (linkedQuantities.get(it.variantId) ?? 0) + it.quantity);
+        }
+      }
+
       return deps.runInTransaction(async (tx) => {
+        const lockedVariants = new Map<string, VariantForOrder>();
+        if (linkedQuantities.size > 0) {
+          const variants = await deps.products.getVariantsForUpdate(tx, [...linkedQuantities.keys()]);
+          for (const v of variants) lockedVariants.set(v.id, v);
+          for (const it of input.items) {
+            if (!it.variantId) continue;
+            const v = lockedVariants.get(it.variantId);
+            if (!v || (it.productId && v.productId !== it.productId)) {
+              throw new DomainError('NOT_FOUND', 'A linked piece is no longer in the catalogue — unlink it to record the bill anyway');
+            }
+          }
+          for (const [id, qty] of linkedQuantities) {
+            const v = lockedVariants.get(id)!;
+            if (v.stock < qty) {
+              throw new DomainError(
+                'INSUFFICIENT_STOCK',
+                `Insufficient stock for ${v.productName} (${v.size}) — unlink the piece to record the bill anyway`,
+              );
+            }
+          }
+        }
+
         let user: User;
         if (input.customer.action === 'link') {
           const found = await deps.users.findById(input.customer.userId);
@@ -300,12 +339,24 @@ export function createOrdersService(deps: {
             deliveryDueDate: input.deliveryDueDate ?? null,
             notes: input.notes ?? '',
           },
-          input.items.map((it) => ({
-            productName: it.description,
-            unitPrice: it.unitPrice,
-            quantity: it.quantity,
-          })),
+          input.items.map((it) => {
+            const v = it.variantId ? lockedVariants.get(it.variantId) : undefined;
+            return {
+              productName: it.description,
+              unitPrice: it.unitPrice, // the handwritten bill's price wins
+              quantity: it.quantity,
+              productId: v?.productId ?? null,
+              variantId: v?.id ?? null,
+              size: v?.size ?? '',
+              color: v?.color ?? '',
+              imageUrl: v?.imageUrl ?? null,
+            };
+          }),
         );
+
+        for (const [id, qty] of linkedQuantities) {
+          await deps.products.decrementStock(tx, id, qty);
+        }
 
         // Attach the scanned photos + save reviewed measurements in the SAME
         // transaction — a failed order must leave no confirmed documents behind.
@@ -357,11 +408,11 @@ export function createOrdersService(deps: {
         if (!cancellable.includes(order.status)) {
           throw new DomainError('INVALID_STATUS_TRANSITION', `Cannot cancel an order in status '${order.status}'`);
         }
-        if (!offline) {
-          // Offline lines never held stock; online freeform lines (none today) are skipped too.
-          for (const item of order.items) {
-            if (item.variantId) await deps.products.restock(tx, item.variantId, item.quantity);
-          }
+        // Any line that decremented stock gets it back: online lines always,
+        // offline lines only when linked to the catalogue (freeform lines and
+        // orders created before linking existed carry a null variantId).
+        for (const item of order.items) {
+          if (item.variantId) await deps.products.restock(tx, item.variantId, item.quantity);
         }
         return (await deps.orders.updateStatus(orderId, 'cancelled', tx))!;
       });
@@ -380,6 +431,9 @@ export function createOrdersService(deps: {
     async recordReceipt(orderId, input) {
       const order = await deps.orders.getById(orderId);
       if (!order) throw new DomainError('NOT_FOUND', 'Order not found');
+      if (order.status === 'cancelled') {
+        throw new DomainError('ORDER_CANCELLED', 'This order is cancelled — payments can no longer be recorded against it');
+      }
       if (order.advancePaid + input.amount > order.total) {
         throw new DomainError('OVER_COLLECTION', 'Payment would exceed the order total');
       }
@@ -388,6 +442,17 @@ export function createOrdersService(deps: {
     },
 
     async updateOrderDetails(orderId, patch) {
+      // A patch may change the bill type and number independently — the pair
+      // that would result must never be a GST invoice with a blank number.
+      if (patch.billNumber !== undefined || patch.billType !== undefined) {
+        const current = await deps.orders.getById(orderId);
+        if (!current) throw new DomainError('NOT_FOUND', 'Order not found');
+        const billType = patch.billType === undefined ? current.billType : patch.billType;
+        const billNumber = patch.billNumber === undefined ? current.billNumber : patch.billNumber;
+        if (billType === 'gst_invoice' && !billNumber?.trim()) {
+          throw new DomainError('BILL_NUMBER_REQUIRED', 'A GST invoice needs a bill number');
+        }
+      }
       const order = await deps.orders.updateDetails(orderId, patch);
       if (!order) throw new DomainError('NOT_FOUND', 'Order not found');
       return order;

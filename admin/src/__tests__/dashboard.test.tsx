@@ -11,20 +11,20 @@ describe('Dashboard', () => {
             activeOrders: 12,
             revenue: 32600000,
             pendingPayments: 3,
+            pendingToCollect: 150000,
+            // One row per fully-out piece, not per zero variant.
             lowStock: [
               {
-                variantId: 'v9',
                 productId: 'p9',
                 productName: 'Pistachio Threadwork Anarkali',
-                size: 'XS',
-                stock: 1,
+                color: 'Pistachio',
+                imageUrl: null,
               },
               {
-                variantId: 'v10',
-                productId: 'p9',
-                productName: 'Pistachio Threadwork Anarkali',
-                size: 'XL',
-                stock: 2,
+                productId: 'p10',
+                productName: 'Fern Zardozi Set',
+                color: 'Fern',
+                imageUrl: 'https://cdn.test/fern.jpg',
               },
             ],
             recentOrders: [makeOrder()],
@@ -38,16 +38,19 @@ describe('Dashboard', () => {
 
     expect(await screen.findByText('Active Orders')).toBeInTheDocument();
     expect(screen.getByText('12')).toBeInTheDocument();
-    expect(screen.getByText('Revenue')).toBeInTheDocument();
+    // Money cards report what was actually received and what is still owed.
+    expect(screen.getByText('Collected')).toBeInTheDocument();
     expect(screen.getByText('₹3,26,000')).toBeInTheDocument();
-    expect(screen.getByText('Pending Payments')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
-    expect(screen.getByText('Low Stock')).toBeInTheDocument();
-    // low stock count card = 2 items
+    expect(screen.getByText('To Collect')).toBeInTheDocument();
+    expect(screen.getByText('₹1,500')).toBeInTheDocument();
+    expect(screen.getByText('3 orders with balance due')).toBeInTheDocument();
+    expect(screen.getByText('Out of Stock')).toBeInTheDocument();
+    // out-of-stock count card = 2 pieces
     expect(screen.getByText('2', { selector: '.stat .v' })).toBeInTheDocument();
-    // low stock rows
-    expect(screen.getAllByText('Pistachio Threadwork Anarkali')).toHaveLength(2);
-    expect(screen.getByText('XS')).toBeInTheDocument();
+    // one row per piece, with colour and a way straight into the editor
+    expect(screen.getByText('Pistachio Threadwork Anarkali')).toBeInTheDocument();
+    expect(screen.getByText('Fern Zardozi Set')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Open piece' })).toHaveLength(2);
     // recent orders table
     expect(screen.getByText('TA-2026-04817')).toBeInTheDocument();
     expect(screen.getByText('Meera Kapoor')).toBeInTheDocument();

@@ -4,7 +4,7 @@ import { createApp } from '../src/app';
 import { deliveryTotals } from '../src/lib/deliveries';
 import { customersToVcf } from '../src/lib/vcard';
 import type { Order, Receipt } from '../src/types';
-import { FakeObjectStore, FakePaymentProvider, Fakes, fakeTx, makeFakes } from './fakes';
+import { seedCatalog, FakeObjectStore, FakePaymentProvider, Fakes, fakeTx, makeFakes } from './fakes';
 
 const SECRET = 'deliveries-test-secret';
 
@@ -121,13 +121,45 @@ describe('delivery board & contacts export API', () => {
 
       const res = await app.request('/api/admin/deliveries', bearer(adminToken));
       expect(res.status).toBe(200);
-      const { orders, totals } = await res.json();
+      const { orders, unscheduled, totals } = await res.json();
       expect(orders.map((o: Order) => o.id)).toEqual([soon.id, later.id]);
+      // The date-less open order is not lost — it shows in its own bucket…
+      expect(unscheduled.map((o: Order) => o.status)).toEqual(['in_atelier']);
       expect(totals).toEqual({
-        pendingToCollect: (4500000 - 2000000) + (4500000 - 1000000),
+        // …and its balance counts: totals cover exactly the orders the board
+        // shows, unscheduled included.
+        pendingToCollect: (4500000 - 2000000) + (4500000 - 1000000) + 4500000,
         collectedCash: 2000000,
         collectedOnline: 1000000,
       });
+    });
+
+    it('unscheduled lists only offline work — abandoned online checkouts never appear', async () => {
+      // A guest checkout that was never paid: online, pending_payment, no due date.
+      const seeded = await seedCatalog(f.products);
+      const guest = await app.request(
+        '/api/orders',
+        post({
+          customer: {
+            email: 'guest@example.com',
+            firstName: 'Guest',
+            lastName: '',
+            addressLine1: '1 Lane',
+            addressLine2: '',
+            city: 'Mumbai',
+            state: 'MH',
+            pincode: '400001',
+            country: 'India',
+          },
+          deliveryMethod: 'standard',
+          items: [{ variantId: seeded.sage.variants[0].id, quantity: 1 }],
+        }),
+      );
+      expect(guest.status).toBe(201);
+
+      const offline = await createOffline(undefined);
+      const { unscheduled } = await (await app.request('/api/admin/deliveries', bearer(adminToken))).json();
+      expect(unscheduled.map((o: Order) => o.id)).toEqual([offline.id]);
     });
   });
 

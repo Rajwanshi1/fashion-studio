@@ -23,6 +23,10 @@
 
   /* ---- Soft gold accent ---- */
   --gold:         #B0894A;
+  /* Darker gold for TEXT: #B0894A measures 2.86:1 on cream (AA needs 4.5:1);
+     #85662F clears 4.7:1 on every surface it labels. Keep --gold for borders,
+     rules and strokes, where contrast rules differ. */
+  --gold-text:    #85662F;
   --gold-soft:    #C9AE7A;
   --gold-pale:    #E6D7B8;
 
@@ -48,7 +52,7 @@
   --t-h3:     1.65rem;
   --t-body:   1.0625rem;
   --t-sm:     0.9375rem;
-  --t-eyebrow: 0.7rem;
+  --t-eyebrow: 0.75rem;
 
   /* ---- Tracking ---- */
   --track-caps: 0.34em;
@@ -68,7 +72,8 @@
 
 * { box-sizing: border-box; }
 
-html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+/* Explicit rem anchor at the browser default — user font-size prefs are respected. */
+html { font-size: 100%; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 
 body {
   margin: 0;
@@ -95,7 +100,7 @@ img { display: block; max-width: 100%; }
   font-weight: 400;
   letter-spacing: var(--track-caps);
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--gold-text);
 }
 
 .rule-gold {

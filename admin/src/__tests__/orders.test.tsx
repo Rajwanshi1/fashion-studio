@@ -56,10 +56,12 @@ describe('Orders', () => {
     });
 
     renderApp('/orders');
-    await screen.findByText('No orders in this state.');
+    await screen.findByText(/No orders yet\./);
 
     await userEvent.click(screen.getByRole('button', { name: 'Dispatched' }));
-    await screen.findByText('No orders in this state.');
+    // Empty states name the actual filter and offer a way in.
+    await screen.findByText(/No dispatched orders\./);
+    expect(screen.getByRole('link', { name: 'Record an order' })).toBeInTheDocument();
 
     expect(calls.some((c) => c.url.endsWith('/api/admin/orders?status=dispatched'))).toBe(true);
   });
@@ -72,20 +74,20 @@ describe('Orders', () => {
     });
 
     renderApp('/orders');
-    await screen.findByText('No orders in this state.');
+    await screen.findByText(/No orders yet\./);
 
     await userEvent.click(screen.getByRole('button', { name: 'In Store' }));
-    await screen.findByText('No orders in this state.');
+    await screen.findByText(/No orders yet\./);
     expect(calls.some((c) => c.url.endsWith('/api/admin/orders?channel=in_store'))).toBe(true);
 
     await userEvent.click(screen.getByRole('button', { name: 'Cash Memo' }));
-    await screen.findByText('No orders in this state.');
+    await screen.findByText(/No orders yet\./);
     expect(
       calls.some((c) => c.url.endsWith('/api/admin/orders?channel=in_store&billType=cash_memo')),
     ).toBe(true);
 
     await userEvent.click(screen.getByRole('button', { name: 'Dispatched' }));
-    await screen.findByText('No orders in this state.');
+    await screen.findByText(/No dispatched orders\./);
     expect(
       calls.some((c) =>
         c.url.endsWith('/api/admin/orders?status=dispatched&channel=in_store&billType=cash_memo'),
@@ -171,7 +173,8 @@ describe('Orders', () => {
     await userEvent.click(cell);
     expect(screen.getByText(/Bill GST-7/)).toBeInTheDocument();
     expect(screen.getByText(/Blouse to be altered/)).toBeInTheDocument();
-    expect(screen.getByText(/2026-07-10 · Cash · Advance/)).toBeInTheDocument();
+    // Receipt dates render like every other date in the app, not raw ISO.
+    expect(screen.getByText(/10 Jul 2026 · Cash · Advance/)).toBeInTheDocument();
     const wa = screen.getByRole('link', { name: 'Send WhatsApp update' });
     expect(wa.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/919820000000\?text=/);
     expect(wa.getAttribute('href')).toContain(encodeURIComponent('TA-2026-04817'));

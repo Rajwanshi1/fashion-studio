@@ -111,6 +111,8 @@ test('bill intake: manual escape hatch skips photos entirely @mobile', async ({ 
 
   await page.locator('#oi-phone').fill(uniquePhone());
   await page.locator('#oi-first').fill('Manual');
+  // A GST invoice (the default) now refuses to save without a bill number.
+  await page.getByRole('group', { name: 'Bill type' }).getByRole('button', { name: 'Cash Memo' }).click();
   await page.locator('#oi-desc-0').fill('Celadon stole');
   await page.locator('#oi-unit-0').fill('8000');
   await page.locator('#oi-total').fill('8000');

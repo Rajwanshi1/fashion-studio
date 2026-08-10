@@ -49,11 +49,17 @@ export interface NewOfflineOrder extends NewOrder {
   notes: string;
 }
 
-/** Freeform handwritten-bill line — no catalog linkage. */
+/** Handwritten-bill line — freeform by default, optionally linked to a variant. */
 export interface NewOfflineItem {
   productName: string;
   unitPrice: number;
   quantity: number;
+  productId?: string | null;
+  variantId?: string | null;
+  /** Snapshot fields, filled from the variant when linked. */
+  size?: string;
+  color?: string;
+  imageUrl?: string | null;
 }
 
 export interface OrderDetailsPatch {
@@ -80,6 +86,8 @@ export interface OrdersRepo {
   listByUser(userId: string): Promise<Order[]>;
   /** Open orders with a promised date, soonest first — the delivery board. */
   listDeliveries(): Promise<Order[]>;
+  /** Live orders with NO due date — work that can silently fall off the board. */
+  listUnscheduled(): Promise<Order[]>;
   listAdmin(filter?: AdminOrdersFilter): Promise<Order[]>;
   updateStatus(id: string, status: OrderStatus, tx?: Tx): Promise<Order | null>;
   updateDetails(id: string, patch: OrderDetailsPatch): Promise<Order | null>;
@@ -296,8 +304,18 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
         const { rows: itemRows } = await client.query(
           `INSERT INTO order_items (order_id, product_id, variant_id, product_name, size, color,
                                     unit_price, quantity, image_url)
-           VALUES ($1, NULL, NULL, $2, '', '', $3, $4, NULL) RETURNING *`,
-          [orderRow.id, item.productName, item.unitPrice, item.quantity],
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+          [
+            orderRow.id,
+            item.productId ?? null,
+            item.variantId ?? null,
+            item.productName,
+            item.size ?? '',
+            item.color ?? '',
+            item.unitPrice,
+            item.quantity,
+            item.imageUrl ?? null,
+          ],
         );
         created.push(mapItem(itemRows[0]));
       }
@@ -319,6 +337,18 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
         pool,
         `WHERE status NOT IN ('delivered','cancelled') AND delivery_due_date IS NOT NULL
          ORDER BY delivery_due_date ASC, created_at ASC`,
+        [],
+      );
+    },
+
+    async listUnscheduled() {
+      // Offline orders only: every abandoned online checkout sits forever at
+      // pending_payment with no due date and would flood the board otherwise.
+      return loadOrders(
+        pool,
+        `WHERE channel <> 'online' AND status NOT IN ('delivered','cancelled')
+           AND delivery_due_date IS NULL
+         ORDER BY created_at ASC`,
         [],
       );
     },

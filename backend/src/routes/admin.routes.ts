@@ -66,21 +66,40 @@ const createOfflineOrderSchema = z.object({
   customer: offlineCustomerSchema,
   items: z
     .array(
-      z.object({
-        description: z.string().min(1),
-        quantity: z.number().int().min(1),
-        unitPrice: z.number().int().min(0),
-      }),
+      z
+        .object({
+          description: z.string().min(1),
+          quantity: z.number().int().min(1),
+          unitPrice: z.number().int().min(0),
+          productId: z.string().min(1).optional(),
+          variantId: z.string().min(1).optional(),
+        })
+        // Both or neither: a variant link without its product (or vice versa)
+        // cannot be validated against the catalogue.
+        .refine((it) => (it.productId === undefined) === (it.variantId === undefined), {
+          message: 'productId and variantId must be sent together',
+        }),
     )
-    .min(1),
+    .min(1)
+    // Keeps the JSON body comfortably under the WAF's edge cap on request size.
+    .max(100),
   gstAmount: z.number().int().min(0).optional(),
   total: z.number().int().min(0),
   advance: z.object({ amount: z.number().int().positive(), mode: z.enum(RECEIPT_MODES) }).optional(),
   deliveryDueDate: z.string().regex(DATE_RE).optional(),
   notes: z.string().optional(),
-  initialStatus: z.enum(['in_atelier', 'delivered']).optional(),
+  initialStatus: z.enum(['in_atelier', 'quality_check', 'dispatched', 'delivered']).optional(),
   documentIds: z.array(z.string().min(1)).optional(),
   measurementSets: z.array(measurementSetSchema).optional(),
+}).superRefine((v, ctx) => {
+  // A GST invoice without a number is a compliance problem, not a draft.
+  if (v.billType === 'gst_invoice' && !v.billNumber?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['billNumber'],
+      message: 'A GST invoice needs a bill number',
+    });
+  }
 });
 
 const receiptSchema = z.object({
@@ -135,8 +154,22 @@ const productBaseSchema = z.object({
   // Optional: omitted → derived from name + colour (see the create route).
   slug: z.string().min(1).optional(),
   name: z.string().min(1),
-  description: z.string().optional(),
-  details: z.string().optional(),
+  // Bounded in BYTES so a product write can never outgrow the WAF's edge cap
+  // on request size (32KB): the cap counts UTF-8 bytes, and Devanagari prose
+  // runs ~3 bytes per char, so a char-count limit would not actually bound
+  // the body. 10KB of prose is far beyond any real listing.
+  description: z
+    .string()
+    .refine((s) => Buffer.byteLength(s, 'utf8') <= 10_000, {
+      message: 'Description is too long — keep it under 10KB of text',
+    })
+    .optional(),
+  details: z
+    .string()
+    .refine((s) => Buffer.byteLength(s, 'utf8') <= 10_000, {
+      message: 'Details are too long — keep them under 10KB of text',
+    })
+    .optional(),
   price: z.number().int().min(0),
   color: z.string().optional(),
   flag: flagSchema.optional(),
@@ -235,13 +268,21 @@ export function adminRoutes(deps: AdminDeps) {
   r.get('/summary', async (c) => {
     const [products, orders] = await Promise.all([deps.products.listAllProducts(), deps.orders.listAdmin()]);
     const paidOrLater: OrderStatus[] = ['paid', 'in_atelier', 'quality_check', 'dispatched', 'delivered'];
+    // Pieces fully out of stock, one row per piece. The old per-variant list
+    // drowned the dashboard: with one stocked size per piece, every other
+    // size sat at a permanent 0 and 33 identical rows meant nothing.
     const lowStock = products
       .filter((p) => p.active)
-      .flatMap((p) =>
-        p.variants
-          .filter((v) => v.size !== 'Custom' && v.stock <= 2)
-          .map((v) => ({ productId: p.id, productName: p.name, size: v.size, stock: v.stock })),
-      );
+      .filter((p) => {
+        const sized = p.variants.filter((v) => v.size !== 'Custom');
+        return sized.length > 0 && sized.every((v) => v.stock === 0);
+      })
+      .map((p) => ({
+        productId: p.id,
+        productName: p.name,
+        color: p.color,
+        imageUrl: p.images?.[0]?.url ?? p.imageUrl ?? null,
+      }));
     // listAdmin returns newest first.
     const recentOrders = orders.slice(0, 8).map((o) => ({
       id: o.id,
@@ -260,13 +301,27 @@ export function adminRoutes(deps: AdminDeps) {
       revenueByChannel[o.channel] = (revenueByChannel[o.channel] ?? 0) + o.total;
       if (o.billType) revenueByBillType[o.billType] = (revenueByBillType[o.billType] ?? 0) + o.total;
     }
-    const pendingToCollect = orders
-      .filter((o) => o.channel !== 'online' && o.status !== 'cancelled' && o.status !== 'delivered')
-      .reduce((sum, o) => sum + (o.total - o.advancePaid), 0);
+    // Money actually in hand, not billed value: every receipt ever taken
+    // (cancelled orders included — their cash was never refunded), plus online
+    // orders once the gateway captured them (gateway money never writes
+    // receipts).
+    const revenue =
+      orders.reduce((sum, o) => sum + o.advancePaid, 0) +
+      orders
+        .filter((o) => o.channel === 'online' && paidOrLater.includes(o.status))
+        .reduce((sum, o) => sum + o.total, 0);
+    // One population for both halves of the "To Collect" card — the count must
+    // caption the same orders the rupee figure sums. Online pending_payment
+    // orders are excluded: nothing is collectible at the counter for them, and
+    // abandoned checkouts would inflate the count forever.
+    const owing = orders.filter(
+      (o) => o.channel !== 'online' && o.status !== 'cancelled' && o.balance > 0,
+    );
+    const pendingToCollect = owing.reduce((sum, o) => sum + o.balance, 0);
     return c.json({
       activeOrders: orders.filter((o) => ACTIVE_ORDER_STATUSES.includes(o.status)).length,
-      revenue: revenueOrders.reduce((sum, o) => sum + o.total, 0),
-      pendingPayments: orders.filter((o) => o.status === 'pending_payment').length,
+      revenue,
+      pendingPayments: owing.length,
       revenueByChannel,
       revenueByBillType,
       pendingToCollect,
@@ -277,8 +332,13 @@ export function adminRoutes(deps: AdminDeps) {
 
   // The delivery board: open orders with a promised date, soonest first.
   r.get('/deliveries', async (c) => {
-    const orders = await deps.orders.listDeliveries();
-    return c.json({ orders, totals: deliveryTotals(orders) });
+    const [orders, unscheduled] = await Promise.all([
+      deps.orders.listDeliveries(),
+      deps.orders.listUnscheduled(),
+    ]);
+    // Totals cover exactly the orders the board shows — an unscheduled order's
+    // balance must not vanish from "To collect" just because it has no date.
+    return c.json({ orders, unscheduled, totals: deliveryTotals([...orders, ...unscheduled]) });
   });
 
   // iPhone contacts export — Safari hands the download to the Contacts app.
@@ -514,7 +574,7 @@ export function adminRoutes(deps: AdminDeps) {
     },
   );
 
-  r.get('/payments', async (c) => c.json(await deps.payments.listAdmin()));
+  r.get('/payments', async (c) => c.json(await deps.payments.listLedger()));
 
   r.get('/users', async (c) => c.json(await deps.users.listAdmin()));
 

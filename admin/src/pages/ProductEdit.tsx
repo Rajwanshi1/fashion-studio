@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { moveItem } from '../lib/reorder';
 import { uploadProductImage } from '../lib/uploads';
+import { useUnsavedGuard } from '../lib/useUnsavedGuard';
 import type { AdminProduct, Category, ProductImage, Variant } from '../lib/types';
 import { ThumbStrip } from '../components/ThumbStrip';
+import ConfirmModal from '../components/ConfirmModal';
 import { useToast } from '../components/Toast';
 
 const NEW_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'Custom'];
@@ -69,7 +71,9 @@ const EMPTY_FORM: FormState = {
   discountPct: '',
   costRupees: '',
   images: [],
-  active: true,
+  // New pieces start hidden — a name-and-price-only piece must never appear
+  // live on the boutique as a blank product page.
+  active: false,
   collection: '',
   craft: '',
   fabric: '',
@@ -110,15 +114,27 @@ export default function ProductEdit() {
   const toast = useToast();
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [catalogue, setCatalogue] = useState<AdminProduct[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [variants, setVariants] = useState<Variant[]>([]);
   const [stocks, setStocks] = useState<Record<string, string>>({});
+  const [baseline, setBaseline] = useState<string | null>(null);
   const [loading, setLoading] = useState(!isNew);
+  const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState<{ done: number; total: number } | null>(null);
   const [urlDraft, setUrlDraft] = useState('');
   const photoInput = useRef<HTMLInputElement>(null);
+  const errRef = useRef<HTMLDivElement>(null);
+
+  // The form is long and the submit button sits at the bottom — an error that
+  // renders quietly at the top is indistinguishable from a dead button.
+  useEffect(() => {
+    if (!error) return;
+    errRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    errRef.current?.focus();
+  }, [error]);
 
   useEffect(() => {
     let live = true;
@@ -132,20 +148,26 @@ export default function ProductEdit() {
 
   useEffect(() => {
     if (isNew) {
+      const initialStocks = Object.fromEntries(NEW_SIZES.map((s) => [s, '0']));
       setForm(EMPTY_FORM);
       setVariants([]);
-      setStocks(Object.fromEntries(NEW_SIZES.map((s) => [s, '0'])));
+      setStocks(initialStocks);
+      setBaseline(JSON.stringify({ form: EMPTY_FORM, stocks: initialStocks }));
       setLoading(false);
-      return;
+    } else {
+      setLoading(true);
     }
     let live = true;
-    setLoading(true);
+    // The whole catalogue in one call: the edit target when editing, and the
+    // existing colour/collection/craft values feeding the field suggestions.
     api<AdminProduct[]>('/api/admin/products')
       .then((products) => {
         if (!live) return;
+        setCatalogue(products);
+        if (isNew) return;
         const product = products.find((p) => p.id === id);
         if (!product) {
-          setError('Piece not found');
+          setNotFound(true);
           setLoading(false);
           return;
         }
@@ -159,7 +181,7 @@ export default function ProductEdit() {
               : [];
         const priceRupees = String(product.price / 100);
         const saleRupees = rupees(product.salePrice);
-        setForm({
+        const nextForm: FormState = {
           name: product.name,
           categorySlug: product.categorySlug,
           description: product.description,
@@ -178,20 +200,34 @@ export default function ProductEdit() {
           occasion: product.occasion,
           dupattaRupees: rupees(product.dupattaPrice),
           jacketRupees: rupees(product.jacketPrice),
-        });
+        };
+        const nextStocks = Object.fromEntries(product.variants.map((v) => [v.id, String(v.stock)]));
+        setForm(nextForm);
         setVariants(product.variants);
-        setStocks(Object.fromEntries(product.variants.map((v) => [v.id, String(v.stock)])));
+        setStocks(nextStocks);
+        setBaseline(JSON.stringify({ form: nextForm, stocks: nextStocks }));
         setLoading(false);
       })
       .catch((err: Error) => {
         if (!live) return;
-        setError(err.message);
-        setLoading(false);
+        // A failed suggestions fetch must not block a blank New Piece form.
+        if (!isNew) {
+          setError(err.message);
+          setLoading(false);
+        }
       });
     return () => {
       live = false;
     };
   }, [id, isNew]);
+
+  const isDirty = baseline !== null && JSON.stringify({ form, stocks }) !== baseline;
+  const guard = useUnsavedGuard(isDirty);
+
+  /** Existing values across the catalogue — free text with suggestions keeps
+   *  one typo from fragmenting the storefront's filters (TA-020). */
+  const suggestions = (key: 'color' | 'collection' | 'craft' | 'occasion'): string[] =>
+    [...new Set(catalogue.map((p) => p[key]).filter(Boolean))].sort();
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -216,6 +252,12 @@ export default function ProductEdit() {
 
   const reorderImage = (from: number, to: number) =>
     setForm((f) => ({ ...f, images: moveItem(f.images, from, to) }));
+
+  const setImagePose = (index: number, pose: string) =>
+    setForm((f) => ({
+      ...f,
+      images: f.images.map((im, x) => (x === index ? { ...im, pose } : im)),
+    }));
 
   const removeImage = (index: number) =>
     setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== index) }));
@@ -274,28 +316,26 @@ export default function ProductEdit() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!form.name.trim()) {
-      setError('Name is required');
-      return;
-    }
-    if (!form.categorySlug) {
-      setError('Please choose a category');
-      return;
-    }
+    // Collect every problem at once — one-error-at-a-time costs a full
+    // scroll-and-resubmit round trip per field (TA-022).
+    const problems: string[] = [];
+    if (!form.name.trim()) problems.push('Name is required');
+    if (!form.categorySlug) problems.push('Choose a category');
     if (!Number.isFinite(pricePaise) || pricePaise < 0 || form.priceRupees.trim() === '') {
-      setError('Please enter a valid price in rupees');
-      return;
+      problems.push('Enter a valid price in rupees');
     }
-    if (saleError) return; // shown inline under the sale fields
+    if (saleError) problems.push(saleError);
     const dupattaPrice = addonPaise(form.dupattaRupees);
     const jacketPrice = addonPaise(form.jacketRupees);
     if (dupattaPrice === undefined || jacketPrice === undefined) {
-      setError('Set-includes prices must be 0 or more — leave blank when the set has no such piece');
-      return;
+      problems.push('Set-includes prices must be 0 or more — leave blank when the set has no such piece');
     }
     const costPrice = addonPaise(form.costRupees);
     if (costPrice === undefined) {
-      setError('Cost price must be 0 or more — leave it blank if you do not track it');
+      problems.push('Cost price must be 0 or more — leave it blank if you do not track it');
+    }
+    if (problems.length > 0) {
+      setError(problems.join('\n'));
       return;
     }
 
@@ -344,15 +384,39 @@ export default function ProductEdit() {
           });
         }
       }
+      guard.release(); // saved — nothing left to guard
       toast(isNew ? 'Piece added to the collection' : 'Piece saved');
       navigate('/products');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to save');
+      const message = err instanceof Error ? err.message : 'Unable to save';
+      setError(message);
+      toast(message, { tone: 'error' });
       setBusy(false);
     }
   };
 
   if (loading) return <p className="state-note">Loading piece…</p>;
+
+  // A bad or stale link must not render a live, saveable empty form —
+  // filling it in would write into nothing.
+  if (notFound) {
+    return (
+      <>
+        <div className="page-head-admin">
+          <span className="eyebrow">Inventory</span>
+          <h1>Piece not found</h1>
+        </div>
+        <p className="state-note">
+          No piece exists at this address — it may have been deleted, or the link is stale.
+        </p>
+        <p className="state-note">
+          <Link className="ulink" to="/products">
+            ← Back to Products
+          </Link>
+        </p>
+      </>
+    );
+  }
 
   const stockKeys: { key: string; label: string }[] = isNew
     ? NEW_SIZES.map((s) => ({ key: s, label: s }))
@@ -368,12 +432,6 @@ export default function ProductEdit() {
       </div>
 
       <form className="form-card" onSubmit={onSubmit} noValidate>
-        {error && (
-          <div className="form-err" role="alert">
-            {error}
-          </div>
-        )}
-
         <div className="grid2">
           <div className="field">
             <label className="lab" htmlFor="p-name">
@@ -454,9 +512,15 @@ export default function ProductEdit() {
             <input
               id="p-color"
               className="inp"
+              list="color-suggestions"
               value={form.color}
               onChange={(e) => set('color', e.target.value)}
             />
+            <datalist id="color-suggestions">
+              {suggestions('color').map((v) => (
+                <option key={v} value={v} />
+              ))}
+            </datalist>
           </div>
           <div className="field">
             <label className="lab" htmlFor="p-collection">
@@ -465,10 +529,16 @@ export default function ProductEdit() {
             <input
               id="p-collection"
               className="inp"
+              list="collection-suggestions"
               placeholder="e.g. The Verdant Edit"
               value={form.collection}
               onChange={(e) => set('collection', e.target.value)}
             />
+            <datalist id="collection-suggestions">
+              {suggestions('collection').map((v) => (
+                <option key={v} value={v} />
+              ))}
+            </datalist>
           </div>
         </div>
 
@@ -480,10 +550,16 @@ export default function ProductEdit() {
             <input
               id="p-craft"
               className="inp"
+              list="craft-suggestions"
               placeholder="e.g. Zardozi"
               value={form.craft}
               onChange={(e) => set('craft', e.target.value)}
             />
+            <datalist id="craft-suggestions">
+              {suggestions('craft').map((v) => (
+                <option key={v} value={v} />
+              ))}
+            </datalist>
           </div>
           <div className="field">
             <label className="lab" htmlFor="p-occasion">
@@ -498,7 +574,7 @@ export default function ProductEdit() {
               onChange={(e) => set('occasion', e.target.value)}
             />
             <datalist id="occasion-suggestions">
-              {OCCASION_SUGGESTIONS.map((o) => (
+              {[...new Set([...OCCASION_SUGGESTIONS, ...suggestions('occasion')])].map((o) => (
                 <option key={o} value={o} />
               ))}
             </datalist>
@@ -660,12 +736,15 @@ export default function ProductEdit() {
             >
               {uploading
                 ? `Uploading ${Math.min(uploading.done + 1, uploading.total)} of ${uploading.total}…`
-                : form.images.length > 0
-                  ? 'Add photos'
-                  : 'Upload photos'}
+                : 'Add photos'}
             </button>
           </div>
-          <ThumbStrip images={form.images} onReorder={reorderImage} onRemove={removeImage} />
+          <ThumbStrip
+            images={form.images}
+            onReorder={reorderImage}
+            onRemove={removeImage}
+            onPoseChange={setImagePose}
+          />
         </div>
         <div className="field">
           <label className="lab" htmlFor="p-image">
@@ -700,6 +779,23 @@ export default function ProductEdit() {
             />
             Active — visible in the boutique
           </label>
+          {!form.active &&
+            (() => {
+              const missing = [
+                form.images.length === 0 && 'add a photo',
+                !form.description.trim() && 'write a description',
+                Object.values(stocks).every((s) => Math.round(Number(s) || 0) === 0) &&
+                  'stock at least one size',
+              ].filter(Boolean);
+              return (
+                <p className="x">
+                  Hidden from the boutique.{' '}
+                  {missing.length > 0
+                    ? `Before going live: ${missing.join(', ')}.`
+                    : 'Tick the box when it should go live.'}
+                </p>
+              );
+            })()}
         </div>
 
         <p className="section-label">Stock by size</p>
@@ -723,6 +819,14 @@ export default function ProductEdit() {
           ))}
         </div>
 
+        {error && (
+          <div className="form-err" role="alert" ref={errRef} tabIndex={-1}>
+            {error.split('\n').map((line, i) => (
+              <p key={i}>{line}</p>
+            ))}
+          </div>
+        )}
+
         <div className="form-actions">
           <button className="btn-buy gold fit" type="submit" disabled={busy}>
             {busy ? 'Saving…' : isNew ? 'Add Piece' : 'Save Piece'}
@@ -735,6 +839,19 @@ export default function ProductEdit() {
             Cancel
           </button>
         </div>
+
+        {guard.blocked && (
+          <ConfirmModal
+            title="Discard unsaved changes?"
+            confirmLabel="Discard"
+            cancelLabel="Keep editing"
+            tone="danger"
+            onConfirm={guard.confirmLeave}
+            onCancel={guard.stay}
+          >
+            <p>This piece has edits that have not been saved.</p>
+          </ConfirmModal>
+        )}
       </form>
     </>
   );

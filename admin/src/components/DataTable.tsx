@@ -12,7 +12,7 @@ interface Props<T> {
   columns: Column<T>[];
   rows: T[];
   rowKey: (row: T) => string;
-  empty: string;
+  empty: ReactNode;
   onRowClick?: (row: T) => void;
   /** When provided, clicking a row toggles an expanded detail row beneath it. */
   renderExpanded?: (row: T) => ReactNode;
@@ -72,7 +72,9 @@ export default function DataTable<T>({
                     <td
                       key={col.key}
                       className={col.align === 'right' ? 'num' : undefined}
-                      data-label={col.label}
+                      // Only real text — a ReactNode label stringifies to
+                      // "[object Object]" in the responsive per-cell captions.
+                      data-label={typeof col.label === 'string' ? col.label : undefined}
                     >
                       {col.render(row)}
                     </td>

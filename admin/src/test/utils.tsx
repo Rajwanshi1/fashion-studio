@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import App from '../App';
+import { RouterProvider, createMemoryRouter } from 'react-router-dom';
+import { AppProviders, appRoutes } from '../App';
 import { AUTH_STORAGE_KEY } from '../lib/api';
 import type { Order } from '../lib/types';
 
@@ -20,10 +20,13 @@ export function seedAdminAuth() {
 }
 
 export function renderApp(path: string) {
+  // The app runs a data router; nesting <App /> in a MemoryRouter throws.
+  // Mount the same route tree on a memory router pointed at the page.
+  const router = createMemoryRouter(appRoutes, { initialEntries: [path] });
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <App />
-    </MemoryRouter>,
+    <AppProviders>
+      <RouterProvider router={router} />
+    </AppProviders>,
   );
 }
 

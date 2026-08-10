@@ -2,21 +2,33 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
-import { formatINR } from '../lib/format';
+import { formatDate, formatINR } from '../lib/format';
 import { normalizePhone } from '../lib/phone';
-import type { AdminUser, BillType, Order, OrderChannel, ReceiptMode } from '../lib/types';
-import { BILL_TYPE_LABELS, CHANNEL_LABELS, OFFLINE_CHANNELS } from '../lib/types';
+import { useUnsavedGuard } from '../lib/useUnsavedGuard';
+import type { AdminProduct, AdminUser, BillType, Order, OrderChannel, ReceiptMode } from '../lib/types';
+import { BILL_TYPE_LABELS, CHANNEL_LABELS, OFFLINE_CHANNELS, ORDER_STATUS_LABELS } from '../lib/types';
+import ConfirmModal from '../components/ConfirmModal';
 import KeyValueEditor, { EMPTY_SET } from '../components/KeyValueEditor';
 import type { MeasurementSetState } from '../components/KeyValueEditor';
+import ProductPicker from '../components/ProductPicker';
 import { useToast } from '../components/Toast';
 
 export interface ItemRow {
   description: string;
   qty: string;
   unitRupees: string;
+  /** Catalogue link — present only when the row came from the picker. */
+  productId?: string;
+  variantId?: string;
+  size?: string;
+  stock?: number;
 }
 
 const EMPTY_ITEM: ItemRow = { description: '', qty: '1', unitRupees: '' };
+
+/** Statuses a handwritten bill can arrive in — old bills enter after the fact. */
+const INTAKE_STATUSES = ['in_atelier', 'quality_check', 'dispatched', 'delivered'] as const;
+type IntakeStatus = (typeof INTAKE_STATUSES)[number];
 
 export interface FormState {
   phone: string;
@@ -37,7 +49,7 @@ export interface FormState {
   advanceMode: ReceiptMode;
   dueDate: string;
   notes: string;
-  initialStatus: 'in_atelier' | 'delivered';
+  initialStatus: IntakeStatus;
 }
 
 const EMPTY_FORM: FormState = {
@@ -65,10 +77,10 @@ const EMPTY_FORM: FormState = {
 const toPaise = (rupees: string) => Math.round(Number(rupees) * 100);
 
 function plusDays(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  // IST, not the machine's zone — due dates are the boutique's dates.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(
+    new Date(Date.now() + days * 86_400_000),
+  );
 }
 
 export interface OrderIntakeFormProps {
@@ -96,10 +108,32 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
   );
   const [candidates, setCandidates] = useState<AdminUser[]>([]);
   const [linked, setLinked] = useState<AdminUser | null>(null);
+  const [catalogue, setCatalogue] = useState<AdminProduct[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const errRef = useRef<HTMLDivElement>(null);
+
+  // Everything the operator can type, snapshotted on mount — deviation from
+  // it means there are unsaved changes worth guarding.
+  const baseline = useRef<string | null>(null);
+  if (baseline.current === null) {
+    baseline.current = JSON.stringify({ form, items, msets, linked });
+  }
+  const isDirty = JSON.stringify({ form, items, msets, linked }) !== baseline.current;
+  const guard = useUnsavedGuard(isDirty);
+
+  // One-shot catalogue load for the item picker; a failure just hides it —
+  // freeform entry must keep working with the API down.
+  useEffect(() => {
+    let live = true;
+    api<AdminProduct[]>('/api/admin/products')
+      .then((data) => live && setCatalogue(data))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -175,6 +209,10 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
       setError('Advance cannot exceed the total');
       return;
     }
+    if (form.billType === 'gst_invoice' && !form.billNumber.trim()) {
+      setError('A GST invoice needs a bill number — enter it, or switch to Cash Memo');
+      return;
+    }
 
     let customer;
     if (linked) {
@@ -223,6 +261,9 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
         description: r.description.trim(),
         quantity: Math.round(Number(r.qty)),
         unitPrice: toPaise(r.unitRupees),
+        // Linked rows reserve stock server-side; freeform rows never touch it.
+        productId: r.productId,
+        variantId: r.variantId,
       })),
       gstAmount:
         form.billType === 'gst_invoice' && form.gstRupees.trim() !== ''
@@ -240,6 +281,7 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
     setBusy(true);
     try {
       const order = await api<Order>('/api/admin/orders', { method: 'POST', body });
+      guard.release(); // the order is saved — nothing left to guard
       if (onDone) {
         onDone(order);
         return;
@@ -440,13 +482,14 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
         <div className="grid2">
           <div className="field">
             <label className="lab" htmlFor="oi-billno">
-              Bill Number
+              Bill Number{form.billType === 'gst_invoice' ? ' (required for GST)' : ''}
             </label>
             <input
               id="oi-billno"
               className="inp"
               value={form.billNumber}
               onChange={(e) => set('billNumber', e.target.value)}
+              required={form.billType === 'gst_invoice'}
             />
           </div>
           {form.billType === 'gst_invoice' && (
@@ -470,11 +513,52 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
 
       <fieldset className="fset">
         <legend>Items</legend>
+        <ProductPicker
+          products={catalogue}
+          onPick={(picked) =>
+            setItems((rows) => {
+              const linkedRow: ItemRow = {
+                description: picked.description,
+                qty: '1',
+                unitRupees: picked.unitRupees,
+                productId: picked.productId,
+                variantId: picked.variantId,
+                size: picked.size,
+                stock: picked.stock,
+              };
+              // Replace a still-empty first row rather than stacking under it.
+              const isBlank = (r: ItemRow) => !r.description.trim() && !r.unitRupees.trim();
+              if (rows.length === 1 && isBlank(rows[0])) return [linkedRow];
+              return [...rows, linkedRow];
+            })
+          }
+        />
         {items.map((row, i) => (
           <div className="item-row" key={i}>
             <div className="field f-desc">
               <label className="lab" htmlFor={`oi-desc-${i}`}>
                 Description
+                {row.variantId && (
+                  <>
+                    {' '}
+                    <span className="badge crafting">Linked · reserves stock</span>{' '}
+                    <button
+                      type="button"
+                      className="ulink"
+                      onClick={() =>
+                        setItems((rows) =>
+                          rows.map((r, x) =>
+                            x === i
+                              ? { description: r.description, qty: r.qty, unitRupees: r.unitRupees }
+                              : r,
+                          ),
+                        )
+                      }
+                    >
+                      Unlink
+                    </button>
+                  </>
+                )}
               </label>
               <input
                 id={`oi-desc-${i}`}
@@ -482,6 +566,12 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
                 value={row.description}
                 onChange={(e) => setItem(i, 'description', e.target.value)}
               />
+              {row.variantId && row.stock !== undefined && Math.round(Number(row.qty) || 0) > row.stock && (
+                <p className="parse-note" role="note">
+                  Only {row.stock} in stock — the bill will be refused unless you lower the
+                  quantity or unlink the piece.
+                </p>
+              )}
             </div>
             <div className="field">
               <label className="lab" htmlFor={`oi-qty-${i}`}>
@@ -624,6 +714,11 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
             value={form.dueDate}
             onChange={(e) => set('dueDate', e.target.value)}
           />
+          {form.dueDate && (
+            // The native picker renders mm/dd/yyyy in some locales — spell the
+            // chosen date out the way the rest of the app writes dates.
+            <p className="x">Due {formatDate(form.dueDate)}</p>
+          )}
         </div>
         <div className="chips" role="group" aria-label="Quick due date">
           {[7, 14, 21].map((days) => (
@@ -653,22 +748,17 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
       <fieldset className="fset">
         <legend>Order status</legend>
         <div className="chips" role="group" aria-label="Initial status">
-          <button
-            type="button"
-            className={form.initialStatus === 'in_atelier' ? 'chip on' : 'chip'}
-            aria-pressed={form.initialStatus === 'in_atelier'}
-            onClick={() => set('initialStatus', 'in_atelier')}
-          >
-            In production
-          </button>
-          <button
-            type="button"
-            className={form.initialStatus === 'delivered' ? 'chip on' : 'chip'}
-            aria-pressed={form.initialStatus === 'delivered'}
-            onClick={() => set('initialStatus', 'delivered')}
-          >
-            Delivered
-          </button>
+          {INTAKE_STATUSES.map((status) => (
+            <button
+              key={status}
+              type="button"
+              className={form.initialStatus === status ? 'chip on' : 'chip'}
+              aria-pressed={form.initialStatus === status}
+              onClick={() => set('initialStatus', status)}
+            >
+              {ORDER_STATUS_LABELS[status]}
+            </button>
+          ))}
         </div>
       </fieldset>
 
@@ -686,6 +776,19 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
           Cancel
         </button>
       </div>
+
+      {guard.blocked && (
+        <ConfirmModal
+          title="Discard this bill?"
+          confirmLabel="Discard"
+          cancelLabel="Keep editing"
+          tone="danger"
+          onConfirm={guard.confirmLeave}
+          onCancel={guard.stay}
+        >
+          <p>The order has not been recorded — leaving now loses everything entered.</p>
+        </ConfirmModal>
+      )}
     </form>
   );
 }

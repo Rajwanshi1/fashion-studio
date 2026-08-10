@@ -150,7 +150,8 @@ describe('ProductEdit', () => {
     expect(body.salePrice).toBeNull();
     expect(body.costPrice).toBe(500000);
     expect(body.images).toEqual([{ url: 'https://cdn.example/pasted.jpg', pose: '' }]);
-    expect(body.active).toBe(true);
+    // New pieces start hidden (TA-004) — publishing is an explicit choice.
+    expect(body.active).toBe(false);
     expect(body.collection).toBe('The Verdant Edit');
     expect(body.craft).toBe('Zardozi');
     expect(body.fabric).toBe('Silk');

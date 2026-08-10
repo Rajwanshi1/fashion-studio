@@ -320,6 +320,7 @@ describe('API', () => {
           name: 'Blush Chiffon Gown',
           price: 8800000,
           color: 'Blush',
+          active: true, // new pieces default to hidden — this one must be publicly visible
         }, adminToken),
       );
       expect((await created.json()).colorFamily).toBe('pink');
@@ -733,6 +734,25 @@ describe('API', () => {
       expect(await ended.json()).toMatchObject({ flag: null, salePrice: null });
     });
 
+    it('creates new pieces hidden by default — never live on the boutique (TA-004)', async () => {
+      const created = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categorySlug: 'gowns',
+          name: 'Half Finished Gown',
+          price: 7700000,
+          color: 'Sage',
+        }, adminToken),
+      );
+      expect(created.status).toBe(201);
+      const product = await created.json();
+      expect(product.active).toBe(false);
+
+      // Invisible to the storefront until explicitly published.
+      const pub = await (await app.request('/api/products?search=Half%20Finished')).json();
+      expect(pub.items).toHaveLength(0);
+    });
+
     it('keeps costPrice on the admin product and off both public reads', async () => {
       const created = await app.request(
         '/api/admin/products',
@@ -742,6 +762,7 @@ describe('API', () => {
           price: 9900000,
           color: 'Sage',
           costPrice: 4200000,
+          active: true,
         }, adminToken),
       );
       expect(created.status).toBe(201);
@@ -768,6 +789,7 @@ describe('API', () => {
           name: 'Gallery Gown',
           price: 9900000,
           color: 'Sage',
+          active: true,
           imageUrl: 'https://cdn.test/legacy.jpg', // a gallery always wins
           images: [
             { url: 'https://cdn.test/a.jpg', pose: 'front' },
@@ -1091,7 +1113,12 @@ describe('API', () => {
       expect(res.status).toBe(200);
       const payments = await res.json();
       expect(payments).toHaveLength(1);
-      expect(payments[0]).toMatchObject({ status: 'captured', orderNumber: order.orderNumber, currency: 'INR' });
+      expect(payments[0]).toMatchObject({
+        source: 'gateway',
+        status: 'captured',
+        orderNumber: order.orderNumber,
+        provider: 'razorpay_mock',
+      });
     });
 
     it('lists users newest first with authProvider and ordersCount', async () => {
@@ -1150,19 +1177,23 @@ describe('API', () => {
       expect(res.status).toBe(200);
       const summary = await res.json();
       expect(summary.activeOrders).toBe(1);
-      expect(summary.pendingPayments).toBe(1);
+      // The pending online checkout is NOT counted: "To Collect" pairs this
+      // count with a rupee sum of offline balances, and nothing is collectible
+      // at the counter for an unpaid online cart.
+      expect(summary.pendingPayments).toBe(0);
       expect(summary.revenue).toBe(paidOrder.total);
-      // moss S has stock 1 (<=2); Custom sizes and inactive products are excluded
-      expect(summary.lowStock).toContainEqual({
-        productId: seeded.moss.id,
-        productName: 'Moss Tissue Draped Gown',
-        size: 'S',
-        stock: 1,
-      });
-      expect(summary.lowStock.every((r: any) => r.size !== 'Custom')).toBe(true);
+      // One row per fully-out piece: sage's only sized variant (M) hit 0 after
+      // the two orders above; moss still has an S in stock; inactive pieces
+      // and Custom-only sizing never count.
+      expect(summary.lowStock).toContainEqual(
+        expect.objectContaining({
+          productId: seeded.sage.id,
+          productName: 'Sage Sequin Jacket Lehenga',
+          color: 'Sage',
+        }),
+      );
+      expect(summary.lowStock.map((r: any) => r.productId)).not.toContain(seeded.moss.id);
       expect(summary.lowStock.map((r: any) => r.productId)).not.toContain(seeded.inactive.id);
-      // sage M is at 0 after the two orders above
-      expect(summary.lowStock).toContainEqual(expect.objectContaining({ productId: seeded.sage.id, size: 'M', stock: 0 }));
       expect(summary.recentOrders).toHaveLength(2);
       expect(summary.recentOrders[0]).toMatchObject({
         orderNumber: expect.stringMatching(/^TA-2026-\d{5}$/),
@@ -1192,6 +1223,65 @@ describe('API', () => {
       expect(res.status).toBe(201);
       return res.json() as Promise<any>;
     }
+
+    it('the ledger lists manual receipts, not just gateway payments', async () => {
+      const order = await createOffline({ advance: { amount: 2000000, mode: 'cash' } });
+      const res = await app.request('/api/admin/payments', bearer(adminToken));
+      expect(res.status).toBe(200);
+      const entries = await res.json();
+      expect(entries).toContainEqual(
+        expect.objectContaining({
+          source: 'manual',
+          status: 'received',
+          mode: 'cash',
+          amount: 2000000,
+          orderNumber: order.orderNumber,
+        }),
+      );
+    });
+
+    it('refuses a GST invoice without a bill number', async () => {
+      const res = await app.request('/api/admin/orders', post(offlineBody({ billNumber: undefined }), adminToken));
+      expect(res.status).toBe(400);
+      const { error } = await res.json();
+      expect(error).toMatch(/bill number/i);
+    });
+
+    it('refuses to clear the bill number of a GST invoice via PATCH', async () => {
+      const order = await createOffline();
+      const res = await app.request(
+        `/api/admin/orders/${order.id}`,
+        withMethod('PATCH', { billNumber: null }, adminToken),
+      );
+      expect(res.status).toBe(400);
+      const { error } = await res.json();
+      expect(error).toMatch(/bill number/i);
+    });
+
+    it('accepts quality_check and dispatched as initial statuses', async () => {
+      const qc = await createOffline({ initialStatus: 'quality_check' });
+      expect(qc.status).toBe('quality_check');
+      const shipped = await createOffline({
+        initialStatus: 'dispatched',
+        customer: { action: 'create', firstName: 'Nur', phone: '98200 55667' },
+      });
+      expect(shipped.status).toBe('dispatched');
+    });
+
+    it('humanizes validation errors instead of leaking schema paths', async () => {
+      const res = await app.request(
+        '/api/admin/orders',
+        post(
+          offlineBody({
+            customer: { action: 'create', firstName: 'Rhea', phone: '98200 11223', email: 'not-an-email' },
+          }),
+          adminToken,
+        ),
+      );
+      expect(res.status).toBe(400);
+      const { error } = await res.json();
+      expect(error).toBe('Enter a valid email address, or leave it blank');
+    });
 
     it('POST creates an offline order with a new customer and an advance receipt', async () => {
       const order = await createOffline({
@@ -1392,7 +1482,10 @@ describe('API', () => {
       });
 
       const summary = await (await app.request('/api/admin/summary', bearer(adminToken))).json();
-      expect(summary.revenue).toBe(paidOrder.total + 12000000 + 5000000);
+      // Money actually received: the online capture, the ₹20,000 advance, and
+      // the exhibition sale's full payment — NOT the in_atelier order's billed
+      // total (₹1,00,000 of it is still owed).
+      expect(summary.revenue).toBe(paidOrder.total + 2000000 + 5000000);
       expect(summary.revenueByChannel).toEqual({
         online: paidOrder.total,
         in_store: 12000000,

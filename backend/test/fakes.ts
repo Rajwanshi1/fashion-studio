@@ -8,7 +8,7 @@ import type {
   OrdersRepo,
 } from '../src/data/orders.repo';
 import type { CreateReceiptInput, ReceiptsRepo } from '../src/data/receipts.repo';
-import type { AdminPayment, CreatePaymentInput, PaymentsRepo } from '../src/data/payments.repo';
+import type { CreatePaymentInput, LedgerEntry, PaymentsRepo } from '../src/data/payments.repo';
 import type {
   AdminProduct,
   BulkDeleteResult,
@@ -446,7 +446,8 @@ export class FakeProductsRepo implements ProductsRepo {
       salePrice: input.salePrice ?? null,
       costPrice: input.costPrice ?? null,
       images: (input.images ?? []).map((im) => ({ url: im.url, pose: im.pose ?? '' })),
-      active: input.active ?? true,
+      // Mirrors the real repo: new pieces start hidden unless explicitly published.
+      active: input.active ?? false,
       variants: sizes.map((v) => ({ id: nextId('v'), productId: id, size: v.size, stock: v.stock })),
       categoryId: category.id,
       createdAt: new Date(Date.UTC(2026, 0, 1) + ++this.clock * 60_000).toISOString(),
@@ -657,20 +658,24 @@ export class FakeOrdersRepo implements OrdersRepo {
   }
 
   async createOffline(_tx: Tx, order: NewOfflineOrder, items: NewOfflineItem[]): Promise<Order> {
+    // Mirror the order_items FK guard for linked lines (see createWithItems).
+    for (const it of items) {
+      if (it.productId) this.productsRepo?.orderedProductIds.add(it.productId);
+    }
     const created: Order = {
       ...this.baseOrder(
         order,
         items.map(
           (it): OrderItem => ({
             id: nextId('oi'),
-            productId: null,
-            variantId: null,
+            productId: it.productId ?? null,
+            variantId: it.variantId ?? null,
             productName: it.productName,
-            size: '',
-            color: '',
+            size: it.size ?? '',
+            color: it.color ?? '',
             unitPrice: it.unitPrice,
             quantity: it.quantity,
-            imageUrl: null,
+            imageUrl: it.imageUrl ?? null,
             measurements: '',
           }),
         ),
@@ -719,6 +724,19 @@ export class FakeOrdersRepo implements OrdersRepo {
         (a, b) =>
           a.deliveryDueDate!.localeCompare(b.deliveryDueDate!) || a.createdAt.localeCompare(b.createdAt),
       )
+      .map((o) => structuredClone(o));
+  }
+
+  async listUnscheduled(): Promise<Order[]> {
+    return this.orders
+      .filter(
+        (o) =>
+          o.channel !== 'online' &&
+          !o.deliveryDueDate &&
+          o.status !== 'delivered' &&
+          o.status !== 'cancelled',
+      )
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .map((o) => structuredClone(o));
   }
 
@@ -832,13 +850,49 @@ export class FakePaymentsRepo implements PaymentsRepo {
     return { ...p };
   }
 
-  async listAdmin(): Promise<AdminPayment[]> {
-    return [...this.payments]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map((p) => ({
-        ...p,
+  async listLedger(): Promise<LedgerEntry[]> {
+    const gateway = this.payments.map((p) => ({
+      entry: {
+        id: p.id,
+        source: 'gateway' as const,
+        orderId: p.orderId,
         orderNumber: this.ordersRepo.orders.find((o) => o.id === p.orderId)?.orderNumber ?? '',
-      }));
+        amount: p.amount,
+        mode: p.method,
+        status: p.status,
+        // IST business date, mirroring the real repo's AT TIME ZONE conversion.
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(
+          new Date(p.createdAt),
+        ),
+        provider: p.provider,
+        providerOrderId: p.providerOrderId,
+        providerPaymentId: p.providerPaymentId,
+        note: '',
+      },
+      sortKey: p.createdAt,
+    }));
+    const manual = this.ordersRepo.orders.flatMap((o) =>
+      o.receipts.map((r) => ({
+        entry: {
+          id: r.id,
+          source: 'manual' as const,
+          orderId: o.id,
+          orderNumber: o.orderNumber,
+          amount: r.amount,
+          mode: r.mode,
+          status: 'received' as const,
+          date: r.receivedAt,
+          provider: null,
+          providerOrderId: null,
+          providerPaymentId: null,
+          note: r.note ?? '',
+        },
+        sortKey: r.createdAt,
+      })),
+    );
+    return [...gateway, ...manual]
+      .sort((a, b) => b.entry.date.localeCompare(a.entry.date) || b.sortKey.localeCompare(a.sortKey))
+      .map((x) => x.entry);
   }
 
   async getByOrderId(orderId: string): Promise<Payment[]> {
@@ -1301,6 +1355,7 @@ export async function seedCatalog(products: FakeProductsRepo) {
   const sage = await products.createProduct({
     categoryId: lehengas.id,
     slug: 'sage-sequin-jacket-lehenga',
+    active: true,
     name: 'Sage Sequin Jacket Lehenga',
     description: 'Hand-embroidered jacket lehenga in moss-sage tissue.',
     details: 'Dry clean only',
@@ -1317,6 +1372,7 @@ export async function seedCatalog(products: FakeProductsRepo) {
   const moss = await products.createProduct({
     categoryId: gowns.id,
     slug: 'moss-tissue-draped-gown',
+    active: true,
     name: 'Moss Tissue Draped Gown',
     description: 'A single length of moss tissue, draped.',
     details: 'Dry clean only',
@@ -1329,6 +1385,7 @@ export async function seedCatalog(products: FakeProductsRepo) {
   const plain = await products.createProduct({
     categoryId: lehengas.id,
     slug: 'celadon-tissue-draped-lehenga',
+    active: true,
     name: 'Celadon Tissue Draped Lehenga',
     description: 'Pre-draped celadon tissue lehenga.',
     details: 'Dry clean only',
@@ -1364,6 +1421,7 @@ export async function seedSetProduct(products: FakeProductsRepo, categoryId: str
   return products.createProduct({
     categoryId,
     slug: 'fern-zardozi-set-fern',
+    active: true,
     name: 'Fern Zardozi Set',
     description: 'Zardozi lehenga with dupatta and jacket.',
     details: 'Dry clean only',
