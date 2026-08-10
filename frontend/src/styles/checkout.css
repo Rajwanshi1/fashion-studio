@@ -68,6 +68,7 @@
 .page-checkout .co-summary { background: var(--celadon-50); padding: clamp(2rem,5vw,3.5rem) clamp(1.5rem,3vw,3rem); }
 @media (max-width: 900px){ .page-checkout .co-summary { order: 1; } }
 .page-checkout .co-summary .sticky { position: sticky; top: 2rem; }
+@media (max-width: 900px){ .page-checkout .co-summary .sticky { position: static; } }
 .page-checkout .co-summary h2 { font-family: var(--serif-display); font-size: 1.2rem; margin: 0 0 1.6rem; }
 .page-checkout .ci { display: grid; grid-template-columns: 64px 1fr auto; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--hairline); align-items: center; }
 .page-checkout .ci .img-slot { width: 64px; aspect-ratio: 3/4; }

@@ -38,6 +38,8 @@ export interface CreateOrderInput {
     /** Set pieces are included unless explicitly opted out. */
     includeDupatta?: boolean;
     includeJacket?: boolean;
+    /** Free-text made-to-measure note; part of line identity. */
+    measurements?: string;
   }[];
 }
 
@@ -152,16 +154,21 @@ export function createOrdersService(deps: {
 }): OrdersService {
   const service: OrdersService = {
     async createOrder(input) {
-      // Merge duplicate lines per variant + set-includes combo: the same
-      // variant with and without a dupatta is two distinct order lines.
-      const combos = new Map<string, { variantId: string; dupatta: boolean; jacket: boolean; qty: number }>();
+      // Merge duplicate lines per variant + set-includes + measurements combo:
+      // the same variant with and without a dupatta — or with a different
+      // made-to-measure note — is two distinct order lines.
+      const combos = new Map<
+        string,
+        { variantId: string; dupatta: boolean; jacket: boolean; measurements: string; qty: number }
+      >();
       for (const item of input.items ?? []) {
         const dupatta = item.includeDupatta !== false; // default: included
         const jacket = item.includeJacket !== false;
-        const key = `${item.variantId}|${dupatta ? 1 : 0}${jacket ? 1 : 0}`;
+        const measurements = (item.measurements ?? '').trim();
+        const key = `${item.variantId}|${dupatta ? 1 : 0}${jacket ? 1 : 0}|${measurements}`;
         const existing = combos.get(key);
         if (existing) existing.qty += item.quantity;
-        else combos.set(key, { variantId: item.variantId, dupatta, jacket, qty: item.quantity });
+        else combos.set(key, { variantId: item.variantId, dupatta, jacket, measurements, qty: item.quantity });
       }
       if (combos.size === 0) {
         throw new DomainError('EMPTY_ORDER', 'Order must contain at least one item');
@@ -203,6 +210,8 @@ export function createOrdersService(deps: {
             imageUrl: v.imageUrl,
             dupattaPrice,
             jacketPrice,
+            // Display-only free text — prices still come exclusively from the DB rows.
+            measurements: combo.measurements,
           };
         });
         const subtotal = items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);

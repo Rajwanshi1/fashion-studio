@@ -13,6 +13,7 @@ import { customersToVcf } from '../lib/vcard';
 import { AuthEnv, requireAdmin, requireAuth } from '../middleware/auth';
 import { resolveColorFamily, type CatalogAi } from '../services/ai/catalog-ai';
 import type { DocumentsService } from '../services/documents.service';
+import type { InvoicesService } from '../services/invoices.service';
 import { namedStorageKey, newStorageKey, sanitizeFileSlug, type ObjectStore } from '../services/objectstore';
 import type { OrdersService } from '../services/orders.service';
 import { DomainError, OrderStatus } from '../types';
@@ -230,6 +231,7 @@ export interface AdminDeps {
   measurements: MeasurementsRepo;
   ordersService: OrdersService;
   documentsService: DocumentsService;
+  invoicesService: InvoicesService;
   /** Null → product-image presign answers 503. */
   objectStore: ObjectStore | null;
   /** Null → colours fall back to the keyword map and photos to uuid names. */
@@ -461,6 +463,20 @@ export function adminRoutes(deps: AdminDeps) {
     const { status, ...details } = c.req.valid('json');
     if (status) return c.json(await deps.ordersService.updateStatus(c.req.param('id'), status));
     return c.json(await deps.ordersService.updateOrderDetails(c.req.param('id'), details));
+  });
+
+  // Regenerated per request so balance/receipts are always current — nothing persisted.
+  r.get('/orders/:id/invoice.pdf', async (c) => {
+    const { pdf, filename } = await deps.invoicesService.invoicePdf(c.req.param('id'));
+    c.header('Content-Type', 'application/pdf');
+    c.header('Content-Disposition', `inline; filename="${filename}"`);
+    return c.body(new Uint8Array(pdf));
+  });
+
+  // No request body by design: the PDF is rendered server-side and uploaded to
+  // WhatsApp, never round-tripped through the client (prod WAF caps bodies at 8KB).
+  r.post('/orders/:id/invoice/send', async (c) => {
+    return c.json(await deps.invoicesService.sendInvoice(c.req.param('id')));
   });
 
   // ---- Document scanning (bill/measurement/receipt photos → Claude drafts) ----

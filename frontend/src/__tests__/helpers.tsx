@@ -112,6 +112,7 @@ export const DETAIL1: ProductDetail = {
     { id: 'v1', productId: 'p1', size: 'S', stock: 3 },
     { id: 'v2', productId: 'p1', size: 'M', stock: 2 },
     { id: 'v3', productId: 'p1', size: 'L', stock: 0 },
+    { id: 'v4', productId: 'p1', size: 'Custom', stock: 50 },
   ],
   // Real gallery: imageUrl mirrors images[0].url. The third row has no pose,
   // so the PDP falls back to its positional 'View 3' label.
@@ -204,6 +205,7 @@ export const ORDER: Order = {
       imageUrl: null,
       dupattaPrice: null,
       jacketPrice: null,
+      measurements: '',
     },
   ],
 };
@@ -226,6 +228,7 @@ export function seedCart() {
         includeJacket: false,
         dupattaPrice: null,
         jacketPrice: null,
+        measurements: '',
       },
     ]),
   );

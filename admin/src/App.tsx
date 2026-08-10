@@ -23,6 +23,8 @@ import Users from './pages/Users';
 import Socials from './pages/Socials';
 import Analytics from './pages/Analytics';
 import NotFound from './pages/NotFound';
+import Site from './pages/Site';
+import SiteSectionEdit from './pages/SiteSectionEdit';
 
 function RequireAuth() {
   const { token } = useAuth();
@@ -47,6 +49,8 @@ const router = createBrowserRouter(
           <Route path="/products" element={<Products />} />
           <Route path="/products/new" element={<ProductEdit />} />
           <Route path="/products/:id" element={<ProductEdit />} />
+          <Route path="/site" element={<Site />} />
+          <Route path="/site/:key" element={<SiteSectionEdit />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/orders/new" element={<OrderIntake />} />
           <Route path="/payments" element={<Payments />} />

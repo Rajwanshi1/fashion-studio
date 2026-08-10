@@ -47,7 +47,7 @@ describe('OrderIntake', () => {
       if (url.endsWith('/api/admin/orders') && init?.method === 'POST') {
         return { status: 201, json: makeOrder({ orderNumber: 'TA-2026-04901' }) };
       }
-      if (url.endsWith('/api/admin/orders')) return { json: [] };
+      if (url.endsWith('/api/admin/orders')) return { json: [makeOrder({ orderNumber: 'TA-2026-04901' })] };
       return undefined;
     });
 
@@ -82,8 +82,10 @@ describe('OrderIntake', () => {
       initialStatus: 'in_atelier',
     });
 
-    // success → toast + back to the order book
+    // success → toast + the order book focused on the fresh order, its
+    // expanded panel carrying the invoice actions
     expect(await screen.findByRole('heading', { name: 'Orders' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Invoice PDF' })).toBeInTheDocument();
   });
 
   it('captures address fields, flags a totals mismatch, and focuses submit errors', async () => {

@@ -5,6 +5,7 @@ import { HTTPException } from 'hono/http-exception';
 import { secureHeaders } from 'hono/secure-headers';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { ClicksRepo } from './data/clicks.repo';
+import type { ContentRepo } from './data/content.repo';
 import type { DocumentsRepo } from './data/documents.repo';
 import type { EventsRepo } from './data/events.repo';
 import type { MeasurementsRepo } from './data/measurements.repo';
@@ -21,6 +22,7 @@ import { adminRoutes } from './routes/admin.routes';
 import { analyticsRoutes } from './routes/analytics.routes';
 import { authRoutes } from './routes/auth.routes';
 import { catalogRoutes } from './routes/catalog.routes';
+import { contentRoutes } from './routes/content.routes';
 import { orderRoutes } from './routes/orders.routes';
 import { paymentRoutes } from './routes/payments.routes';
 import { socialsRoutes } from './routes/socials.routes';
@@ -31,11 +33,13 @@ import { createAnalyticsService } from './services/analytics.service';
 import { createAuthService, VerifyGoogleToken } from './services/auth.service';
 import { createCatalogService } from './services/catalog.service';
 import { createDocumentsService } from './services/documents.service';
+import { createInvoicesService } from './services/invoices.service';
 import type { LocalObjectStore, ObjectStore } from './services/objectstore';
 import { createOrdersService } from './services/orders.service';
 import { createPaymentsService, PaymentProvider } from './services/payments.service';
 import type { SmsProvider } from './services/sms.provider';
 import { createSocialsService } from './services/socials.service';
+import type { WhatsAppProvider } from './services/whatsapp.provider';
 import { DomainError, TxRunner } from './types';
 
 export interface AppDeps {
@@ -52,6 +56,7 @@ export interface AppDeps {
     receipts: ReceiptsRepo;
     documents: DocumentsRepo;
     measurements: MeasurementsRepo;
+    content: ContentRepo;
   };
   /** Masked payments seam — null while payments are disabled (endpoints answer 503). */
   paymentProvider: PaymentProvider | null;
@@ -68,6 +73,8 @@ export interface AppDeps {
   verifyGoogleToken?: VerifyGoogleToken | null;
   /** Masked SMS seam — null/undefined while phone-OTP login is disabled (endpoints answer 503). */
   smsProvider?: SmsProvider | null;
+  /** Masked WhatsApp seam — null/undefined while invoice sends are disabled (send answers 503). */
+  whatsappProvider?: WhatsAppProvider | null;
   /** Fixed OTP for dev/e2e; only meaningful alongside the console provider. */
   otpDevCode?: string | null;
   jwtSecret: string;
@@ -80,7 +87,7 @@ export interface AppDeps {
   uploads?: { store: ObjectStore; local?: LocalObjectStore | null };
 }
 
-const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 429 | 503> = {
+const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 429 | 502 | 503> = {
   EMAIL_TAKEN: 409,
   PHONE_TAKEN: 409,
   INVALID_PHONE: 400,
@@ -98,6 +105,7 @@ const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 429 | 5
   NOT_CONFIGURED: 503,
   INVALID_SOURCE: 400,
   INVALID_LINK: 400,
+  DELIVERY_FAILED: 502,
 };
 
 export function createApp(deps: AppDeps) {
@@ -129,6 +137,7 @@ export function createApp(deps: AppDeps) {
     store: deps.objectStore,
     parser: deps.billParser ?? null,
   });
+  const invoices = createInvoicesService({ orders: repos.orders, whatsapp: deps.whatsappProvider ?? null });
 
   const app = new Hono<AuthEnv>();
 
@@ -191,6 +200,7 @@ export function createApp(deps: AppDeps) {
   app.route('/api', orderRoutes(orders, jwtSecret));
   app.route('/api/payments', paymentRoutes(payments, jwtSecret));
   app.route('/api/socials', socialsRoutes(socials, jwtSecret));
+  app.route('/api', contentRoutes(repos.content, jwtSecret));
   app.route('/api', analyticsRoutes(analytics, jwtSecret));
   // Dev-only local upload transport — never mounted when S3 is the store.
   if (deps.localUploads) app.route('/api/uploads', uploadsRoutes(deps.localUploads, jwtSecret));
@@ -205,6 +215,7 @@ export function createApp(deps: AppDeps) {
       measurements: repos.measurements,
       ordersService: orders,
       documentsService: documents,
+      invoicesService: invoices,
       objectStore: deps.objectStore,
       catalogAi: deps.catalogAi ?? null,
       jwtSecret,
