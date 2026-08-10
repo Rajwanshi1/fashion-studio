@@ -68,6 +68,11 @@ function mockWizardFetch(
     if (url.endsWith('/api/admin/orders') && init?.method === 'POST') {
       return { status: 201, json: makeOrder({ orderNumber: 'TA-2026-04903' }) };
     }
+    if (url.endsWith('/api/admin/orders/o1/invoice/send') && init?.method === 'POST') {
+      return {
+        json: makeOrder({ orderNumber: 'TA-2026-04903', invoiceSentAt: '2026-08-10T10:00:00.000Z' }),
+      };
+    }
     if (url.endsWith('/api/admin/orders')) return { json: [] };
     return undefined;
   });
@@ -166,6 +171,28 @@ describe('BillIntake', () => {
     expect(await screen.findByRole('heading', { name: 'TA-2026-04903' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open order' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Scan next bill' })).toBeInTheDocument();
+  });
+
+  it('done card offers the invoice PDF and WhatsApp send', async () => {
+    mockWizardFetch();
+    renderApp('/intake');
+    await screen.findByRole('heading', { name: 'Scan Bill' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enter manually instead' }));
+    await screen.findByRole('button', { name: 'Record Order' });
+    await userEvent.type(screen.getByLabelText('First Name'), 'Rhea');
+    await userEvent.type(screen.getByLabelText('Phone'), '98200 11223');
+    await userEvent.type(screen.getByLabelText('Description'), 'Sage stole');
+    await userEvent.type(screen.getByLabelText('Unit ₹'), '18000');
+    await userEvent.type(screen.getByLabelText('Bill Total (₹ rupees)'), '18000');
+    await userEvent.click(screen.getByRole('button', { name: 'Record Order' }));
+
+    await screen.findByRole('heading', { name: 'TA-2026-04903' });
+    expect(screen.getByRole('button', { name: 'Invoice PDF' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Send invoice on WhatsApp' }));
+    expect(await screen.findByRole('button', { name: 'Re-send invoice on WhatsApp' })).toBeInTheDocument();
+    expect(screen.getByText(/Invoice sent/, { selector: 'p' })).toBeInTheDocument();
   });
 
   it('a failed parse offers Try again and succeeds on the second attempt', async () => {

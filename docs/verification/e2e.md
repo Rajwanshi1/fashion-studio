@@ -44,8 +44,9 @@ zero: the suite restores every unit of stock it consumes.
 ## Notable selector workarounds (no app code changed)
 
 - **PDP size buttons** have no accessible group/name (`XS/S/M/L/XL` text only,
-  plus a "Made to Measure" CTA sharing the `.size` class) — used
-  `#sizes button.size:not(.custom):enabled` to pick the first in-stock size.
+  plus the "Made to Measure" Custom-variant chip sharing the `.size` class) —
+  used `#sizes button.size:not(.custom):enabled` to pick the first in-stock
+  standard size.
 - **Cart drawer** is an `aside[aria-label="Shopping bag"]` with no heading
   role — located by aria-label.
 - **Admin status select:** `getByLabel('Status')` collides with the order

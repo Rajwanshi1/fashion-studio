@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { MARQUEE_MIN_CHARS, fillTrack, useSiteContent } from '../lib/content';
 import { displayPrice } from '../lib/format';
 import type { Category, ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
@@ -25,6 +26,11 @@ const FALLBACK_CATS: Array<Pick<Category, 'slug' | 'name'>> = [
 export default function Home() {
   const [cats, setCats] = useState<Array<Pick<Category, 'slug' | 'name'>>>(FALLBACK_CATS);
   const [best, setBest] = useState<ProductSummary[]>([]);
+  const site = useSiteContent();
+  // One copy of the marquee has to span the strip before it can be doubled into
+  // a seamless loop — a one- or two-line marquee is repeated up to the length
+  // the band was drawn for.
+  const marquee = fillTrack(site.marquee.items, MARQUEE_MIN_CHARS);
   const cart = useCart();
   const { openDrawer } = useCartDrawer();
   const { showToast } = useToast();
@@ -77,6 +83,7 @@ export default function Home() {
         includeJacket: detail.jacketPrice != null,
         dupattaPrice: detail.dupattaPrice,
         jacketPrice: detail.jacketPrice,
+        measurements: '',
       });
       showToast('Added to your bag');
       openDrawer();
@@ -91,26 +98,33 @@ export default function Home() {
 
       {/* HERO */}
       <header className="hero">
-        <ImageSlot label="Drop campaign image — full bleed editorial" />
+        {/* `label` is the empty-state caption (an instruction to the boutique);
+            `alt` is what a visitor's screen reader hears once a photo exists. */}
+        <ImageSlot
+          src={site.hero.imageUrl}
+          label="Drop campaign image — full bleed editorial"
+          alt={site.hero.title}
+        />
         <div className="veil"></div>
-        <div className="side-label">Spring / Summer 2026</div>
+        <div className="side-label">{site.hero.seasonLabel}</div>
         <div className="hero-inner">
-          <span className="eyebrow">The Verdant Edit · Indo-Western Couture</span>
+          <span className="eyebrow">{site.hero.eyebrow}</span>
           <h1>
-            Tanvi Agnihotry<span className="ital">heritage, made to move.</span>
+            {site.hero.title}
+            <span className="ital">{site.hero.titleItalic}</span>
           </h1>
           <div className="actions">
             <Link className="btn-buy" to="/collection">
-              Discover the Collection
+              {site.hero.ctaPrimary}
             </Link>
             <Link className="btn-outline" to="/contact">
-              Book an Appointment
+              {site.hero.ctaSecondary}
             </Link>
           </div>
         </div>
         <div className="hero-edge">
-          <span>Made to Order — India</span>
-          <span>Vol. 01 / 24 Looks</span>
+          <span>{site.hero.edgeLeft}</span>
+          <span>{site.hero.edgeRight}</span>
         </div>
       </header>
 
@@ -135,34 +149,35 @@ export default function Home() {
 
       {/* MARQUEE */}
       <div className="marquee" aria-hidden="true">
+        {/* The track prints the list twice so the loop is seamless; every
+            second line is set in italics, as the reference marquee does.
+            Parity runs over the position *within one copy*, so an odd number
+            of lines can't italicise the second half opposite the first. */}
         <div className="marquee-track">
-          <span>Made to Order</span>
-          <span className="it">— hand embroidered —</span>
-          <span>The Verdant Edit</span>
-          <span className="it">— Spring 2026 —</span>
-          <span>Made to Order</span>
-          <span className="it">— hand embroidered —</span>
-          <span>The Verdant Edit</span>
-          <span className="it">— Spring 2026 —</span>
+          {[...marquee, ...marquee].map((t, i) => (
+            <span key={i} className={(i % marquee.length) % 2 === 1 ? 'it' : undefined}>
+              {t}
+            </span>
+          ))}
         </div>
       </div>
 
       {/* FEATURED */}
       <section id="feature" className="feature">
         <div className="feat-grid">
-          <ImageSlot label="Featured collection — editorial portrait" />
+          <ImageSlot
+            src={site.featured.imageUrl}
+            label="Featured collection — editorial portrait"
+            alt={site.featured.title}
+          />
           <div className="feat-text">
-            <span className="eyebrow">The New Collection</span>
+            <span className="eyebrow">{site.featured.eyebrow}</span>
             <h2>
-              Rang <em>Mehfil</em>
+              {site.featured.title} <em>{site.featured.titleEm}</em>
             </h2>
-            <p>
-              Hand-embroidered indo-western silhouettes in moss, sage and pistachio — cut for the
-              way the modern Indian woman actually moves. Each piece made to order, each made to
-              last.
-            </p>
-            <Link className="btn btn-line" to="/collection">
-              Explore the Edit <span>→</span>
+            <p>{site.featured.copy}</p>
+            <Link className="btn btn-line" to={site.featured.ctaHref}>
+              {site.featured.ctaLabel} <span>→</span>
             </Link>
           </div>
         </div>
@@ -203,15 +218,20 @@ export default function Home() {
 
       {/* LOOKBOOK COVER */}
       <section id="look" className="look">
-        <ImageSlot label="Lookbook cover — full bleed" />
+        <ImageSlot
+          src={site.lookbookCover.imageUrl}
+          label="Lookbook cover — full bleed"
+          alt={site.lookbookCover.masthead}
+        />
         <div className="look-cover">
-          <div className="masthead">The Edit</div>
+          <div className="masthead">{site.lookbookCover.masthead}</div>
           <div className="sub">
-            <span>Volume 01</span>
-            <span>·</span>
-            <span>Spring 2026</span>
-            <span>·</span>
-            <span>32 Looks</span>
+            {site.lookbookCover.subItems.map((s, i) => (
+              <Fragment key={i}>
+                {i > 0 && <span>·</span>}
+                <span>{s}</span>
+              </Fragment>
+            ))}
           </div>
           <Link className="btn-outline" to="/lookbook">
             View the Lookbook
@@ -221,18 +241,12 @@ export default function Home() {
 
       {/* TRUST */}
       <section className="trust" style={{ padding: 0 }}>
-        <div className="item">
-          <div className="t">Made to Order</div>
-          <div className="d">Crafted on commission · 4–6 weeks</div>
-        </div>
-        <div className="item">
-          <div className="t">Complimentary Fittings</div>
-          <div className="d">Virtual or in-studio, Mumbai</div>
-        </div>
-        <div className="item">
-          <div className="t">Worldwide Shipping</div>
-          <div className="d">Insured &amp; tracked, on the house</div>
-        </div>
+        {site.trust.items.map((t, i) => (
+          <div className="item" key={i}>
+            <div className="t">{t.title}</div>
+            <div className="d">{t.detail}</div>
+          </div>
+        ))}
       </section>
 
       {/* NEWSLETTER */}

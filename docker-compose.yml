@@ -36,6 +36,11 @@ services:
       # backend/.dockerignore excludes .env and the Dockerfile never copies it —
       # so the intake wizard always toasts "Document parsing is not configured".
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Console by default in dev: sends are logged, never delivered. Set the
+      # meta provider + real creds in a root .env to smoke-test real delivery.
+      WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-console}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
     ports:
       - "3001:3001"
     depends_on:

@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { usePageTracking } from './lib/analytics';
 import { AuthProvider } from './lib/auth';
 import { CartProvider } from './lib/cart';
+import { SiteContentProvider } from './lib/content';
 import { WishlistProvider } from './lib/wishlist';
 import { ToastProvider } from './components/Toast';
 import { CartDrawerProvider } from './components/CartDrawer';
@@ -84,10 +85,12 @@ export function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Providers>
-        <AppRoutes />
-      </Providers>
-    </BrowserRouter>
+    <SiteContentProvider>
+      <BrowserRouter>
+        <Providers>
+          <AppRoutes />
+        </Providers>
+      </BrowserRouter>
+    </SiteContentProvider>
   );
 }

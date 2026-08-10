@@ -22,6 +22,7 @@ import type {
   WishlistRepo,
 } from '../src/data/products.repo';
 import type { ClicksRepo, LinkStats } from '../src/data/clicks.repo';
+import type { ContentRepo, ContentRow } from '../src/data/content.repo';
 import type {
   CreateDocumentInput,
   DocumentRow,
@@ -53,6 +54,7 @@ import type { GoogleTokenClaims, VerifyGoogleToken } from '../src/services/auth.
 import type { ObjectStore } from '../src/services/objectstore';
 import type { PaymentProvider } from '../src/services/payments.service';
 import type { SmsProvider } from '../src/services/sms.provider';
+import type { InvoiceVars, WhatsAppProvider } from '../src/services/whatsapp.provider';
 import {
   Category,
   DomainError,
@@ -228,6 +230,16 @@ export class FakeSmsProvider implements SmsProvider {
   }
 }
 
+export class FakeWhatsAppProvider implements WhatsAppProvider {
+  sent: { phone: string; filename: string; vars: InvoiceVars; bytes: number }[] = [];
+  failWith: Error | null = null;
+
+  async sendInvoice(phone: string, pdf: Buffer, filename: string, vars: InvoiceVars): Promise<void> {
+    if (this.failWith) throw this.failWith;
+    this.sent.push({ phone, filename, vars, bytes: pdf.length });
+  }
+}
+
 export class FakeGoogleVerifier {
   /** credential string → claims returned when that credential is verified. */
   tokens = new Map<string, GoogleTokenClaims>();
@@ -306,12 +318,15 @@ export class FakeProductsRepo implements ProductsRepo {
     if (filter.collection) rows = rows.filter((p) => p.collection === filter.collection);
     if (filter.colorFamily) rows = rows.filter((p) => p.colorFamily === filter.colorFamily);
     if (filter.search) {
-      const q = filter.search.toLowerCase();
-      rows = rows.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.description.toLowerCase().includes(q) ||
-          p.color.toLowerCase().includes(q),
+      // Tokenized multi-column match — identical semantics to the SQL repo:
+      // every token must hit one of the descriptive columns (category included).
+      const tokens = filter.search.toLowerCase().split(/\s+/).filter(Boolean);
+      rows = rows.filter((p) =>
+        tokens.every((t) =>
+          [p.name, p.description, p.color, p.craft, p.fabric, p.occasion, p.categoryName].some(
+            (field) => field.toLowerCase().includes(t),
+          ),
+        ),
       );
     }
     const flagRank = (p: AdminProduct) => (p.flag === 'bestseller' ? 0 : p.flag === 'new' ? 1 : 2);
@@ -621,6 +636,7 @@ export class FakeOrdersRepo implements OrdersRepo {
       carrier: null,
       awb: null,
       notes: '',
+      invoiceSentAt: null,
       advancePaid: 0,
       balance: order.total,
       receipts: [],
@@ -634,7 +650,7 @@ export class FakeOrdersRepo implements OrdersRepo {
     for (const it of items) this.productsRepo?.orderedProductIds.add(it.productId);
     const created = this.baseOrder(
       order,
-      items.map((it): OrderItem => ({ ...it, id: nextId('oi') })),
+      items.map((it): OrderItem => ({ ...it, measurements: it.measurements ?? '', id: nextId('oi') })),
     );
     this.orders.push(created);
     return structuredClone(created);
@@ -655,6 +671,7 @@ export class FakeOrdersRepo implements OrdersRepo {
             unitPrice: it.unitPrice,
             quantity: it.quantity,
             imageUrl: null,
+            measurements: '',
           }),
         ),
       ),
@@ -734,6 +751,13 @@ export class FakeOrdersRepo implements OrdersRepo {
     if (patch.carrier !== undefined) o.carrier = patch.carrier;
     if (patch.awb !== undefined) o.awb = patch.awb;
     if (patch.notes !== undefined) o.notes = patch.notes;
+    return structuredClone(o);
+  }
+
+  async markInvoiceSent(id: string): Promise<Order | null> {
+    const o = this.orders.find((x) => x.id === id);
+    if (!o) return null;
+    o.invoiceSentAt = new Date(Date.UTC(2026, 5, 3) + ++this.clock * 60_000).toISOString();
     return structuredClone(o);
   }
 
@@ -906,6 +930,19 @@ export class FakeClicksRepo implements ClicksRepo {
         lastClickAt: rows.map((r) => r.createdAt).sort().at(-1)!,
       }))
       .sort((a, b) => b.total - a.total);
+  }
+}
+
+export class FakeContentRepo implements ContentRepo {
+  rows = new Map<string, unknown>();
+  async all(): Promise<ContentRow[]> {
+    return [...this.rows.entries()].map(([key, value]) => ({ key, value }));
+  }
+  async upsert(key: string, value: unknown): Promise<void> {
+    this.rows.set(key, JSON.parse(JSON.stringify(value)));
+  }
+  async remove(key: string): Promise<void> {
+    this.rows.delete(key);
   }
 }
 
@@ -1236,6 +1273,7 @@ export interface Fakes {
   receipts: FakeReceiptsRepo;
   documents: FakeDocumentsRepo;
   measurements: FakeMeasurementsRepo;
+  content: FakeContentRepo;
 }
 
 export function makeFakes(): Fakes {
@@ -1251,7 +1289,8 @@ export function makeFakes(): Fakes {
   const receipts = new FakeReceiptsRepo(orders);
   const documents = new FakeDocumentsRepo();
   const measurements = new FakeMeasurementsRepo();
-  return { users, products, wishlist, orders, payments, scans, clicks, events, otps, receipts, documents, measurements };
+  const content = new FakeContentRepo();
+  return { users, products, wishlist, orders, payments, scans, clicks, events, otps, receipts, documents, measurements, content };
 }
 
 /** Small catalog covering both categories, all flags, an inactive product and low stock. */

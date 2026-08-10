@@ -19,6 +19,7 @@ import { STATUS_MESSAGES, waLink } from '../lib/whatsapp';
 import ConfirmModal from '../components/ConfirmModal';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
+import { InvoiceActions } from '../components/InvoiceActions';
 import StatusBadge from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 
@@ -200,6 +201,8 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
                     .filter(Boolean)
                     .join(' & ')}`}
               </div>
+              {/* Client-supplied free text — always plain text, never HTML. */}
+              {it.measurements && <div className="item-note">{it.measurements}</div>}
             </div>
             <div>{formatINR(it.unitPrice * it.quantity)}</div>
           </div>
@@ -334,6 +337,7 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
             Send WhatsApp update
           </button>
         )}
+        <InvoiceActions order={order} onUpdated={onUpdated} />
       </div>
       <div>
         {(order.channel !== 'online' || order.receipts.length > 0) && (

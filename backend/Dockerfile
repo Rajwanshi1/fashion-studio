@@ -15,6 +15,8 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 # Migrations live next to dist/; index.ts resolves ./db/migrations from cwd (/app).
 COPY db ./db
+# Invoice-PDF fonts; invoice-pdf.ts resolves ./assets from cwd (/app).
+COPY assets ./assets
 COPY package.json ./
 EXPOSE 3001
 CMD ["node", "dist/index.js"]

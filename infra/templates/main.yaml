@@ -48,6 +48,17 @@ Parameters:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'false'
+  # Fail-closed WhatsApp invoice sends, same contract as SmsProvider: 'meta'
+  # needs the whatsapp-access-token secret + phone-number-id param provisioned,
+  # anything else boots with the send endpoint masked (503).
+  WhatsAppProvider:
+    Type: String
+    AllowedValues: [meta, console, disabled]
+    Default: disabled
+  AllowConsoleWhatsApp:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
   # Browser origins allowed to PUT/GET the uploads bucket directly (presigned
   # URLs). '*' for domainless envs; the admin origin once a domain exists.
   UploadsCorsOrigins:
@@ -187,6 +198,8 @@ Resources:
                   - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fashion/${EnvName}/msg91-auth-key*'
                   # Created manually when bill parsing goes live — absent secret keeps parsing masked.
                   - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fashion/${EnvName}/anthropic-api-key*'
+                  # Created manually when WhatsApp invoice sends go live (docs/whatsapp-invoices.md).
+                  - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fashion/${EnvName}/whatsapp-access-token*'
               - Effect: Allow
                 Action: ['s3:PutObject', 's3:GetObject']
                 Resource: !Sub '${UploadsBucket.Arn}/*'
@@ -250,6 +263,9 @@ Resources:
             MSG91_TEMPLATE=$(aws ssm get-parameter --name /fashion/${EnvName}/msg91-template-id --region $REGION --query Parameter.Value --output text 2>/dev/null || echo "")
             # Absent until bill parsing is provisioned; the API boots with parsing masked.
             ANTHROPIC=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/anthropic-api-key --region $REGION --query SecretString --output text 2>/dev/null || echo "")
+            # Both absent until the WhatsApp Business account is provisioned; invoice sends stay masked.
+            WA_TOKEN=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/whatsapp-access-token --region $REGION --query SecretString --output text 2>/dev/null || echo "")
+            WA_PNID=$(aws ssm get-parameter --name /fashion/${EnvName}/whatsapp-phone-number-id --region $REGION --query Parameter.Value --output text 2>/dev/null || echo "")
             until DATA_IP=$(aws ssm get-parameter --name /fashion/${EnvName}/db-host --region $REGION --query Parameter.Value --output text) && [ -n "$DATA_IP" ]; do echo "db-host param not ready"; sleep 15; done
             TOK=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
             IID=$(curl -s -H "X-aws-ec2-metadata-token: $TOK" http://169.254.169.254/latest/meta-data/instance-id)
@@ -264,6 +280,8 @@ Resources:
               -e PAYMENT_PROVIDER=${PaymentProvider} -e ALLOW_MOCK_PAYMENTS=${AllowMockPayments} \
               -e SMS_PROVIDER=${SmsProvider} -e ALLOW_CONSOLE_OTP=${AllowConsoleOtp} \
               -e MSG91_AUTH_KEY="$MSG91_KEY" -e MSG91_TEMPLATE_ID="$MSG91_TEMPLATE" \
+              -e WHATSAPP_PROVIDER=${WhatsAppProvider} -e ALLOW_CONSOLE_WHATSAPP=${AllowConsoleWhatsApp} \
+              -e WHATSAPP_ACCESS_TOKEN="$WA_TOKEN" -e WHATSAPP_PHONE_NUMBER_ID="$WA_PNID" \
               -e AWS_REGION=$REGION -e S3_UPLOADS_BUCKET=${UploadsBucket} \
               -e ANTHROPIC_API_KEY="$ANTHROPIC" -e ANTHROPIC_MODEL=${AnthropicModel} \
               $REPO:$TAG
