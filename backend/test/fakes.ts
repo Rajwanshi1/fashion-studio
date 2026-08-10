@@ -646,7 +646,7 @@ export class FakeOrdersRepo implements OrdersRepo {
     for (const it of items) this.productsRepo?.orderedProductIds.add(it.productId);
     const created = this.baseOrder(
       order,
-      items.map((it): OrderItem => ({ ...it, id: nextId('oi') })),
+      items.map((it): OrderItem => ({ ...it, measurements: it.measurements ?? '', id: nextId('oi') })),
     );
     this.orders.push(created);
     return structuredClone(created);
@@ -667,6 +667,7 @@ export class FakeOrdersRepo implements OrdersRepo {
             unitPrice: it.unitPrice,
             quantity: it.quantity,
             imageUrl: null,
+            measurements: '',
           }),
         ),
       ),

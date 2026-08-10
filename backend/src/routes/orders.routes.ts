@@ -26,6 +26,8 @@ const createOrderSchema = z.object({
       quantity: z.number().int().min(1),
       includeDupatta: z.boolean().optional(),
       includeJacket: z.boolean().optional(),
+      // 500 keeps a 10-line order well under the prod WAF's 8KB body cap.
+      measurements: z.string().max(500).optional(),
     }),
   ),
 });

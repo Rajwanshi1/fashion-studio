@@ -47,10 +47,17 @@
 .page-pdp .set-includes .check { display: flex; gap: 0.6rem; align-items: center; font-size: var(--t-sm); color: var(--ink-soft); cursor: pointer; }
 .page-pdp .set-includes .check input { accent-color: var(--forest-700); width: 15px; height: 15px; flex: none; }
 
+.page-pdp .mtm-panel { background: var(--celadon-50); border: 1px solid var(--hairline); padding: 1rem 1.2rem; margin-bottom: 1.6rem; }
+.page-pdp .mtm-panel p { margin: 0 0 0.8rem; font-size: var(--t-sm); color: var(--ink-soft); }
+.page-pdp .mtm-panel p strong { color: var(--ink); font-weight: 500; }
+.page-pdp .mtm-panel .mtm-label { display: block; font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink); margin-bottom: 0.5rem; }
+.page-pdp .mtm-panel textarea { width: 100%; border: 1px solid var(--hairline); background: var(--paper); font-family: var(--sans); font-size: var(--t-sm); padding: 0.7em 0.9em; resize: vertical; }
+
 .page-pdp .mto { display: flex; gap: 0.8rem; align-items: flex-start; background: var(--celadon-50); border: 1px solid var(--hairline); padding: 1rem 1.2rem; margin-bottom: 1.6rem; }
 .page-pdp .mto .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--gold); margin-top: 0.5rem; flex: none; }
 .page-pdp .mto p { margin: 0; font-size: var(--t-sm); color: var(--ink-soft); }
 .page-pdp .mto p strong { color: var(--ink); font-weight: 500; }
+.page-pdp .mto p a { color: var(--forest-700); text-decoration: underline; }
 
 .page-pdp .buy-row { display: flex; gap: 0.8rem; align-items: stretch; margin-bottom: 0.8rem; }
 .page-pdp .buy-row .qty { flex: none; }

@@ -150,6 +150,8 @@ export interface OrderItem {
   /** Chosen add-on price snapshot; null = excluded or not part of the set. */
   dupattaPrice: number | null;
   jacketPrice: number | null;
+  /** Free-text made-to-measure note; '' when none. */
+  measurements: string;
 }
 
 export interface Receipt {
