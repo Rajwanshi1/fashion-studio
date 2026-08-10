@@ -81,6 +81,7 @@ export default function Checkout() {
             quantity: i.qty,
             includeDupatta: i.includeDupatta,
             includeJacket: i.includeJacket,
+            measurements: i.measurements || undefined, // omit empties
           })),
         });
         setOrder(ord);
@@ -547,6 +548,7 @@ export default function Checkout() {
                         .filter(Boolean)
                         .join(' & ')}`}
                   </div>
+                  {i.measurements && <div className="line-note">{i.measurements}</div>}
                 </div>
                 <div className="cp">{formatINR(i.unitPrice * i.qty)}</div>
               </div>

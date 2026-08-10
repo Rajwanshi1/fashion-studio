@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useCart } from '../lib/cart';
 import { useCartDrawer } from './CartDrawer';
 import MobileNav from './MobileNav';
+import NavSearch from './NavSearch';
 import BrandLogo from './BrandLogo';
 
 interface NavProps {
@@ -14,6 +15,7 @@ export default function Nav({ home = false }: NavProps) {
   const { count } = useCart();
   const { openDrawer } = useCartDrawer();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [solid, setSolid] = useState(false);
 
   useEffect(() => {
@@ -65,14 +67,38 @@ export default function Nav({ home = false }: NavProps) {
           </Link>
         </div>
         <div className="nav-links right">
-          <Link to="/search">Search</Link>
+          {/* Intercepted like the Bag link: opens the inline bar, /search is
+              the no-JS fallback. Opens only — an outside-mousedown close would
+              race a toggle. */}
+          <a
+            href="/search"
+            aria-expanded={searchOpen}
+            onClick={(e) => {
+              e.preventDefault();
+              setSearchOpen(true);
+            }}
+          >
+            Search
+          </a>
           <Link to="/account">Account</Link>
+          {/* Before the bag anchor so Bag stays a:last-child for mobile-nav.css. */}
+          <button className="nav-search-toggle" aria-label="Search" onClick={() => setSearchOpen(true)}>
+            ⌕
+          </button>
           <a className="bag" href="/cart" onClick={onBagClick}>
             Bag <span className="count">({count})</span>
           </a>
         </div>
+        {searchOpen && <NavSearch onClose={() => setSearchOpen(false)} />}
       </nav>
-      <MobileNav open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <MobileNav
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onSearch={() => {
+          setMenuOpen(false);
+          setSearchOpen(true);
+        }}
+      />
     </>
   );
 }

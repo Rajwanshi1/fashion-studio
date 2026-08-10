@@ -249,8 +249,7 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
         return;
       }
       toast(`Order ${order.orderNumber} recorded`);
-      // Land on the order book with the new order popped open — same deep
-      // link the scan-bill flow uses.
+      // Land on the focused row — its expanded panel carries the invoice actions.
       navigate(`/orders?focus=${order.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to record the order');

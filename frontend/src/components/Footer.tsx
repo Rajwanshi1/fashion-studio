@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useSiteContent } from '../lib/content';
 import BrandLogo from './BrandLogo';
 
 interface FooterProps {
@@ -6,7 +7,19 @@ interface FooterProps {
   mark?: boolean;
 }
 
+/** A social handle. Until the studio supplies a real URL the link stays the
+ *  placeholder anchor it is today — never href="", which self-navigates. */
+function Social({ url, children }: { url: string; children: string }) {
+  if (!url) return <a href="#">{children}</a>;
+  return (
+    <a href={url} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  );
+}
+
 export default function Footer({ mark = false }: FooterProps) {
+  const { footer } = useSiteContent();
   return (
     <footer className="foot" style={mark ? { marginTop: 0 } : undefined}>
       {mark && <div className="foot-mark">Tanvi Agnihotry</div>}
@@ -18,10 +31,7 @@ export default function Footer({ mark = false }: FooterProps) {
               Tanvi Agnihotry
             </Link>
           )}
-          <p>
-            Indo-western couture, made to order in India. Crafting timeless pieces for the modern
-            Indian woman since 2026.
-          </p>
+          <p>{footer.blurb}</p>
         </div>
         <div className="foot-col">
           <h5>Shop</h5>
@@ -49,9 +59,9 @@ export default function Footer({ mark = false }: FooterProps) {
       <div className="foot-bottom">
         <span>© 2026 Tanvi Agnihotry</span>
         <div className="socials">
-          <a href="#">Instagram</a>
-          <a href="#">Pinterest</a>
-          <a href="#">WhatsApp</a>
+          <Social url={footer.instagramUrl}>Instagram</Social>
+          <Social url={footer.pinterestUrl}>Pinterest</Social>
+          <Social url={footer.whatsappUrl}>WhatsApp</Social>
         </div>
       </div>
     </footer>
