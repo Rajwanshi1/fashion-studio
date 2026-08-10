@@ -1,4 +1,13 @@
-import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import {
+  Navigate,
+  Outlet,
+  Route,
+  RouterProvider,
+  createBrowserRouter,
+  createRoutesFromElements,
+  useLocation,
+} from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import { ToastProvider } from './components/Toast';
 import Layout from './components/Layout';
@@ -27,33 +36,52 @@ function RequireAuth() {
   return <Outlet />;
 }
 
-export default function App() {
+/**
+ * The full route tree, exported for the test harness: a data router cannot be
+ * nested inside a test's MemoryRouter, so tests mount these same routes on a
+ * createMemoryRouter instead.
+ */
+export const appRoutes = createRoutesFromElements(
+  <>
+    <Route path="/login" element={<Login />} />
+    <Route element={<RequireAuth />}>
+      <Route element={<Layout />}>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/deliveries" element={<Deliveries />} />
+        <Route path="/intake" element={<BillIntake />} />
+        <Route path="/products" element={<Products />} />
+        <Route path="/products/new" element={<ProductEdit />} />
+        <Route path="/products/:id" element={<ProductEdit />} />
+        <Route path="/site" element={<Site />} />
+        <Route path="/site/:key" element={<SiteSectionEdit />} />
+        <Route path="/orders" element={<Orders />} />
+        <Route path="/orders/new" element={<OrderIntake />} />
+        <Route path="/payments" element={<Payments />} />
+        <Route path="/users" element={<Users />} />
+        <Route path="/socials" element={<Socials />} />
+        <Route path="/analytics" element={<Analytics />} />
+      </Route>
+    </Route>
+    <Route path="*" element={<NotFound />} />
+  </>,
+);
+
+export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <AuthProvider>
-      <ToastProvider>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route element={<RequireAuth />}>
-            <Route element={<Layout />}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/deliveries" element={<Deliveries />} />
-              <Route path="/intake" element={<BillIntake />} />
-              <Route path="/products" element={<Products />} />
-              <Route path="/products/new" element={<ProductEdit />} />
-              <Route path="/products/:id" element={<ProductEdit />} />
-              <Route path="/site" element={<Site />} />
-              <Route path="/site/:key" element={<SiteSectionEdit />} />
-              <Route path="/orders" element={<Orders />} />
-              <Route path="/orders/new" element={<OrderIntake />} />
-              <Route path="/payments" element={<Payments />} />
-              <Route path="/users" element={<Users />} />
-              <Route path="/socials" element={<Socials />} />
-              <Route path="/analytics" element={<Analytics />} />
-            </Route>
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </ToastProvider>
+      <ToastProvider>{children}</ToastProvider>
     </AuthProvider>
+  );
+}
+
+// A data router (not <BrowserRouter>) so pages can useBlocker to guard
+// unsaved changes against in-app navigation.
+const router = createBrowserRouter(appRoutes);
+
+export default function App() {
+  return (
+    <AppProviders>
+      <RouterProvider router={router} />
+    </AppProviders>
   );
 }

@@ -149,6 +149,27 @@ test('products: price and visibility edits persist (TA-001 regression)', async (
   expect(res.ok(), 'restore should succeed').toBeTruthy();
 });
 
+test('products: leaving an edited piece asks before discarding changes (TA-013)', async ({
+  page,
+}) => {
+  await adminLogin(page);
+  await page.goto(`${ADMIN_URL}/products`);
+  await page.getByRole('cell', { name: FERN_GOWN, exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Edit Piece' })).toBeVisible();
+  await page.getByLabel('Name', { exact: true }).fill('Renamed But Never Saved');
+
+  await page.getByRole('link', { name: 'Products' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Keep editing' }).click();
+  await expect(page.getByRole('heading', { name: 'Edit Piece' })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Products' }).click();
+  await dialog.getByRole('button', { name: 'Discard' }).click();
+  await expect(page.getByRole('heading', { name: 'Products' })).toBeVisible();
+  await expect(page.getByText('Renamed But Never Saved')).toHaveCount(0);
+});
+
 test('products: an invalid piece URL shows not-found, not a saveable form', async ({ page }) => {
   await adminLogin(page);
   await page.goto(`${ADMIN_URL}/products/not-a-real-id-12345`);

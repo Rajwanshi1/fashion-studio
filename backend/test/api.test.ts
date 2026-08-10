@@ -320,6 +320,7 @@ describe('API', () => {
           name: 'Blush Chiffon Gown',
           price: 8800000,
           color: 'Blush',
+          active: true, // new pieces default to hidden — this one must be publicly visible
         }, adminToken),
       );
       expect((await created.json()).colorFamily).toBe('pink');
@@ -733,6 +734,25 @@ describe('API', () => {
       expect(await ended.json()).toMatchObject({ flag: null, salePrice: null });
     });
 
+    it('creates new pieces hidden by default — never live on the boutique (TA-004)', async () => {
+      const created = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categorySlug: 'gowns',
+          name: 'Half Finished Gown',
+          price: 7700000,
+          color: 'Sage',
+        }, adminToken),
+      );
+      expect(created.status).toBe(201);
+      const product = await created.json();
+      expect(product.active).toBe(false);
+
+      // Invisible to the storefront until explicitly published.
+      const pub = await (await app.request('/api/products?search=Half%20Finished')).json();
+      expect(pub.items).toHaveLength(0);
+    });
+
     it('keeps costPrice on the admin product and off both public reads', async () => {
       const created = await app.request(
         '/api/admin/products',
@@ -742,6 +762,7 @@ describe('API', () => {
           price: 9900000,
           color: 'Sage',
           costPrice: 4200000,
+          active: true,
         }, adminToken),
       );
       expect(created.status).toBe(201);
@@ -768,6 +789,7 @@ describe('API', () => {
           name: 'Gallery Gown',
           price: 9900000,
           color: 'Sage',
+          active: true,
           imageUrl: 'https://cdn.test/legacy.jpg', // a gallery always wins
           images: [
             { url: 'https://cdn.test/a.jpg', pose: 'front' },

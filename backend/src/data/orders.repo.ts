@@ -49,11 +49,17 @@ export interface NewOfflineOrder extends NewOrder {
   notes: string;
 }
 
-/** Freeform handwritten-bill line — no catalog linkage. */
+/** Handwritten-bill line — freeform by default, optionally linked to a variant. */
 export interface NewOfflineItem {
   productName: string;
   unitPrice: number;
   quantity: number;
+  productId?: string | null;
+  variantId?: string | null;
+  /** Snapshot fields, filled from the variant when linked. */
+  size?: string;
+  color?: string;
+  imageUrl?: string | null;
 }
 
 export interface OrderDetailsPatch {
@@ -296,8 +302,18 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
         const { rows: itemRows } = await client.query(
           `INSERT INTO order_items (order_id, product_id, variant_id, product_name, size, color,
                                     unit_price, quantity, image_url)
-           VALUES ($1, NULL, NULL, $2, '', '', $3, $4, NULL) RETURNING *`,
-          [orderRow.id, item.productName, item.unitPrice, item.quantity],
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+          [
+            orderRow.id,
+            item.productId ?? null,
+            item.variantId ?? null,
+            item.productName,
+            item.size ?? '',
+            item.color ?? '',
+            item.unitPrice,
+            item.quantity,
+            item.imageUrl ?? null,
+          ],
         );
         created.push(mapItem(itemRows[0]));
       }

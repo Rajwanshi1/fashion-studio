@@ -33,7 +33,7 @@ describe('OrdersService — offline orders', () => {
   beforeEach(async () => {
     products = new FakeProductsRepo();
     seeded = await seedCatalog(products);
-    ordersRepo = new FakeOrdersRepo();
+    ordersRepo = new FakeOrdersRepo(products);
     usersRepo = new FakeUsersRepo(ordersRepo);
     receiptsRepo = new FakeReceiptsRepo(ordersRepo);
     service = createOrdersService({
@@ -213,6 +213,69 @@ describe('OrdersService — offline orders', () => {
 
     it('never touches stock', async () => {
       await service.createOfflineOrder(input());
+      const [v] = await products.getVariantsForUpdate({}, [sageM().id]);
+      expect(v.stock).toBe(3);
+    });
+  });
+
+  describe('catalogue-linked items', () => {
+    const linkedItem = (over: Record<string, unknown> = {}) => ({
+      description: 'Sage lehenga — M',
+      quantity: 1,
+      unitPrice: 15000000,
+      productId: seeded.sage.id,
+      variantId: sageM().id,
+      ...over,
+    });
+
+    it('reserves stock and snapshots the variant onto the line', async () => {
+      const order = await service.createOfflineOrder(input({ items: [linkedItem()] }));
+      expect(order.items[0]).toMatchObject({
+        productId: seeded.sage.id,
+        variantId: sageM().id,
+        size: 'M',
+        unitPrice: 15000000, // the handwritten bill's price, not the catalogue's
+      });
+      const [v] = await products.getVariantsForUpdate({}, [sageM().id]);
+      expect(v.stock).toBe(2);
+    });
+
+    it('blocks the bill when a linked line exceeds stock, leaving nothing behind', async () => {
+      await expect(
+        service.createOfflineOrder(input({ items: [linkedItem({ quantity: 4 })] })),
+      ).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK' });
+      expect(ordersRepo.orders).toHaveLength(0);
+      const [v] = await products.getVariantsForUpdate({}, [sageM().id]);
+      expect(v.stock).toBe(3);
+    });
+
+    it('rejects a variant that does not belong to the linked product', async () => {
+      await expect(
+        service.createOfflineOrder(input({ items: [linkedItem({ productId: seeded.moss.id })] })),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+
+    it('mixes linked and freeform lines; only linked ones touch stock', async () => {
+      const order = await service.createOfflineOrder(
+        input({
+          items: [linkedItem(), { description: 'Bespoke dupatta', quantity: 2, unitPrice: 500000 }],
+          total: 16000000,
+        }),
+      );
+      expect(order.items).toHaveLength(2);
+      expect(order.items[1]).toMatchObject({ productId: null, variantId: null });
+      const [v] = await products.getVariantsForUpdate({}, [sageM().id]);
+      expect(v.stock).toBe(2);
+    });
+
+    it('cancelling an offline order restocks its linked lines only', async () => {
+      const order = await service.createOfflineOrder(
+        input({
+          items: [linkedItem(), { description: 'Bespoke dupatta', quantity: 1, unitPrice: 500000 }],
+          total: 15500000,
+        }),
+      );
+      await service.cancelOrder(order.id);
       const [v] = await products.getVariantsForUpdate({}, [sageM().id]);
       expect(v.stock).toBe(3);
     });

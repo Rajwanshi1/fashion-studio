@@ -446,7 +446,8 @@ export class FakeProductsRepo implements ProductsRepo {
       salePrice: input.salePrice ?? null,
       costPrice: input.costPrice ?? null,
       images: (input.images ?? []).map((im) => ({ url: im.url, pose: im.pose ?? '' })),
-      active: input.active ?? true,
+      // Mirrors the real repo: new pieces start hidden unless explicitly published.
+      active: input.active ?? false,
       variants: sizes.map((v) => ({ id: nextId('v'), productId: id, size: v.size, stock: v.stock })),
       categoryId: category.id,
       createdAt: new Date(Date.UTC(2026, 0, 1) + ++this.clock * 60_000).toISOString(),
@@ -657,20 +658,24 @@ export class FakeOrdersRepo implements OrdersRepo {
   }
 
   async createOffline(_tx: Tx, order: NewOfflineOrder, items: NewOfflineItem[]): Promise<Order> {
+    // Mirror the order_items FK guard for linked lines (see createWithItems).
+    for (const it of items) {
+      if (it.productId) this.productsRepo?.orderedProductIds.add(it.productId);
+    }
     const created: Order = {
       ...this.baseOrder(
         order,
         items.map(
           (it): OrderItem => ({
             id: nextId('oi'),
-            productId: null,
-            variantId: null,
+            productId: it.productId ?? null,
+            variantId: it.variantId ?? null,
             productName: it.productName,
-            size: '',
-            color: '',
+            size: it.size ?? '',
+            color: it.color ?? '',
             unitPrice: it.unitPrice,
             quantity: it.quantity,
-            imageUrl: null,
+            imageUrl: it.imageUrl ?? null,
             measurements: '',
           }),
         ),
@@ -1337,6 +1342,7 @@ export async function seedCatalog(products: FakeProductsRepo) {
   const sage = await products.createProduct({
     categoryId: lehengas.id,
     slug: 'sage-sequin-jacket-lehenga',
+    active: true,
     name: 'Sage Sequin Jacket Lehenga',
     description: 'Hand-embroidered jacket lehenga in moss-sage tissue.',
     details: 'Dry clean only',
@@ -1353,6 +1359,7 @@ export async function seedCatalog(products: FakeProductsRepo) {
   const moss = await products.createProduct({
     categoryId: gowns.id,
     slug: 'moss-tissue-draped-gown',
+    active: true,
     name: 'Moss Tissue Draped Gown',
     description: 'A single length of moss tissue, draped.',
     details: 'Dry clean only',
@@ -1365,6 +1372,7 @@ export async function seedCatalog(products: FakeProductsRepo) {
   const plain = await products.createProduct({
     categoryId: lehengas.id,
     slug: 'celadon-tissue-draped-lehenga',
+    active: true,
     name: 'Celadon Tissue Draped Lehenga',
     description: 'Pre-draped celadon tissue lehenga.',
     details: 'Dry clean only',
@@ -1400,6 +1408,7 @@ export async function seedSetProduct(products: FakeProductsRepo, categoryId: str
   return products.createProduct({
     categoryId,
     slug: 'fern-zardozi-set-fern',
+    active: true,
     name: 'Fern Zardozi Set',
     description: 'Zardozi lehenga with dupatta and jacket.',
     details: 'Dry clean only',
