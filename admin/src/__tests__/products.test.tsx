@@ -155,9 +155,14 @@ describe('Products', () => {
     expect(screen.queryByText('Rang Mehfil Lehenga')).not.toBeInTheDocument();
   });
 
+  /** Every bulk action confirms in the in-app modal (never window.confirm). */
+  const confirmInDialog = async (name: string | RegExp) => {
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name }));
+  };
+
   it('puts the selection on sale at a percentage and reloads the saved prices', async () => {
     seedAdminAuth();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     // The server computes the sale price; the page must show what came back.
     let onSale = false;
     const { calls } = mockFetch((url, init) => {
@@ -177,6 +182,7 @@ describe('Products', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Emerald Court Gown' }));
     await userEvent.type(screen.getByLabelText('Discount %'), '20');
     await userEvent.click(screen.getByRole('button', { name: 'Put on sale' }));
+    await confirmInDialog('Put on sale');
 
     const post = calls.find((c) => c.method === 'POST');
     expect(post?.url).toMatch(/\/api\/admin\/products\/bulk-update$/);
@@ -187,13 +193,10 @@ describe('Products', () => {
     expect(await screen.findByText('₹1,47,200')).toBeInTheDocument();
     expect(screen.getByText('−20%')).toBeInTheDocument();
     expect(screen.getAllByText('Sale').length).toBeGreaterThan(0);
-
-    confirmSpy.mockRestore();
   });
 
   it('ends a sale, changes visibility and sets a flag on the selection', async () => {
     seedAdminAuth();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { calls } = mockFetch((url, init) => {
       if (url.endsWith('/api/admin/products/bulk-update') && init?.method === 'POST') {
         return { json: { results: [{ id: 'p1', outcome: 'updated' }, { id: 'p2', outcome: 'skipped' }] } };
@@ -209,16 +212,19 @@ describe('Products', () => {
 
     await selectAll();
     await userEvent.click(screen.getByRole('button', { name: 'End sale' }));
+    await confirmInDialog('End sale');
     // Pieces the action didn't apply to are reported, not silently dropped.
     expect(await screen.findByText('1 back to full price · 1 unchanged')).toBeInTheDocument();
 
     await selectAll();
     await userEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    await confirmInDialog('Hide');
     await screen.findByText('1 hidden · 1 unchanged');
 
     await selectAll();
     await userEvent.selectOptions(screen.getByLabelText('Set flag'), 'new');
     await userEvent.click(screen.getByRole('button', { name: 'Apply flag' }));
+    await confirmInDialog('Apply flag');
     await screen.findByText('1 flagged · 1 unchanged');
 
     const bodies = calls.filter((c) => c.method === 'POST').map((c) => c.body);
@@ -227,13 +233,10 @@ describe('Products', () => {
       { ids: ['p1', 'p2'], action: { type: 'visibility', active: false } },
       { ids: ['p1', 'p2'], action: { type: 'flag', flag: 'new' } },
     ]);
-
-    confirmSpy.mockRestore();
   });
 
   it('selects pieces and bulk-deletes them, reporting archive fallbacks', async () => {
     seedAdminAuth();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { calls } = mockFetch((url, init) => {
       if (url.endsWith('/api/admin/products/bulk-delete') && init?.method === 'POST') {
         return {
@@ -257,7 +260,12 @@ describe('Products', () => {
     expect(screen.getByText('2 selected')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
-    expect(confirmSpy).toHaveBeenCalledOnce();
+    // The confirm modal names every piece about to go before anything fires.
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Emerald Court Gown')).toBeInTheDocument();
+    expect(within(dialog).getByText('Rang Mehfil Lehenga')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete 2 pieces' }));
+
     const post = calls.find((c) => c.method === 'POST');
     expect(post?.url).toMatch(/\/api\/admin\/products\/bulk-delete$/);
     expect(post?.body).toEqual({ ids: ['p1', 'p2'] });
@@ -267,8 +275,6 @@ describe('Products', () => {
     expect(screen.queryByText('Emerald Court Gown')).not.toBeInTheDocument();
     expect(screen.queryByText('Rang Mehfil Lehenga')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New Piece' })).toBeInTheDocument();
-
-    confirmSpy.mockRestore();
   });
 
   it('row checkboxes do not open the editor', async () => {
