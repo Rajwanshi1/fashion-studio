@@ -1155,7 +1155,10 @@ describe('API', () => {
       expect(res.status).toBe(200);
       const summary = await res.json();
       expect(summary.activeOrders).toBe(1);
-      expect(summary.pendingPayments).toBe(1);
+      // The pending online checkout is NOT counted: "To Collect" pairs this
+      // count with a rupee sum of offline balances, and nothing is collectible
+      // at the counter for an unpaid online cart.
+      expect(summary.pendingPayments).toBe(0);
       expect(summary.revenue).toBe(paidOrder.total);
       // moss S has stock 1 (<=2); Custom sizes and inactive products are excluded
       expect(summary.lowStock).toContainEqual(

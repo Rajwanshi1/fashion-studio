@@ -159,6 +159,8 @@ describe('BillIntake', () => {
     // manual completion still records the order WITH the uploaded document
     await userEvent.type(screen.getByLabelText('First Name'), 'Rhea');
     await userEvent.type(screen.getByLabelText('Phone'), '98200 11223');
+    // A GST invoice now needs a bill number — this bill has none, so Cash Memo.
+    await userEvent.click(screen.getByRole('button', { name: 'Cash Memo' }));
     await userEvent.type(screen.getByLabelText('Description'), 'Sage stole');
     await userEvent.type(screen.getByLabelText('Unit ₹'), '18000');
     await userEvent.type(screen.getByLabelText('Bill Total (₹ rupees)'), '18000');
@@ -182,6 +184,7 @@ describe('BillIntake', () => {
     await screen.findByRole('button', { name: 'Record Order' });
     await userEvent.type(screen.getByLabelText('First Name'), 'Rhea');
     await userEvent.type(screen.getByLabelText('Phone'), '98200 11223');
+    await userEvent.click(screen.getByRole('button', { name: 'Cash Memo' }));
     await userEvent.type(screen.getByLabelText('Description'), 'Sage stole');
     await userEvent.type(screen.getByLabelText('Unit ₹'), '18000');
     await userEvent.type(screen.getByLabelText('Bill Total (₹ rupees)'), '18000');
@@ -274,6 +277,7 @@ describe('BillIntake', () => {
     // fill the rest of the bill and record
     await userEvent.type(screen.getByLabelText('First Name'), 'Rhea');
     await userEvent.type(screen.getByLabelText('Phone'), '98200 11223');
+    await userEvent.click(screen.getByRole('button', { name: 'Cash Memo' }));
     await userEvent.type(screen.getByLabelText('Description'), 'Custom blouse');
     await userEvent.type(screen.getByLabelText('Unit ₹'), '12000');
     await userEvent.type(screen.getByLabelText('Bill Total (₹ rupees)'), '12000');
