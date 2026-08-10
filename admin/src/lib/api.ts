@@ -32,7 +32,15 @@ export function storedToken(): string | null {
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
+  /** Override for slow endpoints (photo presign, OCR parse). */
+  timeoutMs?: number;
 }
+
+const READ_TIMEOUT_MS = 20_000;
+// Mutations get much longer: the server has no idempotency keys, so aborting
+// a write that eventually succeeds invites a duplicate on retry. The timeout
+// exists to surface a truly dead connection, not to race a slow one.
+const WRITE_TIMEOUT_MS = 90_000;
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {};
@@ -40,11 +48,29 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   if (token) headers.Authorization = `Bearer ${token}`;
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
 
-  const res = await fetch(`${API_URL}${path}`, {
-    method: options.method ?? 'GET',
-    headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
+  const controller = new AbortController();
+  const timer = window.setTimeout(
+    () => controller.abort(),
+    options.timeoutMs ?? ((options.method ?? 'GET') === 'GET' ? READ_TIMEOUT_MS : WRITE_TIMEOUT_MS),
+  );
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: options.method ?? 'GET',
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    // A hung request or a dead connection must never look like success —
+    // surface it as a readable failure instead of a raw TypeError.
+    if (controller.signal.aborted) {
+      throw new ApiError(0, 'The request timed out — check whether the change was saved before trying again.');
+    }
+    throw new ApiError(0, 'Network error — the change was not saved. Check your connection and try again.');
+  } finally {
+    window.clearTimeout(timer);
+  }
 
   if (!res.ok) {
     let message = `Request failed (${res.status})`;

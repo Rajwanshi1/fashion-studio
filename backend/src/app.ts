@@ -95,6 +95,7 @@ const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 429 | 5
   SLUG_TAKEN: 409,
   INSUFFICIENT_STOCK: 409,
   OVER_COLLECTION: 409,
+  ORDER_CANCELLED: 409,
   PAYMENT_ALREADY_FINAL: 409,
   INVALID_CREDENTIALS: 401,
   NOT_FOUND: 404,
@@ -140,6 +141,11 @@ export function createApp(deps: AppDeps) {
   const app = new Hono<AuthEnv>();
 
   app.use(secureHeaders());
+  // CORS must register before anything that can short-circuit a response
+  // (body limits especially): a 413 without Access-Control-Allow-Origin
+  // reaches the browser as an opaque "CORS error" instead of its real message.
+  // maxAge lets the browser reuse the preflight instead of doubling every call.
+  app.use('/api/*', cors({ origin: corsOrigins, allowHeaders: ['Content-Type', 'Authorization'], maxAge: 7200 }));
   // Global 100KB JSON cap — skipped for the dev-only local photo transport,
   // which enforces its own 10MB cap (uploads.routes.ts), and raised for the
   // product-image presign, whose body carries the base64 photo the naming call
@@ -169,8 +175,6 @@ export function createApp(deps: AppDeps) {
     return c.json({ error: 'Internal server error' }, 500);
   });
   app.notFound((c) => c.json({ error: 'Not found' }, 404));
-
-  app.use('/api/*', cors({ origin: corsOrigins, allowHeaders: ['Content-Type', 'Authorization'] }));
 
   app.get('/api/health', (c) => c.json({ status: 'ok' }));
   app.get('/api/ready', async (c) => {

@@ -16,6 +16,7 @@ import {
 import type { ShippingReceiptDraft } from '../lib/uploads';
 import { fetchDocumentImage, parseDocument, uploadDocument } from '../lib/uploads';
 import { STATUS_MESSAGES, waLink } from '../lib/whatsapp';
+import ConfirmModal from '../components/ConfirmModal';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { InvoiceActions } from '../components/InvoiceActions';
@@ -70,6 +71,7 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
   const [docImages, setDocImages] = useState<Record<string, string>>({});
   const [receipt, setReceipt] = useState<{ documentId: string; carrier: string; awb: string } | null>(null);
   const [receiptBusy, setReceiptBusy] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const receiptInput = useRef<HTMLInputElement>(null);
   const nexts = transitionsFor(order);
   const message = STATUS_MESSAGES[order.status]?.(order);
@@ -360,7 +362,7 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
             </div>
           </>
         )}
-        {order.channel !== 'online' && order.balance > 0 && (
+        {order.channel !== 'online' && order.status !== 'cancelled' && order.balance > 0 && (
           <form className="pay-form" onSubmit={recordPayment}>
             <div className="field">
               <label className="lab" htmlFor={`pay-${order.id}`}>
@@ -424,7 +426,10 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
               value={order.status}
               onChange={(e) => {
                 const next = e.target.value as OrderStatus;
-                if (next !== order.status) void moveOrder(next);
+                if (next === order.status) return;
+                // Cancelling is terminal — never one stray click on a dropdown.
+                if (next === 'cancelled') setConfirmCancel(true);
+                else void moveOrder(next);
               }}
             >
               <option value={order.status} disabled>
@@ -437,6 +442,27 @@ function ExpandedOrder({ order, onUpdated, onError }: ExpandedProps) {
               ))}
             </select>
           </div>
+        )}
+        {confirmCancel && (
+          <ConfirmModal
+            title={`Cancel order ${order.orderNumber}?`}
+            confirmLabel="Cancel order"
+            cancelLabel="Keep order"
+            tone="danger"
+            onCancel={() => setConfirmCancel(false)}
+            onConfirm={() => {
+              setConfirmCancel(false);
+              void moveOrder('cancelled');
+            }}
+          >
+            <p>
+              A cancelled order cannot be reopened
+              {order.advancePaid > 0
+                ? `, and the ${formatINR(order.advancePaid)} already received stays on the books`
+                : ''}
+              .
+            </p>
+          </ConfirmModal>
         )}
       </div>
     </div>

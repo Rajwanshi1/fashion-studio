@@ -72,7 +72,9 @@ const createOfflineOrderSchema = z.object({
         unitPrice: z.number().int().min(0),
       }),
     )
-    .min(1),
+    .min(1)
+    // Keeps the JSON body comfortably under the WAF's edge cap on request size.
+    .max(100),
   gstAmount: z.number().int().min(0).optional(),
   total: z.number().int().min(0),
   advance: z.object({ amount: z.number().int().positive(), mode: z.enum(RECEIPT_MODES) }).optional(),
@@ -135,8 +137,22 @@ const productBaseSchema = z.object({
   // Optional: omitted → derived from name + colour (see the create route).
   slug: z.string().min(1).optional(),
   name: z.string().min(1),
-  description: z.string().optional(),
-  details: z.string().optional(),
+  // Bounded in BYTES so a product write can never outgrow the WAF's edge cap
+  // on request size (32KB): the cap counts UTF-8 bytes, and Devanagari prose
+  // runs ~3 bytes per char, so a char-count limit would not actually bound
+  // the body. 10KB of prose is far beyond any real listing.
+  description: z
+    .string()
+    .refine((s) => Buffer.byteLength(s, 'utf8') <= 10_000, {
+      message: 'Description is too long — keep it under 10KB of text',
+    })
+    .optional(),
+  details: z
+    .string()
+    .refine((s) => Buffer.byteLength(s, 'utf8') <= 10_000, {
+      message: 'Details are too long — keep them under 10KB of text',
+    })
+    .optional(),
   price: z.number().int().min(0),
   color: z.string().optional(),
   flag: flagSchema.optional(),

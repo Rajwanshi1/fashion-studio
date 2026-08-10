@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ADMIN_AUTH, mockFetch, renderApp, seedAdminAuth } from '../test/utils';
 import type { AdminUser } from '../lib/types';
@@ -87,6 +87,10 @@ describe('Users', () => {
     await screen.findByText('Meera Kapoor');
 
     await userEvent.click(screen.getByRole('button', { name: 'Make admin' }));
+    // Role changes confirm in a modal that names the user and the access granted.
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/full access/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Make admin' }));
 
     const patch = calls.find((c) => c.method === 'PATCH');
     expect(patch).toBeDefined();

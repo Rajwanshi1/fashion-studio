@@ -13,3 +13,6 @@ docs/verification/design-qa/
 
 # Claude subagent-driven-development scratch (briefs, reports, review diffs)
 .superpowers/
+
+# Dev-local upload transport scratch (e2e bill photos land here)
+backend/.data/

@@ -324,6 +324,15 @@ describe('OrdersService — offline orders', () => {
         code: 'NOT_FOUND',
       });
     });
+
+    it('refuses payments against a cancelled order', async () => {
+      const order = await service.createOfflineOrder(input());
+      await service.cancelOrder(order.id);
+      await expect(
+        service.recordReceipt(order.id, { amount: 5000000, mode: 'cash' }),
+      ).rejects.toMatchObject({ code: 'ORDER_CANCELLED' });
+      expect((await ordersRepo.getById(order.id))!.advancePaid).toBe(0);
+    });
   });
 
   describe('updateOrderDetails', () => {
