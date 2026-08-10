@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatINR } from '../lib/format';
 import { productUrl } from '../lib/shop';
@@ -226,7 +226,20 @@ export default function Products() {
         return (
           <span className="thumbs">
             {urls.map((url, i) => (
-              <img key={`${url}-${i}`} src={url} alt="" loading="lazy" />
+              <img
+                key={`${url}-${i}`}
+                src={url}
+                alt=""
+                loading="lazy"
+                width={34}
+                height={44}
+                // A broken photo shows the celadon placeholder box instead of
+                // the browser's broken-image glyph.
+                onError={(e) => {
+                  e.currentTarget.src =
+                    'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+                }}
+              />
             ))}
           </span>
         );
@@ -274,6 +287,17 @@ export default function Products() {
         ),
     },
     { key: 'stock', label: 'Total Stock', align: 'right', render: (p) => totalStock(p) },
+    {
+      key: 'edit',
+      label: 'Edit',
+      // A real link: discoverable, keyboard-reachable and screen-reader
+      // visible — the row-click shortcut alone was none of those.
+      render: (p) => (
+        <Link className="ulink" to={`/products/${p.id}`} onClick={(e) => e.stopPropagation()}>
+          Edit
+        </Link>
+      ),
+    },
     {
       key: 'live',
       label: 'Live page',
@@ -340,7 +364,9 @@ export default function Products() {
         />
       )}
 
-      {selected.size > 0 && (
+      {/* Always mounted: unmounting collapsed ~73px and shifted the table
+          under the cursor mid-click (TA-044). */}
+      {products && (
         <ProductBulkBar
           count={selected.size}
           busy={busy}

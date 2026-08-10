@@ -253,12 +253,12 @@ export interface MeasurementSet {
   createdAt: string;
 }
 
+/** One fully-out-of-stock piece (no sized variant left). */
 export interface LowStockItem {
-  variantId: string;
   productId: string;
   productName: string;
-  size: string;
-  stock: number;
+  color: string;
+  imageUrl: string | null;
 }
 
 export interface AdminSummary {

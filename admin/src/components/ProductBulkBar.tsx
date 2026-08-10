@@ -34,9 +34,17 @@ export default function ProductBulkBar({
   const discount = Number(pct);
   const pctValid =
     pct.trim() !== '' && Number.isInteger(discount) && discount >= MIN_PCT && discount <= MAX_PCT;
+  const idle = count === 0;
 
   return (
-    <div className="bulk-bar" role="group" aria-label="Actions for selected pieces">
+    <div
+      // Kept in the layout while idle so appearing/disappearing never shifts
+      // the table under the cursor.
+      className={idle ? 'bulk-bar idle' : 'bulk-bar'}
+      role="group"
+      aria-label="Actions for selected pieces"
+      aria-hidden={idle}
+    >
       <span className="bulk-count">{count} selected</span>
       <button className="ulink" type="button" onClick={onClear} disabled={busy}>
         Clear

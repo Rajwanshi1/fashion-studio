@@ -86,6 +86,8 @@ export interface OrdersRepo {
   listByUser(userId: string): Promise<Order[]>;
   /** Open orders with a promised date, soonest first — the delivery board. */
   listDeliveries(): Promise<Order[]>;
+  /** Live orders with NO due date — work that can silently fall off the board. */
+  listUnscheduled(): Promise<Order[]>;
   listAdmin(filter?: AdminOrdersFilter): Promise<Order[]>;
   updateStatus(id: string, status: OrderStatus, tx?: Tx): Promise<Order | null>;
   updateDetails(id: string, patch: OrderDetailsPatch): Promise<Order | null>;
@@ -335,6 +337,18 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
         pool,
         `WHERE status NOT IN ('delivered','cancelled') AND delivery_due_date IS NOT NULL
          ORDER BY delivery_due_date ASC, created_at ASC`,
+        [],
+      );
+    },
+
+    async listUnscheduled() {
+      // Offline orders only: every abandoned online checkout sits forever at
+      // pending_payment with no due date and would flood the board otherwise.
+      return loadOrders(
+        pool,
+        `WHERE channel <> 'online' AND status NOT IN ('delivered','cancelled')
+           AND delivery_due_date IS NULL
+         ORDER BY created_at ASC`,
         [],
       );
     },
