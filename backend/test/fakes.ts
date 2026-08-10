@@ -729,7 +729,13 @@ export class FakeOrdersRepo implements OrdersRepo {
 
   async listUnscheduled(): Promise<Order[]> {
     return this.orders
-      .filter((o) => !o.deliveryDueDate && o.status !== 'delivered' && o.status !== 'cancelled')
+      .filter(
+        (o) =>
+          o.channel !== 'online' &&
+          !o.deliveryDueDate &&
+          o.status !== 'delivered' &&
+          o.status !== 'cancelled',
+      )
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .map((o) => structuredClone(o));
   }

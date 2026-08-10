@@ -134,6 +134,8 @@ export default function Deliveries() {
   };
 
   const buckets = data ? bucketDeliveries(data.orders, today) : null;
+  // Tolerate an older API during a rolling deploy — the field is additive.
+  const unscheduled = data?.unscheduled ?? [];
 
   return (
     <>
@@ -153,7 +155,7 @@ export default function Deliveries() {
             <StatCard label="Online received" value={formatINR(data.totals.collectedOnline)} />
           </div>
 
-          {data.orders.length === 0 && data.unscheduled.length === 0 && (
+          {data.orders.length === 0 && unscheduled.length === 0 && (
             <p className="state-note">
               No delivery dates set — add due dates from Orders or the Scan Bill flow.
             </p>
@@ -176,13 +178,13 @@ export default function Deliveries() {
             );
           })}
 
-          {data.unscheduled.length > 0 && (
+          {unscheduled.length > 0 && (
             <details className="dl-bucket" open>
               <summary>
                 <span>Unscheduled — no due date</span>
-                <span className="dl-count">{data.unscheduled.length}</span>
+                <span className="dl-count">{unscheduled.length}</span>
               </summary>
-              {data.unscheduled.map((o) => (
+              {unscheduled.map((o) => (
                 <div className="dl-card" key={o.id}>
                   <div className="dl-top">
                     <div>

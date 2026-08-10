@@ -342,9 +342,12 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
     },
 
     async listUnscheduled() {
+      // Offline orders only: every abandoned online checkout sits forever at
+      // pending_payment with no due date and would flood the board otherwise.
       return loadOrders(
         pool,
-        `WHERE status NOT IN ('delivered','cancelled') AND delivery_due_date IS NULL
+        `WHERE channel <> 'online' AND status NOT IN ('delivered','cancelled')
+           AND delivery_due_date IS NULL
          ORDER BY created_at ASC`,
         [],
       );

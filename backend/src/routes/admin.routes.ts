@@ -336,7 +336,9 @@ export function adminRoutes(deps: AdminDeps) {
       deps.orders.listDeliveries(),
       deps.orders.listUnscheduled(),
     ]);
-    return c.json({ orders, unscheduled, totals: deliveryTotals(orders) });
+    // Totals cover exactly the orders the board shows — an unscheduled order's
+    // balance must not vanish from "To collect" just because it has no date.
+    return c.json({ orders, unscheduled, totals: deliveryTotals([...orders, ...unscheduled]) });
   });
 
   // iPhone contacts export — Safari hands the download to the Contacts app.
