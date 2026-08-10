@@ -399,6 +399,7 @@ export default function BillIntake() {
               type="button"
               className="btn-buy gold fit"
               disabled={!bill || bill.status !== 'ready' || anyUploading}
+              aria-disabled={!bill || bill.status !== 'ready' || anyUploading}
               onClick={() => void parseAll()}
             >
               Parse bill
@@ -407,6 +408,9 @@ export default function BillIntake() {
               Enter manually instead
             </button>
           </div>
+          {!bill && (
+            <p className="x">Add a bill photo to continue — or enter the order manually.</p>
+          )}
         </div>
       )}
 

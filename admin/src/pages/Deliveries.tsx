@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { bucketDeliveries, relativeDue, type DeliveryBuckets } from '../lib/deliveries';
 import { formatDate, formatINR, todayIST } from '../lib/format';
@@ -11,6 +12,8 @@ import { useToast } from '../components/Toast';
 
 interface DeliveriesResponse {
   orders: Order[];
+  /** Live orders with no due date — invisible to the buckets above. */
+  unscheduled: Order[];
   totals: { pendingToCollect: number; collectedCash: number; collectedOnline: number };
 }
 
@@ -150,7 +153,7 @@ export default function Deliveries() {
             <StatCard label="Online received" value={formatINR(data.totals.collectedOnline)} />
           </div>
 
-          {data.orders.length === 0 && (
+          {data.orders.length === 0 && data.unscheduled.length === 0 && (
             <p className="state-note">
               No delivery dates set — add due dates from Orders or the Scan Bill flow.
             </p>
@@ -172,6 +175,38 @@ export default function Deliveries() {
               </details>
             );
           })}
+
+          {data.unscheduled.length > 0 && (
+            <details className="dl-bucket" open>
+              <summary>
+                <span>Unscheduled — no due date</span>
+                <span className="dl-count">{data.unscheduled.length}</span>
+              </summary>
+              {data.unscheduled.map((o) => (
+                <div className="dl-card" key={o.id}>
+                  <div className="dl-top">
+                    <div>
+                      <span className="nm">
+                        {o.firstName} {o.lastName}
+                      </span>
+                      <span className="x">
+                        {' '}
+                        {o.orderNumber} · no due date · {ORDER_STATUS_LABELS[o.status]}
+                      </span>
+                    </div>
+                    <div className="dl-balance">
+                      {o.channel !== 'online' && o.balance > 0 ? formatINR(o.balance) : ''}
+                    </div>
+                  </div>
+                  <div className="dl-actions">
+                    <Link className="dl-act" to={`/orders?focus=${o.id}`}>
+                      Set a due date
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </details>
+          )}
         </>
       )}
     </>

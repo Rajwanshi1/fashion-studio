@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDate, formatINR, todayIST } from '../lib/format';
 import type { BillType, DocumentSummary, Order, OrderChannel, OrderStatus, ReceiptMode } from '../lib/types';
@@ -592,7 +592,16 @@ export default function Orders() {
           columns={columns}
           rows={orders}
           rowKey={(o) => o.id}
-          empty="No orders in this state."
+          empty={
+            <>
+              {filter === 'all'
+                ? 'No orders yet.'
+                : `No ${ORDER_STATUS_LABELS[filter].toLowerCase()} orders.`}{' '}
+              <Link className="ulink" to="/orders/new">
+                Record an order
+              </Link>
+            </>
+          }
           initialExpandedKey={focusId}
           renderExpanded={(order) => (
             <ExpandedOrder order={order} onUpdated={replaceOrder} />

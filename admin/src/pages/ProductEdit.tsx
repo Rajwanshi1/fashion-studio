@@ -735,9 +735,7 @@ export default function ProductEdit() {
             >
               {uploading
                 ? `Uploading ${Math.min(uploading.done + 1, uploading.total)} of ${uploading.total}…`
-                : form.images.length > 0
-                  ? 'Add photos'
-                  : 'Upload photos'}
+                : 'Add photos'}
             </button>
           </div>
           {form.images.length > 0 && (
@@ -748,7 +746,30 @@ export default function ProductEdit() {
                     src={img.url}
                     alt={img.pose ? `Product photo ${i + 1} — ${img.pose}` : `Product photo ${i + 1}`}
                   />
-                  <figcaption>{img.pose || `Photo ${i + 1}`}</figcaption>
+                  {/* The AI naming call guesses the pose; guesses must be correctable. */}
+                  <select
+                    className="inp thumb-pose"
+                    aria-label={`Pose tag for photo ${i + 1}`}
+                    value={img.pose}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        images: f.images.map((im, x) =>
+                          x === i ? { ...im, pose: e.target.value } : im,
+                        ),
+                      }))
+                    }
+                  >
+                    <option value="">No tag</option>
+                    {['front', 'back', 'side', 'detail'].map((p) => (
+                      <option key={p} value={p}>
+                        {p.charAt(0).toUpperCase() + p.slice(1)}
+                      </option>
+                    ))}
+                    {img.pose && !['front', 'back', 'side', 'detail'].includes(img.pose) && (
+                      <option value={img.pose}>{img.pose}</option>
+                    )}
+                  </select>
                   <div className="thumb-actions">
                     <button
                       type="button"

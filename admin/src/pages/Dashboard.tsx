@@ -8,10 +8,36 @@ import StatusBadge from '../components/StatusBadge';
 import DataTable from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 
+const LOW_STOCK_CAP = 10;
+
 const lowStockColumns: Column<LowStockItem>[] = [
+  {
+    key: 'photo',
+    label: 'Photo',
+    render: (r) =>
+      r.imageUrl ? (
+        <span className="thumbs">
+          <img src={r.imageUrl} alt="" loading="lazy" width={34} height={44} />
+        </span>
+      ) : (
+        <span className="dim">—</span>
+      ),
+  },
   { key: 'product', label: 'Piece', render: (r) => <span className="nm">{r.productName}</span> },
-  { key: 'size', label: 'Size', render: (r) => r.size },
-  { key: 'stock', label: 'Stock', align: 'right', render: (r) => r.stock },
+  {
+    key: 'color',
+    label: 'Colour',
+    render: (r) => r.color || <span className="dim">—</span>,
+  },
+  {
+    key: 'edit',
+    label: 'Restock',
+    render: (r) => (
+      <Link className="ulink" to={`/products/${r.productId}`}>
+        Open piece
+      </Link>
+    ),
+  },
 ];
 
 const recentOrderColumns: Column<Order>[] = [
@@ -65,19 +91,28 @@ export default function Dashboard() {
               hint={`${summary.pendingPayments} ${summary.pendingPayments === 1 ? 'order' : 'orders'} with balance due`}
             />
             <StatCard
-              label="Low Stock"
+              label="Out of Stock"
               value={summary.lowStock.length}
-              hint="Variants running out"
+              hint="Pieces with no sizes left"
             />
           </div>
 
-          <p className="section-label">Low stock</p>
+          <p className="section-label">Out of stock</p>
           <DataTable
             columns={lowStockColumns}
-            rows={summary.lowStock}
-            rowKey={(r) => r.variantId}
-            empty="Every piece is well stocked."
+            rows={summary.lowStock.slice(0, LOW_STOCK_CAP)}
+            rowKey={(r) => r.productId}
+            empty="Every piece is in stock."
           />
+          {summary.lowStock.length > LOW_STOCK_CAP && (
+            <p className="state-note">
+              …and {summary.lowStock.length - LOW_STOCK_CAP} more — see{' '}
+              <Link className="ulink" to="/products">
+                Products
+              </Link>
+              .
+            </p>
+          )}
 
           <p className="section-label">Recent orders</p>
           <DataTable

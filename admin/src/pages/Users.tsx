@@ -17,6 +17,7 @@ export default function Users() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingRole, setPendingRole] = useState<{ user: AdminUser; next: Role } | null>(null);
+  const [confirmExport, setConfirmExport] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -58,6 +59,7 @@ export default function Users() {
       a.download = 'ta-customers.vcf';
       a.click();
       URL.revokeObjectURL(url);
+      toast('Contacts exported');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Unable to export contacts', { tone: 'error' });
     }
@@ -123,7 +125,7 @@ export default function Users() {
       <div className="page-head-admin">
         <span className="eyebrow">The House · Access</span>
         <h1>Users</h1>
-        <button type="button" className="ulink vcf-export" onClick={() => void exportContacts()}>
+        <button type="button" className="ulink vcf-export" onClick={() => setConfirmExport(true)}>
           Export contacts (.vcf)
         </button>
       </div>
@@ -137,6 +139,23 @@ export default function Users() {
           rowKey={(u) => u.id}
           empty="No users registered yet."
         />
+      )}
+
+      {confirmExport && (
+        <ConfirmModal
+          title="Export every customer contact?"
+          confirmLabel="Download .vcf"
+          onCancel={() => setConfirmExport(false)}
+          onConfirm={() => {
+            setConfirmExport(false);
+            void exportContacts();
+          }}
+        >
+          <p>
+            This downloads every customer's name and phone number to this device — handle the file
+            as personal data.
+          </p>
+        </ConfirmModal>
       )}
 
       {pendingRole && (

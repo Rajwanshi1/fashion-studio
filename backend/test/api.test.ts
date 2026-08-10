@@ -1147,20 +1147,18 @@ describe('API', () => {
       expect(summary.activeOrders).toBe(1);
       expect(summary.pendingPayments).toBe(1);
       expect(summary.revenue).toBe(paidOrder.total);
-      // moss S has stock 1 (<=2); Custom sizes and inactive products are excluded
+      // One row per fully-out piece: sage's only sized variant (M) hit 0 after
+      // the two orders above; moss still has an S in stock; inactive pieces
+      // and Custom-only sizing never count.
       expect(summary.lowStock).toContainEqual(
         expect.objectContaining({
-          productId: seeded.moss.id,
-          variantId: expect.any(String),
-          productName: 'Moss Tissue Draped Gown',
-          size: 'S',
-          stock: 1,
+          productId: seeded.sage.id,
+          productName: 'Sage Sequin Jacket Lehenga',
+          color: 'Sage',
         }),
       );
-      expect(summary.lowStock.every((r: any) => r.size !== 'Custom')).toBe(true);
+      expect(summary.lowStock.map((r: any) => r.productId)).not.toContain(seeded.moss.id);
       expect(summary.lowStock.map((r: any) => r.productId)).not.toContain(seeded.inactive.id);
-      // sage M is at 0 after the two orders above
-      expect(summary.lowStock).toContainEqual(expect.objectContaining({ productId: seeded.sage.id, size: 'M', stock: 0 }));
       expect(summary.recentOrders).toHaveLength(2);
       expect(summary.recentOrders[0]).toMatchObject({
         orderNumber: expect.stringMatching(/^TA-2026-\d{5}$/),

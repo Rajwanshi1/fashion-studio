@@ -254,13 +254,21 @@ export function adminRoutes(deps: AdminDeps) {
   r.get('/summary', async (c) => {
     const [products, orders] = await Promise.all([deps.products.listAllProducts(), deps.orders.listAdmin()]);
     const paidOrLater: OrderStatus[] = ['paid', 'in_atelier', 'quality_check', 'dispatched', 'delivered'];
+    // Pieces fully out of stock, one row per piece. The old per-variant list
+    // drowned the dashboard: with one stocked size per piece, every other
+    // size sat at a permanent 0 and 33 identical rows meant nothing.
     const lowStock = products
       .filter((p) => p.active)
-      .flatMap((p) =>
-        p.variants
-          .filter((v) => v.size !== 'Custom' && v.stock <= 2)
-          .map((v) => ({ productId: p.id, variantId: v.id, productName: p.name, size: v.size, stock: v.stock })),
-      );
+      .filter((p) => {
+        const sized = p.variants.filter((v) => v.size !== 'Custom');
+        return sized.length > 0 && sized.every((v) => v.stock === 0);
+      })
+      .map((p) => ({
+        productId: p.id,
+        productName: p.name,
+        color: p.color,
+        imageUrl: p.images?.[0]?.url ?? p.imageUrl ?? null,
+      }));
     // listAdmin returns newest first.
     const recentOrders = orders.slice(0, 8).map((o) => ({
       id: o.id,
@@ -310,8 +318,11 @@ export function adminRoutes(deps: AdminDeps) {
 
   // The delivery board: open orders with a promised date, soonest first.
   r.get('/deliveries', async (c) => {
-    const orders = await deps.orders.listDeliveries();
-    return c.json({ orders, totals: deliveryTotals(orders) });
+    const [orders, unscheduled] = await Promise.all([
+      deps.orders.listDeliveries(),
+      deps.orders.listUnscheduled(),
+    ]);
+    return c.json({ orders, unscheduled, totals: deliveryTotals(orders) });
   });
 
   // iPhone contacts export — Safari hands the download to the Contacts app.
