@@ -5,6 +5,7 @@ import { HTTPException } from 'hono/http-exception';
 import { secureHeaders } from 'hono/secure-headers';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { ClicksRepo } from './data/clicks.repo';
+import type { ContentRepo } from './data/content.repo';
 import type { DocumentsRepo } from './data/documents.repo';
 import type { EventsRepo } from './data/events.repo';
 import type { MeasurementsRepo } from './data/measurements.repo';
@@ -21,6 +22,7 @@ import { adminRoutes } from './routes/admin.routes';
 import { analyticsRoutes } from './routes/analytics.routes';
 import { authRoutes } from './routes/auth.routes';
 import { catalogRoutes } from './routes/catalog.routes';
+import { contentRoutes } from './routes/content.routes';
 import { orderRoutes } from './routes/orders.routes';
 import { paymentRoutes } from './routes/payments.routes';
 import { socialsRoutes } from './routes/socials.routes';
@@ -54,6 +56,7 @@ export interface AppDeps {
     receipts: ReceiptsRepo;
     documents: DocumentsRepo;
     measurements: MeasurementsRepo;
+    content: ContentRepo;
   };
   /** Masked payments seam — null while payments are disabled (endpoints answer 503). */
   paymentProvider: PaymentProvider | null;
@@ -192,6 +195,7 @@ export function createApp(deps: AppDeps) {
   app.route('/api', orderRoutes(orders, jwtSecret));
   app.route('/api/payments', paymentRoutes(payments, jwtSecret));
   app.route('/api/socials', socialsRoutes(socials, jwtSecret));
+  app.route('/api', contentRoutes(repos.content, jwtSecret));
   app.route('/api', analyticsRoutes(analytics, jwtSecret));
   // Dev-only local upload transport — never mounted when S3 is the store.
   if (deps.localUploads) app.route('/api/uploads', uploadsRoutes(deps.localUploads, jwtSecret));

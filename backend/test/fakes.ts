@@ -22,6 +22,7 @@ import type {
   WishlistRepo,
 } from '../src/data/products.repo';
 import type { ClicksRepo, LinkStats } from '../src/data/clicks.repo';
+import type { ContentRepo, ContentRow } from '../src/data/content.repo';
 import type {
   CreateDocumentInput,
   DocumentRow,
@@ -932,6 +933,19 @@ export class FakeClicksRepo implements ClicksRepo {
   }
 }
 
+export class FakeContentRepo implements ContentRepo {
+  rows = new Map<string, unknown>();
+  async all(): Promise<ContentRow[]> {
+    return [...this.rows.entries()].map(([key, value]) => ({ key, value }));
+  }
+  async upsert(key: string, value: unknown): Promise<void> {
+    this.rows.set(key, JSON.parse(JSON.stringify(value)));
+  }
+  async remove(key: string): Promise<void> {
+    this.rows.delete(key);
+  }
+}
+
 type StoredEvent = NewEvent & { createdAt: Date };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -1259,6 +1273,7 @@ export interface Fakes {
   receipts: FakeReceiptsRepo;
   documents: FakeDocumentsRepo;
   measurements: FakeMeasurementsRepo;
+  content: FakeContentRepo;
 }
 
 export function makeFakes(): Fakes {
@@ -1274,7 +1289,8 @@ export function makeFakes(): Fakes {
   const receipts = new FakeReceiptsRepo(orders);
   const documents = new FakeDocumentsRepo();
   const measurements = new FakeMeasurementsRepo();
-  return { users, products, wishlist, orders, payments, scans, clicks, events, otps, receipts, documents, measurements };
+  const content = new FakeContentRepo();
+  return { users, products, wishlist, orders, payments, scans, clicks, events, otps, receipts, documents, measurements, content };
 }
 
 /** Small catalog covering both categories, all flags, an inactive product and low stock. */
