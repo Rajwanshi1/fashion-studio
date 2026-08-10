@@ -365,9 +365,16 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         where.push(`p.color_family = $${params.length}`);
       }
       if (filter.search) {
-        params.push(`%${filter.search}%`);
-        const p = `$${params.length}`;
-        where.push(`(p.name ILIKE ${p} OR p.description ILIKE ${p} OR p.color ILIKE ${p})`);
+        // Tokenized: every word must hit one of the descriptive columns, so
+        // "sage lehenga" finds a sage piece filed under the Lehenga category.
+        for (const token of filter.search.split(/\s+/).filter(Boolean)) {
+          params.push(`%${token}%`);
+          const p = `$${params.length}`;
+          where.push(
+            `(p.name ILIKE ${p} OR p.description ILIKE ${p} OR p.color ILIKE ${p}
+              OR p.craft ILIKE ${p} OR p.fabric ILIKE ${p} OR p.occasion ILIKE ${p} OR c.name ILIKE ${p})`,
+          );
+        }
       }
       const whereSql = `WHERE ${where.join(' AND ')}`;
       const { rows: countRows } = await pool.query(

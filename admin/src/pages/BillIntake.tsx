@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { InvoiceActions } from '../components/InvoiceActions';
 import type { MeasurementSetState } from '../components/KeyValueEditor';
 import ShotTile, { ZoomableShot } from '../components/ShotTile';
 import { useToast } from '../components/Toast';
@@ -548,6 +549,7 @@ export default function BillIntake() {
             )}
           </dl>
           <div className="form-actions">
+            <InvoiceActions order={order} onUpdated={setOrder} />
             {order.phone && waMessage && (
               <a className="btn-buy gold fit" href={waLink(order.phone, waMessage)} target="_blank" rel="noreferrer">
                 Send WhatsApp confirmation

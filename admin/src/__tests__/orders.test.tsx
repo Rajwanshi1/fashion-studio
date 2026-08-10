@@ -6,6 +6,7 @@ describe('Orders', () => {
   it('expands a row and PATCHes the selected valid transition', async () => {
     seedAdminAuth();
     const order = makeOrder({ status: 'paid' });
+    order.items[0].measurements = 'bust 36in, waist 30in';
     const { calls } = mockFetch((url, init) => {
       if (url.endsWith('/api/admin/orders') && (init?.method ?? 'GET') === 'GET') {
         return { json: [order] };
@@ -23,9 +24,10 @@ describe('Orders', () => {
     expect(screen.getByText('Meera Kapoor')).toBeInTheDocument();
     expect(screen.getByText('₹1,84,000', { selector: 'td' })).toBeInTheDocument();
 
-    // expand → detail pane with items + address + status select
+    // expand → detail pane with items (incl. the measurements note) + address + status select
     await userEvent.click(cell);
     expect(screen.getByText('Emerald Court Gown')).toBeInTheDocument();
+    expect(screen.getByText('bust 36in, waist 30in')).toBeInTheDocument();
     expect(screen.getByText(/14 Altamount Road/)).toBeInTheDocument();
 
     const select = screen.getByLabelText('Status');
@@ -126,6 +128,7 @@ describe('Orders', () => {
           dupattaPrice: null,
           jacketPrice: null,
           imageUrl: null,
+          measurements: '',
         },
       ],
     });
@@ -191,5 +194,46 @@ describe('Orders', () => {
 
     // refreshed order lands in the table — balance cleared
     expect(await screen.findByText('—', { selector: 'td.num' })).toBeInTheDocument();
+  });
+
+  it('sends the invoice on WhatsApp from the expanded row and shows the sent state', async () => {
+    seedAdminAuth();
+    const order = makeOrder({ status: 'in_atelier', channel: 'in_store', billType: 'cash_memo' });
+    const sentAt = '2026-08-10T10:00:00.000Z';
+    const { calls } = mockFetch((url, init) => {
+      if (url.endsWith('/api/admin/orders') && (init?.method ?? 'GET') === 'GET') {
+        return { json: [order] };
+      }
+      if (url.endsWith('/api/admin/orders/o1/invoice/send') && init?.method === 'POST') {
+        return { json: { ...order, invoiceSentAt: sentAt } };
+      }
+      return undefined;
+    });
+
+    renderApp('/orders');
+    await userEvent.click(await screen.findByText('TA-2026-04817'));
+
+    expect(screen.getByRole('button', { name: 'Invoice PDF' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Send invoice on WhatsApp' }));
+
+    // the returned order replaces the row: re-send label + sent note
+    expect(await screen.findByRole('button', { name: 'Re-send invoice on WhatsApp' })).toBeInTheDocument();
+    expect(screen.getByText(/Invoice sent/, { selector: 'p' })).toBeInTheDocument();
+    expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/orders/o1/invoice/send'))).toBe(true);
+  });
+
+  it('disables the invoice send for orders without a phone', async () => {
+    seedAdminAuth();
+    mockFetch((url, init) => {
+      if (url.endsWith('/api/admin/orders') && (init?.method ?? 'GET') === 'GET') {
+        return { json: [makeOrder({ phone: '' })] };
+      }
+      return undefined;
+    });
+
+    renderApp('/orders');
+    await userEvent.click(await screen.findByText('TA-2026-04817'));
+
+    expect(screen.getByRole('button', { name: 'Send invoice on WhatsApp' })).toBeDisabled();
   });
 });

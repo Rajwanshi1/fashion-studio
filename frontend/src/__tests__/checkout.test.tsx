@@ -67,6 +67,33 @@ describe('checkout', () => {
     expect(String(confirmCall?.[1]?.body)).toContain('"outcome":"success"');
   });
 
+  it('sends measurements for noted lines and omits it for plain ones', async () => {
+    seedCart(); // line 1: plain, no note
+    const cart = JSON.parse(localStorage.getItem('ta.cart') ?? '[]');
+    cart.push({
+      ...cart[0],
+      variantId: 'v4',
+      size: 'Custom',
+      measurements: 'bust 36in, waist 30in',
+    });
+    localStorage.setItem('ta.cart', JSON.stringify(cart));
+    const fetchMock = mockFetch(checkoutRoutes);
+    renderApp('/checkout');
+
+    const user = userEvent.setup();
+    await fillForm(user);
+    await user.click(screen.getByRole('button', { name: /Place Order/ }));
+    await screen.findByRole('dialog', { name: 'Razorpay · Test Mode' });
+
+    const orderCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]).endsWith('/api/orders') && c[1]?.method === 'POST',
+    );
+    const body = JSON.parse(String(orderCall?.[1]?.body));
+    expect(body.items).toHaveLength(2);
+    expect(body.items[0]).not.toHaveProperty('measurements'); // empty note omitted
+    expect(body.items[1].measurements).toBe('bust 36in, waist 30in');
+  });
+
   it('payments disabled: 503 from checkout shows the coming-soon notice, order saved', async () => {
     seedCart();
     mockFetch((url, init) => {

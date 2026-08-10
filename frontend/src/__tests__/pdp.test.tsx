@@ -155,4 +155,73 @@ describe('PDP', () => {
     expect(screen.getByRole('button', { name: 'L' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'S' })).toBeEnabled();
   });
+
+  describe('made to measure', () => {
+    const routes = (url: string) => {
+      if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;
+      if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+      if (url.includes('/api/categories')) return [];
+      return undefined;
+    };
+    const NOTES_LABEL = 'Share measurements or notes (optional)';
+
+    it('renders the Custom variant as a chip that selects instead of navigating', async () => {
+      mockFetch(routes);
+      renderApp('/product/sage-sequin-jacket-lehenga');
+      await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
+
+      const chip = screen.getByRole('button', { name: 'Made to Measure' });
+      expect(chip.className).toBe('size custom');
+
+      const user = userEvent.setup();
+      await user.click(chip);
+      // Still on the PDP — the chip is a variant pick, not a /contact redirect.
+      expect(
+        screen.getByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' }),
+      ).toBeInTheDocument();
+      expect(chip.className).toBe('size custom active');
+    });
+
+    it('reveals the measurements panel only while Custom is selected', async () => {
+      mockFetch(routes);
+      renderApp('/product/sage-sequin-jacket-lehenga');
+      await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
+
+      expect(screen.queryByLabelText(NOTES_LABEL)).not.toBeInTheDocument();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: 'Made to Measure' }));
+      expect(screen.getByLabelText(NOTES_LABEL)).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'M' }));
+      expect(screen.queryByLabelText(NOTES_LABEL)).not.toBeInTheDocument();
+    });
+
+    it('adds the typed note to the bag line; standard sizes add an empty note', async () => {
+      mockFetch(routes);
+      renderApp('/product/sage-sequin-jacket-lehenga');
+      await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: 'Made to Measure' }));
+      await user.type(screen.getByLabelText(NOTES_LABEL), 'bust 36in, waist 30in');
+      await user.click(screen.getByRole('button', { name: 'Add to Bag' }));
+
+      let stored = JSON.parse(localStorage.getItem('ta.cart') ?? '[]');
+      expect(stored[0]).toMatchObject({
+        variantId: 'v4',
+        size: 'Custom',
+        measurements: 'bust 36in, waist 30in',
+      });
+      // The note renders on the drawer line too (the textarea also holds the text).
+      expect(
+        screen.getByText('bust 36in, waist 30in', { selector: '.line-note' }),
+      ).toBeInTheDocument();
+
+      // A standard size ignores the (still-typed) draft.
+      await user.click(screen.getByRole('button', { name: 'S' }));
+      await user.click(screen.getByRole('button', { name: 'Add to Bag' }));
+      stored = JSON.parse(localStorage.getItem('ta.cart') ?? '[]');
+      expect(stored).toHaveLength(2);
+      expect(stored[1]).toMatchObject({ variantId: 'v1', size: 'S', measurements: '' });
+    });
+  });
 });
