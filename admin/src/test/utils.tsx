@@ -100,6 +100,7 @@ export function makeOrder(overrides: Partial<Order> = {}): Order {
     carrier: null,
     awb: null,
     notes: '',
+    invoiceSentAt: null,
     advancePaid: 0,
     balance: 18400000,
     receipts: [],

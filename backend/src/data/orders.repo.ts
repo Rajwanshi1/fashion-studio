@@ -81,6 +81,8 @@ export interface OrdersRepo {
   listAdmin(filter?: AdminOrdersFilter): Promise<Order[]>;
   updateStatus(id: string, status: OrderStatus, tx?: Tx): Promise<Order | null>;
   updateDetails(id: string, patch: OrderDetailsPatch): Promise<Order | null>;
+  /** Stamps invoice_sent_at = now(); returns the fresh order (null when missing). */
+  markInvoiceSent(id: string): Promise<Order | null>;
   nextOrderNumber(tx: Tx): Promise<string>;
 }
 
@@ -141,6 +143,7 @@ function mapOrder(row: any, items: OrderItem[], receipts: Receipt[]): Order {
     carrier: row.carrier ?? null,
     awb: row.awb ?? null,
     notes: row.notes,
+    invoiceSentAt: row.invoice_sent_at ? row.invoice_sent_at.toISOString() : null,
     advancePaid,
     balance: row.total - advancePaid,
     receipts,
@@ -370,6 +373,16 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
       const { rows } = await pool.query(
         `UPDATE orders SET ${sets.join(', ')}, updated_at = now() WHERE id = $1 RETURNING id`,
         params,
+      );
+      if (!rows[0]) return null;
+      return loadOne(pool, id);
+    },
+
+    async markInvoiceSent(id) {
+      if (!UUID_RE.test(id)) return null;
+      const { rows } = await pool.query(
+        'UPDATE orders SET invoice_sent_at = now(), updated_at = now() WHERE id = $1 RETURNING id',
+        [id],
       );
       if (!rows[0]) return null;
       return loadOne(pool, id);

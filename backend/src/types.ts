@@ -194,6 +194,8 @@ export interface Order {
   /** AWB / consignment number; null until dispatched. */
   awb: string | null;
   notes: string;
+  /** When the PDF invoice was last WhatsApped to the customer; null = never. */
+  invoiceSentAt: string | null;
   /** SUM of receipts, paise. */
   advancePaid: number;
   /** total − advancePaid, paise. */
@@ -244,7 +246,8 @@ export class DomainError extends Error {
       | 'PAYMENT_ALREADY_FINAL'
       | 'NOT_CONFIGURED'
       | 'INVALID_SOURCE'
-      | 'INVALID_LINK',
+      | 'INVALID_LINK'
+      | 'DELIVERY_FAILED',
     message: string,
   ) {
     super(message);

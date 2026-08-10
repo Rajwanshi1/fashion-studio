@@ -31,11 +31,13 @@ import { createAnalyticsService } from './services/analytics.service';
 import { createAuthService, VerifyGoogleToken } from './services/auth.service';
 import { createCatalogService } from './services/catalog.service';
 import { createDocumentsService } from './services/documents.service';
+import { createInvoicesService } from './services/invoices.service';
 import type { LocalObjectStore, ObjectStore } from './services/objectstore';
 import { createOrdersService } from './services/orders.service';
 import { createPaymentsService, PaymentProvider } from './services/payments.service';
 import type { SmsProvider } from './services/sms.provider';
 import { createSocialsService } from './services/socials.service';
+import type { WhatsAppProvider } from './services/whatsapp.provider';
 import { DomainError, TxRunner } from './types';
 
 export interface AppDeps {
@@ -68,6 +70,8 @@ export interface AppDeps {
   verifyGoogleToken?: VerifyGoogleToken | null;
   /** Masked SMS seam — null/undefined while phone-OTP login is disabled (endpoints answer 503). */
   smsProvider?: SmsProvider | null;
+  /** Masked WhatsApp seam — null/undefined while invoice sends are disabled (send answers 503). */
+  whatsappProvider?: WhatsAppProvider | null;
   /** Fixed OTP for dev/e2e; only meaningful alongside the console provider. */
   otpDevCode?: string | null;
   jwtSecret: string;
@@ -80,7 +84,7 @@ export interface AppDeps {
   uploads?: { store: ObjectStore; local?: LocalObjectStore | null };
 }
 
-const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 429 | 503> = {
+const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 429 | 502 | 503> = {
   EMAIL_TAKEN: 409,
   PHONE_TAKEN: 409,
   INVALID_PHONE: 400,
@@ -96,6 +100,7 @@ const DOMAIN_STATUS: Record<DomainError['code'], 400 | 401 | 404 | 409 | 429 | 5
   NOT_CONFIGURED: 503,
   INVALID_SOURCE: 400,
   INVALID_LINK: 400,
+  DELIVERY_FAILED: 502,
 };
 
 export function createApp(deps: AppDeps) {
@@ -127,6 +132,7 @@ export function createApp(deps: AppDeps) {
     store: deps.objectStore,
     parser: deps.billParser ?? null,
   });
+  const invoices = createInvoicesService({ orders: repos.orders, whatsapp: deps.whatsappProvider ?? null });
 
   const app = new Hono<AuthEnv>();
 
@@ -200,6 +206,7 @@ export function createApp(deps: AppDeps) {
       measurements: repos.measurements,
       ordersService: orders,
       documentsService: documents,
+      invoicesService: invoices,
       objectStore: deps.objectStore,
       catalogAi: deps.catalogAi ?? null,
       jwtSecret,
