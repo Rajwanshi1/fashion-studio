@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { prefersReducedMotion } from '../lib/motion';
 
 /** Selector list mirrored from reveal.js. */
 const SEL = [
@@ -28,10 +29,7 @@ export default function Reveal({ watch }: { watch?: unknown }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     clearTimeout(orphanTimer);
-    if (
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
+    if (prefersReducedMotion()) {
       return;
     }
 

@@ -37,6 +37,7 @@ export type EventType =
   | 'wishlist_remove'
   | 'variant_select'
   | 'color_select'
+  | 'gallery_image_change'
   | 'signup'
   | 'login'
   | 'newsletter_signup'

@@ -6,6 +6,7 @@ import { displayPrice, displaySalePrice } from '../lib/format';
 import type { ProductsResponse, ProductSummary } from '../lib/types';
 import ImageSlot from './ImageSlot';
 import Price from './Price';
+import SearchIcon from './SearchIcon';
 import '../styles/nav-search.css';
 
 /** Inline search dropdown under the top bar: quick hits linking to the PDP,
@@ -77,7 +78,9 @@ export default function NavSearch({ onClose }: { onClose: () => void }) {
   return (
     <div className="nav-search" ref={rootRef}>
       <div className="nav-search-bar">
-        <span className="ic">⌕</span>
+        <span className="ic">
+          <SearchIcon />
+        </span>
         <input
           ref={inputRef}
           type="text"

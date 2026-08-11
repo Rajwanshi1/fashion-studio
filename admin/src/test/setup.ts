@@ -15,6 +15,27 @@ if (!Blob.prototype.arrayBuffer) {
   };
 }
 
+// jsdom ships neither PointerEvent nor pointer capture; the photo strip's
+// drag-and-drop needs both. Plain assignments, not spies — the afterEach
+// vi.restoreAllMocks() would strip spies between tests.
+if (typeof window.PointerEvent === 'undefined') {
+  class PointerEventPolyfill extends MouseEvent {
+    pointerId: number;
+    pointerType: string;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+      this.pointerType = init.pointerType ?? 'mouse';
+    }
+  }
+  window.PointerEvent = PointerEventPolyfill as unknown as typeof PointerEvent;
+}
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => {};
+  Element.prototype.releasePointerCapture = () => {};
+  Element.prototype.hasPointerCapture = () => false;
+}
+
 afterEach(() => {
   cleanup();
   localStorage.clear();

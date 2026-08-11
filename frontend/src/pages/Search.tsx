@@ -5,6 +5,7 @@ import { track } from '../lib/analytics';
 import type { ProductsResponse, ProductSummary } from '../lib/types';
 import Shop from '../components/Shop';
 import ProductCard from '../components/ProductCard';
+import SearchIcon from '../components/SearchIcon';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/search.css';
@@ -67,7 +68,9 @@ export default function Search() {
       <section className="search-band">
         <span className="eyebrow">Find Your Piece</span>
         <div className="search-box">
-          <span className="ic">⌕</span>
+          <span className="ic">
+            <SearchIcon />
+          </span>
           <input
             type="text"
             aria-label="Search"

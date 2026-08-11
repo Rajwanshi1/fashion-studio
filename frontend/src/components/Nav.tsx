@@ -5,6 +5,7 @@ import { useCartDrawer } from './CartDrawer';
 import MobileNav from './MobileNav';
 import NavSearch from './NavSearch';
 import BrandLogo from './BrandLogo';
+import SearchIcon from './SearchIcon';
 
 interface NavProps {
   /** Homepage variant: fixed + transparent over hero, turns solid past 60px. */
@@ -83,7 +84,7 @@ export default function Nav({ home = false }: NavProps) {
           <Link to="/account">Account</Link>
           {/* Before the bag anchor so Bag stays a:last-child for mobile-nav.css. */}
           <button className="nav-search-toggle" aria-label="Search" onClick={() => setSearchOpen(true)}>
-            ⌕
+            <SearchIcon size={18} />
           </button>
           <a className="bag" href="/cart" onClick={onBagClick}>
             Bag <span className="count">({count})</span>
