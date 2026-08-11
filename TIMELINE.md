@@ -7,6 +7,8 @@ Deep dive: `gh pr view NN` / `gh pr diff NN` (repo Rajwanshi1/fashion-studio).
 Cap: past ~150 lines, compress the oldest entries into an era-summary paragraph
 at the bottom — don't delete history.
 
+- #38 2026-08-11 Preview-first Site CMS: canvas hub, live editors, focal-point picker — admin, frontend (CSS breadcrumbs), docs
+- #37 2026-08-11 Focal point for CMS images: focusX/focusY through the three mirrors — backend, frontend, admin
 - #36 2026-08-11 PDP swipe gallery, admin drag-and-drop photo reorder, mobile nav fix — frontend, admin, backend
 - #35 2026-08-10 UAT fixes D: polish & accessibility (TA-021, 023, 028, 033-036, 039-047) — admin, backend
 - #34 2026-08-10 UAT fixes C: catalogue-linked items, unsaved-changes guard, hidden-by-default pieces — admin, backend, e2e

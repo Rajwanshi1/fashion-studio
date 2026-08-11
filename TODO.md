@@ -7,13 +7,17 @@ work as it's discovered. Refresh the PR list with `gh pr list --state open`.
 Keep this file under ~60 lines.
 
 ## Open PRs (as of 2026-08-11)
-- #38 draft Preview-first Site CMS: canvas hub, live editors, focal-point picker
-- #37 draft Focal point for CMS images: focusX/focusY through the three mirrors
 - #20 draft Admin mobile-first UX overhaul: app shell, UI kit, order pages
 - #12 draft Inline inventory editing from the products list
 - #11 draft Infra go-live follow-ups (resolver-proof delegation gate)
 
 ## Chores / known issues
+- Deploy #37+#38 (site CMS preview): backend image FIRST, then SPAs (new admin
+  PUTs focus keys an old backend 400s); post-deploy, load admin /site once —
+  the preview iframes inherit the CloudFront-only CSP (unverifiable locally).
+- Site CMS follow-up (from /code-review on #38): consider replacing the
+  hand-mirrored admin/src/preview/storefront.css with cross-package ?raw
+  imports — trades drift risk for package coupling; discussion on #38.
 - Fix the 2 e2e specs failing on main: admin-offline-orders.spec.ts,
   deliveries.spec.ts (red since before current branches — see e2e/CLAUDE.md).
 - Staging teardown (2026-08-09) leftover: one AWS secret still needs manual
