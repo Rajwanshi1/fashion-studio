@@ -5,8 +5,9 @@ import { api } from '../lib/api';
 import { moveItem } from '../lib/reorder';
 import { uploadProductImage } from '../lib/uploads';
 import { useUnsavedGuard } from '../lib/useUnsavedGuard';
-import type { AdminProduct, Category, ProductImage, Variant } from '../lib/types';
+import type { AdminProduct, Category, Variant } from '../lib/types';
 import { ThumbStrip } from '../components/ThumbStrip';
+import type { GalleryImage } from '../components/ThumbStrip';
 import ConfirmModal from '../components/ConfirmModal';
 import { useToast } from '../components/Toast';
 
@@ -41,7 +42,7 @@ interface FormState {
   discountPct: string;
   /** Admin-only; never leaves the admin API. */
   costRupees: string;
-  images: ProductImage[];
+  images: GalleryImage[];
   active: boolean;
   collection: string;
   craft: string;
@@ -106,6 +107,14 @@ function pctFromSale(priceRupees: string, saleRupees: string): string {
 function rupees(paise: number | null): string {
   return paise == null ? '' : String(paise / 100);
 }
+
+/** Gallery row with a client-side id for stable list keys — the id never
+ *  leaves the form (the save payload strips back to {url, pose}). */
+const galleryImage = (url: string, pose: string): GalleryImage => ({
+  id: crypto.randomUUID(),
+  url,
+  pose,
+});
 
 export default function ProductEdit() {
   const { id } = useParams();
@@ -173,11 +182,11 @@ export default function ProductEdit() {
         }
         // Pieces saved before galleries existed carry a lone imageUrl — show it
         // as the first (only) gallery photo so they stay editable.
-        const gallery: ProductImage[] =
+        const gallery: GalleryImage[] =
           product.images && product.images.length > 0
-            ? product.images.map((img) => ({ url: img.url, pose: img.pose ?? '' }))
+            ? product.images.map((img) => galleryImage(img.url, img.pose ?? ''))
             : product.imageUrl
-              ? [{ url: product.imageUrl, pose: '' }]
+              ? [galleryImage(product.imageUrl, '')]
               : [];
         const priceRupees = String(product.price / 100);
         const saleRupees = rupees(product.salePrice);
@@ -265,7 +274,7 @@ export default function ProductEdit() {
   const addImageUrl = () => {
     const url = urlDraft.trim();
     if (!url) return;
-    setForm((f) => ({ ...f, images: [...f.images, { url, pose: '' }] }));
+    setForm((f) => ({ ...f, images: [...f.images, galleryImage(url, '')] }));
     setUrlDraft('');
   };
 
@@ -295,7 +304,7 @@ export default function ProductEdit() {
     for (const file of files) {
       try {
         const { publicUrl, pose } = await uploadProductImage(file, form.name);
-        setForm((f) => ({ ...f, images: [...f.images, { url: publicUrl, pose: pose ?? '' }] }));
+        setForm((f) => ({ ...f, images: [...f.images, galleryImage(publicUrl, pose ?? '')] }));
         added += 1;
       } catch (err) {
         toast(err instanceof Error ? err.message : 'Photo upload failed', { tone: 'error' });

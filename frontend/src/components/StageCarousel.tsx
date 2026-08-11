@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type { ProductImage } from '../lib/types';
+import { prefersReducedMotion } from '../lib/motion';
 import ImageSlot from './ImageSlot';
 
 export type GalleryTrigger = 'swipe' | 'drag' | 'dot' | 'thumb';
@@ -15,13 +16,11 @@ interface StageCarouselProps {
   poseLabel: (img: ProductImage, i: number) => string;
 }
 
-/** Same guard as Reveal — smooth scrolling must collapse to instant jumps. */
-const prefersReduced = () =>
-  typeof window.matchMedia === 'function' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
 /** Threshold before a mousedown becomes a drag rather than a click. */
 const DRAG_THRESHOLD_PX = 5;
+
+/** Quiet time after the last scroll event before we call the scroll settled. */
+const SETTLE_MS = 200;
 
 /**
  * PDP stage as a scroll-snap carousel. Touch swipes ride the native
@@ -52,13 +51,38 @@ export default function StageCarousel({
     dragged: boolean;
   } | null>(null);
   const justDraggedRef = useRef(false);
+  const settleRef = useRef(0);
   const [dragging, setDragging] = useState(false);
 
   const clampIndex = (i: number) => Math.max(0, Math.min(images.length - 1, i));
 
+  // An interrupted smooth scroll never produces a frame at the pending index,
+  // so pendingRef cannot rely on exact arrival alone: once scrolling goes
+  // quiet, wherever the track settled is the truth — clear the gate and sync.
+  const armSettle = () => {
+    clearTimeout(settleRef.current);
+    settleRef.current = window.setTimeout(() => {
+      if (pendingRef.current == null) return;
+      pendingRef.current = null;
+      const el = trackRef.current;
+      if (!el || el.clientWidth === 0) return;
+      const i = clampIndex(Math.round(el.scrollLeft / el.clientWidth));
+      if (i !== lastEmittedRef.current) {
+        lastEmittedRef.current = i;
+        onIndexChange(i, 'swipe');
+      }
+    }, SETTLE_MS);
+  };
+
   const scrollToIndex = (el: HTMLElement, i: number) => {
     pendingRef.current = i;
-    el.scrollTo({ left: i * el.clientWidth, behavior: prefersReduced() ? 'auto' : 'smooth' });
+    el.scrollTo({
+      left: i * el.clientWidth,
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    });
+    // A same-position scrollTo fires no scroll event at all — arm the settle
+    // fallback here too so the gate can never stay closed.
+    armSettle();
   };
 
   // Parent-driven index changes (thumbnail clicks) scroll the track.
@@ -78,10 +102,17 @@ export default function StageCarousel({
     lastEmittedRef.current = 0;
   }, [images]);
 
-  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(rafRef.current);
+      clearTimeout(settleRef.current);
+    },
+    [],
+  );
 
   // Scroll → index sync, rAF-throttled (Reveal idiom).
   const onScroll = () => {
+    armSettle();
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = 0;
@@ -103,6 +134,9 @@ export default function StageCarousel({
 
   // Mouse/pen drag-to-scroll. Touch returns early — native pan + snap owns it.
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    // Any pointer contact (touch included) takes over scroll ownership from a
+    // pending programmatic scroll — never leave the sync gate armed.
+    pendingRef.current = null;
     if (e.pointerType === 'touch' || e.button !== 0) return;
     const el = trackRef.current;
     if (!el) return;

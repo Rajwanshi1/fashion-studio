@@ -136,6 +136,35 @@ describe('PDP', () => {
     );
   });
 
+  it('recovers thumb sync when a programmatic scroll is interrupted mid-flight', async () => {
+    mockFetch((url) => {
+      if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;
+      if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+      if (url.includes('/api/categories')) return [];
+      return undefined;
+    });
+
+    renderApp('/product/sage-sequin-jacket-lehenga');
+    await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
+
+    const track = getTrack();
+    const thumbs = document.getElementById('thumbs')!;
+    // Thumbnail click arms the pending gate targeting slide 3…
+    await userEvent.click(within(thumbs).getByAltText('Sage Sequin Jacket Lehenga — View 3'));
+    // …but the user swipes back before it arrives and the snap settles on slide 1.
+    track.scrollLeft = 600;
+    fireEvent.scroll(track);
+    // The settle fallback must clear the gate and sync to the real position —
+    // without it, thumbs/dots freeze on the stale index forever.
+    await waitFor(
+      () =>
+        expect(
+          within(thumbs).getByAltText('Sage Sequin Jacket Lehenga — back').className,
+        ).toContain('active'),
+      { timeout: 2000 },
+    );
+  });
+
   it('mouse drag past the threshold scrolls the track and snaps to the next slide', async () => {
     mockFetch((url) => {
       if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;

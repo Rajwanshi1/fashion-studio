@@ -23,8 +23,9 @@
   nav.has-mnav .nav-links.right a:last-child { display: inline-flex !important; }
 }
 @media (max-width: 360px) {
-  /* Logo-only sacrifice: drop the brand mark image, keep the name readable. */
-  nav.has-mnav .wordmark img { display: none; }
+  /* Logo-only sacrifice: drop the brand mark image, keep the name readable.
+     !important is required — BrandLogo sets display as an inline style. */
+  nav.has-mnav .wordmark img { display: none !important; }
 }
 
 .mnav-overlay { position: fixed; inset: 0; z-index: 340; background: var(--forest-800); color: var(--celadon-100); transform: translateX(-100%); transition: transform .4s cubic-bezier(.22,1,.36,1); visibility: hidden; display: flex; flex-direction: column; }

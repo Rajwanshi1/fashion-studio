@@ -5,6 +5,7 @@ import { useCartDrawer } from './CartDrawer';
 import MobileNav from './MobileNav';
 import NavSearch from './NavSearch';
 import BrandLogo from './BrandLogo';
+import SearchIcon from './SearchIcon';
 
 interface NavProps {
   /** Homepage variant: fixed + transparent over hero, turns solid past 60px. */
@@ -83,11 +84,7 @@ export default function Nav({ home = false }: NavProps) {
           <Link to="/account">Account</Link>
           {/* Before the bag anchor so Bag stays a:last-child for mobile-nav.css. */}
           <button className="nav-search-toggle" aria-label="Search" onClick={() => setSearchOpen(true)}>
-            {/* Inline SVG — U+2315 ⌕ has patchy glyph coverage in Jost/system fallbacks. */}
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" />
-              <line x1="16.2" y1="16.2" x2="21" y2="21" />
-            </svg>
+            <SearchIcon size={18} />
           </button>
           <a className="bag" href="/cart" onClick={onBagClick}>
             Bag <span className="count">({count})</span>

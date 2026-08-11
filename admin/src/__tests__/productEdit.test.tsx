@@ -326,8 +326,12 @@ describe('ProductEdit', () => {
     expect(screen.queryByRole('button', { name: 'Move image 1 up' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Move image 1 down' })).not.toBeInTheDocument();
 
-    // arrow keys on a focused grip move the photo one slot; focus follows it
-    screen.getByRole('button', { name: 'Reorder image 1 of 3' }).focus();
+    // a plain click must land focus on the grip (its pointerdown preventDefault
+    // would otherwise suppress focus-on-click and strand the arrow-key path)
+    await userEvent.click(screen.getByRole('button', { name: 'Reorder image 1 of 3' }));
+    expect(screen.getByRole('button', { name: 'Reorder image 1 of 3' })).toHaveFocus();
+
+    // arrow keys on the focused grip move the photo one slot; focus follows it
     await userEvent.keyboard('{ArrowRight}');
     expect(screen.getByRole('button', { name: 'Reorder image 2 of 3' })).toHaveFocus();
     expect(screen.getByText('Photo moved to position 2 of 3')).toBeInTheDocument();

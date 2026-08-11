@@ -518,7 +518,9 @@ select.inp {
 /* Gold insertion line — sits in the middle of the 0.75rem strip gap */
 .thumb.drop-before::before { content: ''; position: absolute; left: -0.45rem; top: 0; bottom: 0; width: 2px; background: var(--gold); }
 .thumb-strip.drop-end::after { content: ''; width: 2px; align-self: stretch; background: var(--gold); }
-.thumb-ghost { position: fixed; left: 0; top: 0; z-index: 300; pointer-events: none; margin: 0; opacity: 0.9; box-shadow: 0 8px 24px rgba(30, 38, 32, 0.25); }
+/* Scoped past `.thumb-strip .thumb` (0,2,0) — a bare .thumb-ghost would lose
+   `position` to it and render in-flow instead of under the cursor. */
+.thumb-strip .thumb.thumb-ghost { position: fixed; left: 0; top: 0; z-index: 300; pointer-events: none; margin: 0; opacity: 0.9; box-shadow: 0 8px 24px rgba(30, 38, 32, 0.25); }
 
 .form-card {
   background: var(--surface);

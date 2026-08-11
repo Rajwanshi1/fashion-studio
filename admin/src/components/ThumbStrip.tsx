@@ -4,10 +4,16 @@ import type { ProductImage } from '../lib/types';
 import { dropIndexForPoint, slotToIndex } from '../lib/reorder';
 import type { Rect } from '../lib/reorder';
 
-const POSE_OPTIONS = ['front', 'back', 'side', 'detail'];
+/** Mirrors the backend AI pose enum — backend/src/services/ai/prompts.ts
+ *  (catalog naming) also produces 'drape' and 'flat'. Keep in sync. */
+const POSE_OPTIONS = ['front', 'back', 'side', 'detail', 'drape', 'flat'];
+
+/** ProductImage plus a client-side identity for stable list keys.
+ *  Minted in ProductEdit form state; stripped before the API call. */
+export type GalleryImage = ProductImage & { id: string };
 
 interface ThumbStripProps {
-  images: ProductImage[];
+  images: GalleryImage[];
   /** Splice-move: item leaves `from`, lands at `to`. */
   onReorder: (from: number, to: number) => void;
   onRemove: (index: number) => void;
@@ -20,10 +26,8 @@ interface DragState {
   x: number;
   y: number;
   slot: number;
-  /** Snapshotted at drag start — never re-read images[from] mid-gesture
-      (duplicate URLs + index keys make index lookups unstable). */
+  /** Snapshotted at drag start — never re-read images[from] mid-gesture. */
   url: string;
-  pose: string;
 }
 
 /** Mutable gesture bookkeeping that must not trigger renders. */
@@ -33,7 +37,6 @@ interface Gesture {
   startX: number;
   startY: number;
   url: string;
-  pose: string;
   el: HTMLElement;
   /** Set once the 4px threshold is crossed; the grid never reflows
       mid-drag (we show an insertion line, not a live reorder), so one
@@ -58,7 +61,8 @@ export function ThumbStrip({ images, onReorder, onRemove, onPoseChange }: ThumbS
   const handleRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const pointRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef(0);
-  /** Index-keyed handles remount on reorder — focus must be restored by hand. */
+  /** Browsers blur an element when the DOM move detaches it, so focus must be
+      restored by hand after a keyboard reorder even with stable keys. */
   const focusAfterRender = useRef<number | null>(null);
 
   useEffect(() => {
@@ -91,20 +95,22 @@ export function ThumbStrip({ images, onReorder, onRemove, onPoseChange }: ThumbS
       const g = gestureRef.current;
       if (!g?.rects) return;
       const { x, y } = pointRef.current;
-      setDrag({ from: g.from, x, y, slot: dropIndexForPoint(g.rects, x, y), url: g.url, pose: g.pose });
+      setDrag({ from: g.from, x, y, slot: dropIndexForPoint(g.rects, x, y), url: g.url });
     });
   };
 
   const onHandlePointerDown = (i: number, e: ReactPointerEvent<HTMLButtonElement>) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
+    // preventDefault suppresses the browser's focus-on-click, which would make
+    // the advertised arrow-key path unreachable by mouse — focus explicitly.
+    e.currentTarget.focus();
     gestureRef.current = {
       from: i,
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
       url: images[i].url,
-      pose: images[i].pose || '',
       el: e.currentTarget,
       rects: null,
     };
@@ -163,7 +169,7 @@ export function ThumbStrip({ images, onReorder, onRemove, onPoseChange }: ThumbS
       {images.map((img, i) => (
         <figure
           className={`thumb${drag?.from === i ? ' dragging' : ''}${drag?.slot === i ? ' drop-before' : ''}`}
-          key={`${img.url}#${i}`}
+          key={img.id}
           ref={(el) => {
             thumbRefs.current[i] = el;
           }}

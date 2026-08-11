@@ -8,6 +8,7 @@
 
 .nav-search-bar { display: flex; align-items: center; gap: 0.7rem; max-width: 720px; margin: 0 auto; border-bottom: 1px solid rgba(230,215,184,0.3); padding-bottom: 0.5rem; }
 .nav-search-bar .ic { color: var(--gold-soft); font-size: 1.3rem; }
+.nav-search-bar .ic svg { display: block; }
 .nav-search-bar input { flex: 1; background: none; border: 0; outline: none; color: var(--celadon-50); font-family: var(--serif-soft); font-size: 1.05rem; }
 .nav-search-bar input::placeholder { color: var(--sage-500); }
 .nav-search-bar .x { background: none; border: 0; color: var(--celadon-100); cursor: pointer; }
