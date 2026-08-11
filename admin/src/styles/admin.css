@@ -674,7 +674,9 @@ select.inp {
     padding-bottom: 0;
   }
   .editor-preview-frame { max-height: calc(100vh - 8rem); }
-  .preview-collapse { display: none; } /* room for both — nothing to collapse */
+  /* The collapse toggle stays visible at every width: previewOpen is state,
+     and hiding its only control here would strand a preview collapsed on a
+     narrow window once the window widens past this breakpoint. */
 }
 
 /* Focal point: the uncropped photo, a crosshair where the crop will centre */

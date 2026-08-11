@@ -18,26 +18,22 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { uploadProductImage } from '../lib/uploads';
 import { useToast } from '../components/Toast';
+import ConfirmModal from '../components/ConfirmModal';
+import { useUnsavedGuard } from '../lib/useUnsavedGuard';
 import { SECTIONS, SECTION_DEFAULTS } from '../lib/siteContent';
-import type { FieldConfig, SectionConfig } from '../lib/siteContent';
+import type {
+  FieldConfig,
+  LookContent,
+  SectionConfig,
+  TrustItemContent,
+} from '../lib/siteContent';
 import DeviceToggle from '../preview/DeviceToggle';
 import SectionLivePreview from '../preview/SectionLivePreview';
 import type { PreviewDevice } from '../preview/PreviewFrame';
 
-interface TrustItem {
-  title: string;
-  detail: string;
-}
-
-interface Look {
-  imageUrl: string | null;
-  focusX: number;
-  focusY: number;
-  lookNo: string;
-  title: string;
-  copy: string;
-  ctaHref: string;
-}
+// The one shape both the form and the previews speak — siteContent.ts owns it.
+type TrustItem = TrustItemContent;
+type Look = LookContent;
 
 type FormState = Record<string, unknown>;
 
@@ -146,7 +142,8 @@ function mergeLooks(stored: unknown, fallback: unknown): Look[] {
 
 /** Effective content for one section, ready to edit. */
 function buildForm(config: SectionConfig, stored: Record<string, unknown> | null): FormState {
-  const defaults = SECTION_DEFAULTS[config.key];
+  // Widened: the form reads fields by dynamic name, off the schema config.
+  const defaults: Record<string, unknown> = SECTION_DEFAULTS[config.key];
   const form: FormState = {};
   for (const field of config.fields) {
     const value = stored?.[field.name];
@@ -349,6 +346,10 @@ function FocalPointField({
   const button = useRef<HTMLButtonElement>(null);
 
   const onPick = (e: MouseEvent<HTMLButtonElement>) => {
+    // Enter/Space synthesize a click at clientX/Y 0 (detail 0) — without this
+    // guard a keyboard activation silently snaps a saved crop to the top-left
+    // corner. Arrows are the keyboard path.
+    if (e.detail === 0) return;
     const rect = button.current?.getBoundingClientRect();
     if (!rect || rect.width === 0 || rect.height === 0) return;
     onChange(
@@ -698,11 +699,14 @@ export default function SiteSectionEdit() {
   const [previewOpen, setPreviewOpen] = useState(true);
   /** Stored lookbookCover row — the lookbook's preview renders beneath it. */
   const [coverStored, setCoverStored] = useState<Record<string, unknown> | null>(null);
+  /** The form as loaded (or last saved/reset) — edits are measured against it. */
+  const [baseline, setBaseline] = useState<string | null>(null);
 
   useEffect(() => {
     if (!config) return;
     let live = true;
     setForm(null);
+    setBaseline(null);
     setError(null);
     api<{ sections: Record<string, unknown> }>('/api/content')
       .then((data) => {
@@ -710,15 +714,20 @@ export default function SiteSectionEdit() {
         const sections = isRecord(data.sections) ? data.sections : {};
         const stored = sections[config.key];
         const cover = sections.lookbookCover;
+        const built = buildForm(config, isRecord(stored) ? stored : null);
         setCustomised(isRecord(stored));
         setCoverStored(isRecord(cover) ? cover : null);
-        setForm(buildForm(config, isRecord(stored) ? stored : null));
+        setForm(built);
+        setBaseline(JSON.stringify(built));
       })
       .catch((err: Error) => live && setError(err.message));
     return () => {
       live = false;
     };
   }, [config]);
+
+  const isDirty = baseline !== null && form !== null && JSON.stringify(form) !== baseline;
+  const guard = useUnsavedGuard(isDirty);
 
   // Unknown key (stale link, typo) — the list is the only sensible place to be.
   if (!config) return <Navigate to="/site" replace />;
@@ -774,6 +783,7 @@ export default function SiteSectionEdit() {
     setBusy(true);
     try {
       await api(`/api/admin/content/${config.key}`, { method: 'PUT', body });
+      guard.release(); // saved — nothing left to guard
       toast('Live on the site');
       navigate('/site');
     } catch (err) {
@@ -786,7 +796,9 @@ export default function SiteSectionEdit() {
     setBusy(true);
     try {
       await api(`/api/admin/content/${config.key}`, { method: 'DELETE' });
-      setForm(buildForm(config, null));
+      const built = buildForm(config, null);
+      setForm(built);
+      setBaseline(JSON.stringify(built));
       setCustomised(false);
       setConfirming(false);
       toast('Back to the built-in default');
@@ -971,6 +983,19 @@ export default function SiteSectionEdit() {
                 {uploads > 0 ? 'Uploading photo…' : busy ? 'Saving…' : 'Save'}
               </button>
             </div>
+
+            {guard.blocked && (
+              <ConfirmModal
+                title="Discard unsaved changes?"
+                confirmLabel="Discard"
+                cancelLabel="Keep editing"
+                tone="danger"
+                onConfirm={guard.confirmLeave}
+                onCancel={guard.stay}
+              >
+                <p>This section has edits that have not been saved.</p>
+              </ConfirmModal>
+            )}
           </form>
         </div>
       )}

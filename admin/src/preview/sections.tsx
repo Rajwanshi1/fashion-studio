@@ -40,7 +40,12 @@ export function PreviewImage({
     const style = focusX !== undefined || focusY !== undefined
       ? { objectPosition: `${focusX ?? 50}% ${focusY ?? 50}%` }
       : undefined;
-    return <img className={cls} src={src} alt={alt || label} style={style} />;
+    // lazy/async is a deliberate divergence from the storefront's ImageSlot:
+    // the canvas mounts ~11 full-resolution originals, nearly all below the
+    // fold, to paint scaled-down previews.
+    return (
+      <img className={cls} src={src} alt={alt || label} style={style} loading="lazy" decoding="async" />
+    );
   }
   return (
     <div className={cls} role="img" aria-label={alt || label}>
@@ -59,11 +64,8 @@ export function fillTrack(items: string[], minChars: number): string[] {
   return Array.from({ length: copies }, () => items).flat();
 }
 
-const defaultItems = (key: 'marquee' | 'ticker'): string[] =>
-  SECTION_DEFAULTS[key].items as string[];
-
-export const MARQUEE_MIN_CHARS = defaultItems('marquee').join('').length;
-export const TICKER_MIN_CHARS = defaultItems('ticker').join('').length;
+export const MARQUEE_MIN_CHARS = SECTION_DEFAULTS.marquee.items.join('').length;
+export const TICKER_MIN_CHARS = SECTION_DEFAULTS.ticker.items.join('').length;
 
 /* ---- MIRROR of frontend/src/pages/Home.tsx — HERO ---- */
 

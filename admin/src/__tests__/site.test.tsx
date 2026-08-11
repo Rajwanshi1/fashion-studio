@@ -39,6 +39,19 @@ describe('effectiveContent', () => {
     expect(site.lookbook.looks).toHaveLength(7);
     expect(site.hero.focusX).toBe(50);
   });
+
+  it('never previews a crop or a list the storefront would not render', () => {
+    // zod guards the PUT, not the column — a hand-edited row must not make the
+    // canvas diverge from the live site (or crash it)
+    const site = effectiveContent({
+      hero: { focusX: 150, focusY: '30' },
+      ticker: { items: [{ evil: true }, 'Made to order', '  '] },
+    } as Record<string, Record<string, unknown>>);
+    expect(site.hero.focusX).toBe(100); // clamped, like the storefront
+    expect(site.hero.focusY).toBe(50); // junk loses to the default
+    // the object leaf is dropped instead of being rendered as a React child
+    expect(site.ticker.items).toEqual(['Made to order']);
+  });
 });
 
 describe('site canvas', () => {

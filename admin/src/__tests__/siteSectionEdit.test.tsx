@@ -470,7 +470,8 @@ describe('site section editor', () => {
 
     pick.getBoundingClientRect = () =>
       ({ left: 0, top: 0, width: 100, height: 200, right: 100, bottom: 200, x: 0, y: 0 }) as DOMRect;
-    fireEvent.click(pick, { clientX: 42, clientY: 33 });
+    // detail: 1 = a real pointer click; keyboard-synthesized clicks carry 0
+    fireEvent.click(pick, { detail: 1, clientX: 42, clientY: 33 });
     expect(
       screen.getByRole('button', { name: /17% down/ }),
     ).toHaveAccessibleName(/42% across/);
@@ -512,7 +513,7 @@ describe('site section editor', () => {
     const pick = screen.getByRole('button', { name: /^Focal point for look 1 photo/ });
     pick.getBoundingClientRect = () =>
       ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0 }) as DOMRect;
-    fireEvent.click(pick, { clientX: 10, clientY: 90 });
+    fireEvent.click(pick, { detail: 1, clientX: 10, clientY: 90 });
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     const looks = (
@@ -523,6 +524,64 @@ describe('site section editor', () => {
     // the neighbour keeps its centred default
     expect(looks[1].focusX).toBe(50);
     expect(looks[1].focusY).toBe(50);
+  });
+
+  it('ignores keyboard-activation clicks on the focal picker', async () => {
+    seedAdminAuth();
+    stubContent({ hero: { imageUrl: 'https://cdn.example/h.jpg', focusX: 70, focusY: 40 } });
+
+    renderApp('/site/hero');
+    await screen.findByLabelText('Headline');
+
+    const pick = screen.getByRole('button', { name: /^Focal point for photo/ });
+    pick.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0 }) as DOMRect;
+    // Enter/Space synthesize a click at 0,0 with detail 0 — without the guard
+    // this would silently snap the saved 70/40 crop to the top-left corner
+    fireEvent.click(pick, { detail: 0, clientX: 0, clientY: 0 });
+    expect(pick).toHaveAccessibleName(/70% across, 40% down/);
+  });
+
+  it('holds Cancel behind a confirm while the form has unsaved edits', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({});
+
+    renderApp('/site/hero');
+    await screen.findByLabelText('Headline');
+
+    // untouched form leaves freely — no dialog
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(await screen.findByRole('heading', { name: 'Site' })).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole('link', { name: /^Edit Hero/ }));
+    const title2 = await screen.findByLabelText('Headline');
+    await userEvent.clear(title2);
+    await userEvent.type(title2, 'Half-finished thought');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // edits present — the guard holds the navigation
+    expect(await screen.findByRole('dialog', { name: 'Discard unsaved changes?' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect(screen.getByLabelText('Headline')).toHaveValue('Half-finished thought');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard' }));
+    expect(await screen.findByRole('heading', { name: 'Site' })).toBeInTheDocument();
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false);
+  });
+
+  it('collapses and restores the live preview', async () => {
+    seedAdminAuth();
+    stubContent({});
+
+    const { container } = renderApp('/site/hero');
+    await screen.findByLabelText('Headline');
+
+    expect(container.querySelector('.editor-preview-frame iframe')).not.toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Hide preview' }));
+    expect(container.querySelector('.editor-preview-frame')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Show preview' }));
+    expect(container.querySelector('.editor-preview-frame iframe')).not.toBeNull();
   });
 
   it('offers no focal control before a photo exists', async () => {

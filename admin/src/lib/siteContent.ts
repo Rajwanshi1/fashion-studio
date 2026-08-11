@@ -134,9 +134,13 @@ export const SECTIONS: SectionConfig[] = [
 /**
  * The storefront's built-in copy, character-for-character (Home.tsx,
  * Ticker.tsx, Footer.tsx, Lookbook.tsx). Editing a section starts from these,
- * and a card previews these until the section is saved.
+ * and the canvas previews these until the section is saved.
+ *
+ * `satisfies` pins every section to its EffectiveContent shape, so a field
+ * added to an interface without a default (or vice versa) is a compile error
+ * instead of an undefined that surfaces mid-preview.
  */
-export const SECTION_DEFAULTS: Record<SectionKey, Record<string, unknown>> = {
+export const SECTION_DEFAULTS = {
   hero: {
     imageUrl: null,
     focusX: 50,
@@ -221,7 +225,7 @@ export const SECTION_DEFAULTS: Record<SectionKey, Record<string, unknown>> = {
     pinterestUrl: '',
     whatsappUrl: '',
   },
-};
+} satisfies { [K in SectionKey]: EffectiveContent[K] };
 
 /* ---- Stored ← default, by the storefront's blank-loses rule ---- */
 
@@ -231,6 +235,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function mergeValue(stored: unknown, fallback: unknown): unknown {
   if (stored === undefined || stored === null) return fallback;
+  // Focal points — mirror the storefront's mergeNum (frontend content.tsx):
+  // a finite number wins, clamped to the percent range; junk loses. Without
+  // this, a hand-edited row (zod guards the PUT, not the column) previews a
+  // crop the live site would never show.
+  if (typeof fallback === 'number') {
+    return typeof stored === 'number' && Number.isFinite(stored)
+      ? Math.min(100, Math.max(0, stored))
+      : fallback;
+  }
   if (typeof stored === 'string') return stored.trim() === '' ? fallback : stored;
   if (Array.isArray(stored)) return mergeArray(stored, fallback);
   if (isRecord(stored)) return mergeRecord(stored, isRecord(fallback) ? fallback : {});
@@ -240,9 +253,14 @@ function mergeValue(stored: unknown, fallback: unknown): unknown {
 function mergeArray(stored: unknown[], fallback: unknown): unknown[] {
   const defaults = Array.isArray(fallback) ? fallback : [];
   // Lists of copy (marquee, ticker, sub-lines) are replaced wholesale — an
-  // empty or all-blank list falls back to the default.
-  if (stored.every((item) => typeof item === 'string')) {
-    const kept = (stored as string[]).filter((item) => item.trim() !== '');
+  // empty or all-blank list falls back to the default. The DEFAULT's shape
+  // picks the path, so a junk leaf in a stored row can't route an object into
+  // a string list and end up rendered as a React child.
+  const copyList = defaults.length > 0 && defaults.every((item) => typeof item === 'string');
+  if (copyList || (defaults.length === 0 && stored.every((item) => typeof item === 'string'))) {
+    const kept = stored.filter(
+      (item): item is string => typeof item === 'string' && item.trim() !== '',
+    );
     return kept.length > 0 ? kept : defaults;
   }
   // Lists of rows (trust promises, looks) merge per index over their default.

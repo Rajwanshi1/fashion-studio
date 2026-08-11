@@ -22,7 +22,11 @@ const SITE = effectiveContent({});
 describe('PreviewImage', () => {
   it('crops a photo around its focal point', () => {
     render(<PreviewImage src="/img/x.jpg" alt="Photo" focusX={30} focusY={20} />);
-    expect(screen.getByAltText('Photo')).toHaveStyle({ objectPosition: '30% 20%' });
+    const img = screen.getByAltText('Photo');
+    expect(img).toHaveStyle({ objectPosition: '30% 20%' });
+    // the canvas mounts ~11 originals, nearly all below the fold
+    expect(img).toHaveAttribute('loading', 'lazy');
+    expect(img).toHaveAttribute('decoding', 'async');
   });
 
   it('renders the labelled placeholder when there is no photo', () => {
