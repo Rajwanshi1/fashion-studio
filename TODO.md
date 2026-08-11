@@ -6,13 +6,9 @@ Keep current: remove items as they land (a merged PR moves to TIMELINE.md), add
 work as it's discovered. Refresh the PR list with `gh pr list --state open`.
 Keep this file under ~60 lines.
 
-## Open PRs (as of 2026-08-10)
-- #26 open  Fix mobile overlap: reset sticky columns when their grids collapse
-- #30 draft Site content CMS: admin-editable storefront content (mweb-first)
-- #29 draft Invoicing: PDF cash memo + WhatsApp Cloud API send — blocked on Meta
-            onboarding + phone-number decision
-- #28 draft Inline top-bar search matching fabric/craft/occasion/category
-- #27 draft Made to Measure continues the order flow (no contact-form detour)
+## Open PRs (as of 2026-08-11)
+- #38 draft Preview-first Site CMS: canvas hub, live editors, focal-point picker
+- #37 draft Focal point for CMS images: focusX/focusY through the three mirrors
 - #20 draft Admin mobile-first UX overhaul: app shell, UI kit, order pages
 - #12 draft Inline inventory editing from the products list
 - #11 draft Infra go-live follow-ups (resolver-proof delegation gate)
@@ -23,6 +19,8 @@ Keep this file under ~60 lines.
 - Staging teardown (2026-08-09) leftover: one AWS secret still needs manual
   deletion (needs Sarthak).
 - No CI — all tests run manually (see PRODUCTION-TODO P1).
+- Shop-page footer (.foot-col) overflows ~15px at 320px viewports — pre-existing
+  on prod, spotted during #36 verification.
 
 ## Go-live headline (full list: PRODUCTION-TODO.md)
 - Payments are gated/mocked in production — live Razorpay integration pending.

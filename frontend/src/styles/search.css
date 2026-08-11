@@ -6,6 +6,7 @@
 .page-search .search-box input::placeholder { color: var(--sage-500); }
 .page-search .search-box input:focus { outline: none; }
 .page-search .search-box .ic { color: var(--gold); font-size: 1.3rem; }
+.page-search .search-box .ic svg { display: block; }
 .page-search .suggest { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; margin-top: 1.8rem; }
 .page-search .suggest .lbl { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); align-self: center; margin-right: 0.4rem; }
 

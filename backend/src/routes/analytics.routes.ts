@@ -9,7 +9,8 @@ export const EVENT_TYPES = [
   'session_start', 'page_view', 'product_view', 'add_to_cart', 'remove_from_cart',
   'checkout_start', 'checkout_step', 'payment_result', 'order_placed',
   'search', 'filter_apply', 'sort_change', 'wishlist_add', 'wishlist_remove',
-  'variant_select', 'color_select', 'signup', 'login', 'newsletter_signup', 'contact_submit',
+  'variant_select', 'color_select', 'gallery_image_change', 'signup', 'login',
+  'newsletter_signup', 'contact_submit',
 ] as const;
 
 const eventSchema = z.object({
