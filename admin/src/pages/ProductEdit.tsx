@@ -2,9 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
+import { moveItem } from '../lib/reorder';
 import { uploadProductImage } from '../lib/uploads';
 import { useUnsavedGuard } from '../lib/useUnsavedGuard';
-import type { AdminProduct, Category, ProductImage, Variant } from '../lib/types';
+import type { AdminProduct, Category, Variant } from '../lib/types';
+import { ThumbStrip } from '../components/ThumbStrip';
+import type { GalleryImage } from '../components/ThumbStrip';
 import ConfirmModal from '../components/ConfirmModal';
 import { useToast } from '../components/Toast';
 
@@ -39,7 +42,7 @@ interface FormState {
   discountPct: string;
   /** Admin-only; never leaves the admin API. */
   costRupees: string;
-  images: ProductImage[];
+  images: GalleryImage[];
   active: boolean;
   collection: string;
   craft: string;
@@ -104,6 +107,14 @@ function pctFromSale(priceRupees: string, saleRupees: string): string {
 function rupees(paise: number | null): string {
   return paise == null ? '' : String(paise / 100);
 }
+
+/** Gallery row with a client-side id for stable list keys — the id never
+ *  leaves the form (the save payload strips back to {url, pose}). */
+const galleryImage = (url: string, pose: string): GalleryImage => ({
+  id: crypto.randomUUID(),
+  url,
+  pose,
+});
 
 export default function ProductEdit() {
   const { id } = useParams();
@@ -171,11 +182,11 @@ export default function ProductEdit() {
         }
         // Pieces saved before galleries existed carry a lone imageUrl — show it
         // as the first (only) gallery photo so they stay editable.
-        const gallery: ProductImage[] =
+        const gallery: GalleryImage[] =
           product.images && product.images.length > 0
-            ? product.images.map((img) => ({ url: img.url, pose: img.pose ?? '' }))
+            ? product.images.map((img) => galleryImage(img.url, img.pose ?? ''))
             : product.imageUrl
-              ? [{ url: product.imageUrl, pose: '' }]
+              ? [galleryImage(product.imageUrl, '')]
               : [];
         const priceRupees = String(product.price / 100);
         const saleRupees = rupees(product.salePrice);
@@ -248,14 +259,14 @@ export default function ProductEdit() {
   const onFabricChip = (fabric: string) =>
     setForm((f) => ({ ...f, fabric: f.fabric === fabric ? '' : fabric }));
 
-  const moveImage = (index: number, delta: -1 | 1) =>
-    setForm((f) => {
-      const to = index + delta;
-      if (to < 0 || to >= f.images.length) return f;
-      const images = [...f.images];
-      [images[index], images[to]] = [images[to], images[index]];
-      return { ...f, images };
-    });
+  const reorderImage = (from: number, to: number) =>
+    setForm((f) => ({ ...f, images: moveItem(f.images, from, to) }));
+
+  const setImagePose = (index: number, pose: string) =>
+    setForm((f) => ({
+      ...f,
+      images: f.images.map((im, x) => (x === index ? { ...im, pose } : im)),
+    }));
 
   const removeImage = (index: number) =>
     setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== index) }));
@@ -263,7 +274,7 @@ export default function ProductEdit() {
   const addImageUrl = () => {
     const url = urlDraft.trim();
     if (!url) return;
-    setForm((f) => ({ ...f, images: [...f.images, { url, pose: '' }] }));
+    setForm((f) => ({ ...f, images: [...f.images, galleryImage(url, '')] }));
     setUrlDraft('');
   };
 
@@ -293,7 +304,7 @@ export default function ProductEdit() {
     for (const file of files) {
       try {
         const { publicUrl, pose } = await uploadProductImage(file, form.name);
-        setForm((f) => ({ ...f, images: [...f.images, { url: publicUrl, pose: pose ?? '' }] }));
+        setForm((f) => ({ ...f, images: [...f.images, galleryImage(publicUrl, pose ?? '')] }));
         added += 1;
       } catch (err) {
         toast(err instanceof Error ? err.message : 'Photo upload failed', { tone: 'error' });
@@ -421,7 +432,6 @@ export default function ProductEdit() {
     : variants.map((v) => ({ key: v.id, label: v.size }));
 
   const legacyFabric = form.fabric !== '' && !FABRICS.includes(form.fabric) ? form.fabric : null;
-  const lastImage = form.images.length - 1;
 
   return (
     <>
@@ -738,70 +748,12 @@ export default function ProductEdit() {
                 : 'Add photos'}
             </button>
           </div>
-          {form.images.length > 0 && (
-            <div className="thumb-strip">
-              {form.images.map((img, i) => (
-                <figure className="thumb" key={`${img.url}#${i}`}>
-                  <img
-                    src={img.url}
-                    alt={img.pose ? `Product photo ${i + 1} — ${img.pose}` : `Product photo ${i + 1}`}
-                  />
-                  {/* The AI naming call guesses the pose; guesses must be correctable. */}
-                  <select
-                    className="inp thumb-pose"
-                    aria-label={`Pose tag for photo ${i + 1}`}
-                    value={img.pose}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        images: f.images.map((im, x) =>
-                          x === i ? { ...im, pose: e.target.value } : im,
-                        ),
-                      }))
-                    }
-                  >
-                    <option value="">No tag</option>
-                    {['front', 'back', 'side', 'detail'].map((p) => (
-                      <option key={p} value={p}>
-                        {p.charAt(0).toUpperCase() + p.slice(1)}
-                      </option>
-                    ))}
-                    {img.pose && !['front', 'back', 'side', 'detail'].includes(img.pose) && (
-                      <option value={img.pose}>{img.pose}</option>
-                    )}
-                  </select>
-                  <div className="thumb-actions">
-                    <button
-                      type="button"
-                      className="ulink"
-                      aria-label={`Move image ${i + 1} up`}
-                      disabled={i === 0}
-                      onClick={() => moveImage(i, -1)}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="ulink"
-                      aria-label={`Move image ${i + 1} down`}
-                      disabled={i === lastImage}
-                      onClick={() => moveImage(i, 1)}
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      className="ulink"
-                      aria-label={`Remove image ${i + 1}`}
-                      onClick={() => removeImage(i)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </figure>
-              ))}
-            </div>
-          )}
+          <ThumbStrip
+            images={form.images}
+            onReorder={reorderImage}
+            onRemove={removeImage}
+            onPoseChange={setImagePose}
+          />
         </div>
         <div className="field">
           <label className="lab" htmlFor="p-image">

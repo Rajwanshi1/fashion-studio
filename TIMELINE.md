@@ -7,6 +7,15 @@ Deep dive: `gh pr view NN` / `gh pr diff NN` (repo Rajwanshi1/fashion-studio).
 Cap: past ~150 lines, compress the oldest entries into an era-summary paragraph
 at the bottom — don't delete history.
 
+- #36 2026-08-11 PDP swipe gallery, admin drag-and-drop photo reorder, mobile nav fix — frontend, admin, backend
+- #35 2026-08-10 UAT fixes D: polish & accessibility (TA-021, 023, 028, 033-036, 039-047) — admin, backend
+- #34 2026-08-10 UAT fixes C: catalogue-linked items, unsaved-changes guard, hidden-by-default pieces — admin, backend, e2e
+- #33 2026-08-10 UAT fixes B: unified ledger, honest dashboard, IST dates (TA-005..007, 010, 012, 016, 017) — admin, backend, e2e
+- #32 2026-08-10 UAT fixes A: guard destructive actions, make failures visible (P0s + TA-008/009/014/015) — admin, backend, e2e, infra
+- #30 2026-08-10 Site content CMS: admin-editable storefront content (mweb-first) — backend, frontend, admin, docs
+- #28 2026-08-10 Nav: inline search bar in the top bar; tokenized multi-column search — frontend, backend
+- #27 2026-08-10 Made to Measure continues the order flow (no contact-form detour) — frontend, backend, admin, docs
+- #26 2026-08-10 Fix mobile overlap: reset sticky columns when their grids collapse — frontend
 - #25 2026-08-09 Storefront all-pieces view + social marks on login — backend, frontend
 - #24 2026-08-09 CSP: allow wasm compilation on the admin distribution — infra
 - #23 2026-08-09 Products admin: batch actions, richer columns, filters — admin, backend, e2e, infra

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { prefersReducedMotion } from '../lib/motion';
 
 /** Ambient interaction layer (React port of ambient.js):
  *  1) Magnetic CTAs — buttons lean toward the cursor.
@@ -9,7 +10,7 @@ import { useEffect } from 'react';
 export default function Ambient({ watch }: { watch?: unknown }) {
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (prefersReducedMotion()) return;
     if (!window.matchMedia('(pointer: fine)').matches) return;
 
     const cleanups: Array<() => void> = [];

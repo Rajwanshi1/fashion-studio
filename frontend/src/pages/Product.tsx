@@ -10,6 +10,8 @@ import { useCartDrawer } from '../components/CartDrawer';
 import { useToast } from '../components/Toast';
 import Shop from '../components/Shop';
 import ImageSlot from '../components/ImageSlot';
+import StageCarousel from '../components/StageCarousel';
+import type { GalleryTrigger } from '../components/StageCarousel';
 import Price from '../components/Price';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
@@ -130,6 +132,22 @@ export default function Product() {
     setThumb((t) => (t < gallery.length ? t : 0));
   }, [gallery.length]);
 
+  // Single path for every gallery move — thumbnail click, swipe, drag, dot.
+  const onGalleryChange = (i: number, trigger: GalleryTrigger) => {
+    if (i !== thumb && product) {
+      track('gallery_image_change', {
+        productId: product.id,
+        props: {
+          slug: product.slug,
+          index: i,
+          pose: gallery[i] ? poseLabel(gallery[i], i) : '',
+          trigger,
+        },
+      });
+    }
+    setThumb(i);
+  };
+
   const swatches = useMemo(() => {
     if (!product) return SWATCH_PALETTE;
     return SWATCH_PALETTE.includes(product.color)
@@ -220,7 +238,7 @@ export default function Product() {
                   src={img.url}
                   label={poseLabel(img, i)}
                   alt={`${product.name} — ${poseLabel(img, i)}`}
-                  onClick={() => setThumb(i)}
+                  onClick={() => onGalleryChange(i, 'thumb')}
                 />
               ))
             ) : (
@@ -234,10 +252,12 @@ export default function Product() {
               {product.flag === 'sale' && <span>Sale</span>}
               <span>Made to Order</span>
             </div>
-            <ImageSlot
-              src={gallery[thumb]?.url ?? null}
-              label={product.name}
-              alt={gallery[thumb] ? `${product.name} — ${poseLabel(gallery[thumb], thumb)}` : product.name}
+            <StageCarousel
+              images={gallery}
+              index={thumb}
+              productName={product.name}
+              poseLabel={poseLabel}
+              onIndexChange={onGalleryChange}
             />
           </div>
         </div>
