@@ -28,6 +28,8 @@ interface TrustItem {
 
 interface Look {
   imageUrl: string | null;
+  focusX: number;
+  focusY: number;
   lookNo: string;
   title: string;
   copy: string;
@@ -90,6 +92,17 @@ function mergeImg(stored: unknown, fallback: unknown): string | null {
   return typeof fallback === 'string' && fallback.trim() !== '' ? fallback : null;
 }
 
+/** An integer percent for object-position — whatever arrives, 0–100 leaves. */
+function clampPct(n: number): number {
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+/** Focal points: a finite stored number wins (clamped); junk falls back to 50. */
+function mergeNum(stored: unknown, fallback: unknown): number {
+  if (typeof stored === 'number' && Number.isFinite(stored)) return clampPct(stored);
+  return typeof fallback === 'number' ? fallback : 50;
+}
+
 /** Lists are replaced wholesale — an all-blank list falls back to the default. */
 function mergeList(stored: unknown, fallback: unknown): string[] {
   const defaults = Array.isArray(fallback)
@@ -118,6 +131,8 @@ function mergeLooks(stored: unknown, fallback: unknown): Look[] {
     const def = isRecord(defaults[i]) ? defaults[i] : {};
     return {
       imageUrl: mergeImg(row.imageUrl, def.imageUrl),
+      focusX: mergeNum(row.focusX, def.focusX),
+      focusY: mergeNum(row.focusY, def.focusY),
       lookNo: mergeStr(row.lookNo, def.lookNo),
       title: mergeStr(row.title, def.title),
       copy: mergeStr(row.copy, def.copy),
@@ -136,6 +151,11 @@ function buildForm(config: SectionConfig, stored: Record<string, unknown> | null
     switch (field.type) {
       case 'image':
         form[field.name] = mergeImg(value, fallback);
+        // The photo's focal point rides beside it as sibling form keys.
+        if (field.focus) {
+          form.focusX = mergeNum(stored?.focusX, defaults.focusX);
+          form.focusY = mergeNum(stored?.focusY, defaults.focusY);
+        }
         break;
       case 'stringList':
         form[field.name] = mergeList(value, fallback);
@@ -170,6 +190,11 @@ const trustOf = (form: FormState, name: string): TrustItem[] =>
 const looksOf = (form: FormState, name: string): Look[] =>
   Array.isArray(form[name]) ? (form[name] as Look[]) : [];
 
+const pctOf = (form: FormState, name: string): number => {
+  const value = form[name];
+  return typeof value === 'number' && Number.isFinite(value) ? clampPct(value) : 50;
+};
+
 /** The full section body — only the configured field names, strictly shaped. */
 function payload(config: SectionConfig, form: FormState): Record<string, unknown> {
   const body: Record<string, unknown> = {};
@@ -178,6 +203,10 @@ function payload(config: SectionConfig, form: FormState): Record<string, unknown
     switch (field.type) {
       case 'image':
         body[field.name] = imgOf(form, field.name);
+        if (field.focus) {
+          body.focusX = pctOf(form, 'focusX');
+          body.focusY = pctOf(form, 'focusY');
+        }
         break;
       case 'stringList':
         // Blank rows are a UI convenience; the schema rejects empty strings.
@@ -194,8 +223,10 @@ function payload(config: SectionConfig, form: FormState): Record<string, unknown
       case 'looks':
         body[field.name] = looksOf(form, field.name)
           .slice(0, LOOK_COUNT)
-          .map(({ imageUrl, lookNo, title, copy, ctaHref }) => ({
+          .map(({ imageUrl, focusX, focusY, lookNo, title, copy, ctaHref }) => ({
             imageUrl,
+            focusX: clampPct(focusX),
+            focusY: clampPct(focusY),
             lookNo,
             title,
             copy,

@@ -77,11 +77,33 @@ describe('mergeContent', () => {
     expect(merged.lookbook.looks).toHaveLength(DEFAULT_CONTENT.lookbook.looks.length + 1);
     expect(merged.lookbook.looks[DEFAULT_CONTENT.lookbook.looks.length]).toEqual({
       imageUrl: '/img/look-08.jpg',
+      focusX: 50,
+      focusY: 50,
       lookNo: 'Look 08',
       title: 'One more.',
       copy: '',
       ctaHref: '',
     });
+  });
+
+  it('keeps focal points inside 0–100 and falls back on junk', () => {
+    expect(mergeContent({ hero: { focusX: 30, focusY: 70 } }).hero).toMatchObject({
+      focusX: 30,
+      focusY: 70,
+    });
+    // Absent means centred — the object-fit: cover default the site always had.
+    expect(mergeContent({ hero: { title: 'x' } }).hero).toMatchObject({ focusX: 50, focusY: 50 });
+    // Junk from an old or hand-edited row must never reach object-position.
+    expect(mergeContent({ hero: { focusX: '30' } }).hero.focusX).toBe(50);
+    expect(mergeContent({ hero: { focusX: NaN } }).hero.focusX).toBe(50);
+    expect(mergeContent({ hero: { focusX: 150, focusY: -20 } }).hero).toMatchObject({
+      focusX: 100,
+      focusY: 0,
+    });
+    // Per-look focus merges by index like every other look field.
+    const merged = mergeContent({ lookbook: { looks: [{ focusX: 10, focusY: 90 }] } });
+    expect(merged.lookbook.looks[0]).toMatchObject({ focusX: 10, focusY: 90 });
+    expect(merged.lookbook.looks[1]).toMatchObject({ focusX: 50, focusY: 50 });
   });
 
   it('never mutates DEFAULT_CONTENT', () => {
@@ -158,6 +180,18 @@ describe('alt text on content-driven photos', () => {
     // No title of its own — the slot label stands in rather than nothing.
     expect(screen.getByAltText('Look 02')).toBeInTheDocument();
     expect(screen.queryByAltText(/full bleed editorial/)).not.toBeInTheDocument();
+  });
+
+  it('crops content photos around their focal point', async () => {
+    renderRoute('/', {
+      hero: { imageUrl: '/img/hero.jpg', title: 'A New Season', focusX: 30, focusY: 20 },
+      featured: { imageUrl: '/img/feature.jpg', title: 'Rang' },
+    });
+
+    // The saved focal point steers the object-fit: cover crop…
+    expect(await screen.findByAltText('A New Season')).toHaveStyle({ objectPosition: '30% 20%' });
+    // …and a photo saved before focal points existed stays centred.
+    expect(screen.getByAltText('Rang')).toHaveStyle({ objectPosition: '50% 50%' });
   });
 
   it('names the home hero and featured photos by their headlines', async () => {

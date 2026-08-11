@@ -56,9 +56,12 @@ describe('site section editor', () => {
 
     const put = calls.find((c) => c.method === 'PUT');
     expect(put?.url).toMatch(/\/api\/admin\/content\/hero$/);
-    // the whole section travels, not just the edited field
+    // the whole section travels, not just the edited field — including the
+    // focal point, which a photo-less default carries as centred 50/50
     expect(put?.body).toEqual({
       imageUrl: null,
+      focusX: 50,
+      focusY: 50,
       seasonLabel: 'Spring / Summer 2026',
       eyebrow: 'The Verdant Edit · Indo-Western Couture',
       title: 'The Verdant Season',
@@ -256,6 +259,25 @@ describe('site section editor', () => {
     expect((put?.body as { imageUrl: string | null }).imageUrl).toBeNull();
   });
 
+  it('carries a stored focal point through an unrelated save', async () => {
+    seedAdminAuth();
+    const { calls } = stubContent({
+      hero: { imageUrl: 'https://cdn.example/h.jpg', focusX: 30, focusY: 70 },
+      lookbook: { looks: [{ imageUrl: 'https://cdn.example/l.jpg', focusX: 10, focusY: 90 }] },
+    });
+
+    renderApp('/site/hero');
+    const title = await screen.findByLabelText('Headline');
+    await userEvent.clear(title);
+    await userEvent.type(title, 'New season');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    // editing the headline must not recentre the photo's saved crop
+    const hero = calls.find((c) => c.method === 'PUT')?.body as { focusX: number; focusY: number };
+    expect(hero.focusX).toBe(30);
+    expect(hero.focusY).toBe(70);
+  });
+
   it('keeps exactly three trust promises and saves them whole', async () => {
     seedAdminAuth();
     const { calls } = stubContent({});
@@ -306,7 +328,7 @@ describe('site section editor', () => {
     };
     expect(body.looks).toHaveLength(7);
     expect(Object.keys(body.looks[0]).sort()).toEqual(
-      ['copy', 'ctaHref', 'imageUrl', 'lookNo', 'title'].sort(),
+      ['copy', 'ctaHref', 'focusX', 'focusY', 'imageUrl', 'lookNo', 'title'].sort(),
     );
     expect(body.looks[1].title).toBe('Ivory hour.');
     expect(body.quote).toBe(

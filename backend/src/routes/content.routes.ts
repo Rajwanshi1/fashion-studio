@@ -29,20 +29,28 @@ const url = z
   .max(500)
   .refine((v) => v === '' || /^(https?:\/\/|\/(?![\/\\])|mailto:|tel:)/i.test(v), 'Must be a link (https://…, /path, mailto: or tel:)');
 const image = url.nullable();
+// Focal point of an image, percent of the source photo (object-position on the
+// storefront). Absent means 50/50 — the object-fit: cover default, centred.
+const pct = z.number().int().min(0).max(100);
 
-const look = z.object({ imageUrl: image, lookNo: str, title: str, copy, ctaHref: url }).partial().strict();
+const look = z.object({
+  imageUrl: image, focusX: pct, focusY: pct, lookNo: str, title: str, copy, ctaHref: url,
+}).partial().strict();
 
 export const SECTION_SCHEMAS = {
   hero: z.object({
-    imageUrl: image, seasonLabel: str, eyebrow: str, title: str, titleItalic: str,
-    ctaPrimary: str, ctaSecondary: str, edgeLeft: str, edgeRight: str,
+    imageUrl: image, focusX: pct, focusY: pct, seasonLabel: str, eyebrow: str, title: str,
+    titleItalic: str, ctaPrimary: str, ctaSecondary: str, edgeLeft: str, edgeRight: str,
   }).partial().strict(),
   featured: z.object({
-    imageUrl: image, eyebrow: str, title: str, titleEm: str, copy, ctaLabel: str, ctaHref: url,
+    imageUrl: image, focusX: pct, focusY: pct, eyebrow: str, title: str, titleEm: str,
+    copy, ctaLabel: str, ctaHref: url,
   }).partial().strict(),
   marquee: z.object({ items: z.array(str.min(1)).max(8) }).strict(),
   trust: z.object({ items: z.array(z.object({ title: str, detail: str }).strict()).length(3) }).strict(),
-  lookbookCover: z.object({ imageUrl: image, masthead: str, subItems: z.array(str).max(4) }).partial().strict(),
+  lookbookCover: z.object({
+    imageUrl: image, focusX: pct, focusY: pct, masthead: str, subItems: z.array(str).max(4),
+  }).partial().strict(),
   lookbook: z.object({ looks: z.array(look).max(7), quote: copy, quoteCite: str }).partial().strict(),
   ticker: z.object({ items: z.array(str.min(1)).max(8) }).strict(),
   footer: z.object({ blurb: copy, instagramUrl: url, pinterestUrl: url, whatsappUrl: url }).partial().strict(),

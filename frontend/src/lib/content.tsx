@@ -13,6 +13,9 @@ export interface TrustItem {
 
 export interface Look {
   imageUrl: string | null;
+  // Focal point, percent of the source photo — object-position for the crop.
+  focusX: number;
+  focusY: number;
   lookNo: string;
   title: string;
   copy: string;
@@ -22,6 +25,8 @@ export interface Look {
 export interface SiteContent {
   hero: {
     imageUrl: string | null;
+    focusX: number;
+    focusY: number;
     seasonLabel: string;
     eyebrow: string;
     title: string;
@@ -33,6 +38,8 @@ export interface SiteContent {
   };
   featured: {
     imageUrl: string | null;
+    focusX: number;
+    focusY: number;
     eyebrow: string;
     title: string;
     titleEm: string;
@@ -42,7 +49,13 @@ export interface SiteContent {
   };
   marquee: { items: string[] };
   trust: { items: TrustItem[] };
-  lookbookCover: { imageUrl: string | null; masthead: string; subItems: string[] };
+  lookbookCover: {
+    imageUrl: string | null;
+    focusX: number;
+    focusY: number;
+    masthead: string;
+    subItems: string[];
+  };
   lookbook: { looks: Look[]; quote: string; quoteCite: string };
   ticker: { items: string[] };
   footer: { blurb: string; instagramUrl: string; pinterestUrl: string; whatsappUrl: string };
@@ -54,6 +67,8 @@ export interface SiteContent {
 export const DEFAULT_CONTENT: SiteContent = {
   hero: {
     imageUrl: null,
+    focusX: 50,
+    focusY: 50,
     seasonLabel: 'Spring / Summer 2026',
     eyebrow: 'The Verdant Edit · Indo-Western Couture',
     title: 'Tanvi Agnihotry',
@@ -65,6 +80,8 @@ export const DEFAULT_CONTENT: SiteContent = {
   },
   featured: {
     imageUrl: null,
+    focusX: 50,
+    focusY: 50,
     eyebrow: 'The New Collection',
     title: 'Rang',
     titleEm: 'Mehfil',
@@ -85,6 +102,8 @@ export const DEFAULT_CONTENT: SiteContent = {
   },
   lookbookCover: {
     imageUrl: null,
+    focusX: 50,
+    focusY: 50,
     masthead: 'The Edit',
     subItems: ['Volume 01', 'Spring 2026', '32 Looks'],
   },
@@ -93,23 +112,27 @@ export const DEFAULT_CONTENT: SiteContent = {
     looks: [
       {
         imageUrl: null,
+        focusX: 50,
+        focusY: 50,
         lookNo: 'Look 01',
         title: 'The garden, after rain.',
         copy: 'Sage sequin jacket lehenga with a hand-draped dupatta. Structured shoulder, fluid hem.',
         ctaHref: '/collection/lehenga',
       },
-      { imageUrl: null, lookNo: 'Look 02', title: '', copy: '', ctaHref: '' },
-      { imageUrl: null, lookNo: 'Look 03', title: '', copy: '', ctaHref: '' },
+      { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 02', title: '', copy: '', ctaHref: '' },
+      { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 03', title: '', copy: '', ctaHref: '' },
       {
         imageUrl: null,
+        focusX: 50,
+        focusY: 50,
         lookNo: 'Look 04',
         title: 'Moss & mirror.',
         copy: 'A tissue draped gown caught with mirror-work — light moving as you do.',
         ctaHref: '/collection/kaftan',
       },
-      { imageUrl: null, lookNo: 'Look 05', title: '', copy: '', ctaHref: '' },
-      { imageUrl: null, lookNo: 'Look 06', title: '', copy: '', ctaHref: '' },
-      { imageUrl: null, lookNo: 'Look 07', title: '', copy: '', ctaHref: '' },
+      { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 05', title: '', copy: '', ctaHref: '' },
+      { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 06', title: '', copy: '', ctaHref: '' },
+      { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 07', title: '', copy: '', ctaHref: '' },
     ],
     quote: '"She does not choose between heritage and the present. She wears both, at once."',
     quoteCite: '— The Verdant Edit',
@@ -132,7 +155,9 @@ export const DEFAULT_CONTENT: SiteContent = {
   },
 };
 
-const EMPTY_LOOK: Look = { imageUrl: null, lookNo: '', title: '', copy: '', ctaHref: '' };
+const EMPTY_LOOK: Look = {
+  imageUrl: null, focusX: 50, focusY: 50, lookNo: '', title: '', copy: '', ctaHref: '',
+};
 
 /* ---- Scrolling tracks (ticker, marquee) ---- */
 
@@ -173,6 +198,11 @@ function mergeImg(v: unknown, d: string | null): string | null {
   return typeof v === 'string' && v.trim() !== '' ? v : d;
 }
 
+/** Focal points: a finite number clamped to 0–100 wins; junk falls back. */
+function mergeNum(v: unknown, d: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.min(100, Math.max(0, v)) : d;
+}
+
 /** String lists are replaced wholesale — a non-empty list wins, anything else
  *  (missing, empty, not an array, all-blank) falls back to the default. */
 function mergeStrList(v: unknown, d: string[]): string[] {
@@ -190,6 +220,8 @@ function mergeLook(v: unknown, d: Look): Look {
   const o = obj(v);
   return {
     imageUrl: mergeImg(o.imageUrl, d.imageUrl),
+    focusX: mergeNum(o.focusX, d.focusX),
+    focusY: mergeNum(o.focusY, d.focusY),
     lookNo: mergeStr(o.lookNo, d.lookNo),
     title: mergeStr(o.title, d.title),
     copy: mergeStr(o.copy, d.copy),
@@ -233,6 +265,8 @@ export function mergeContent(sections: Record<string, unknown>): SiteContent {
   return {
     hero: {
       imageUrl: mergeImg(hero.imageUrl, d.hero.imageUrl),
+      focusX: mergeNum(hero.focusX, d.hero.focusX),
+      focusY: mergeNum(hero.focusY, d.hero.focusY),
       seasonLabel: mergeStr(hero.seasonLabel, d.hero.seasonLabel),
       eyebrow: mergeStr(hero.eyebrow, d.hero.eyebrow),
       title: mergeStr(hero.title, d.hero.title),
@@ -244,6 +278,8 @@ export function mergeContent(sections: Record<string, unknown>): SiteContent {
     },
     featured: {
       imageUrl: mergeImg(featured.imageUrl, d.featured.imageUrl),
+      focusX: mergeNum(featured.focusX, d.featured.focusX),
+      focusY: mergeNum(featured.focusY, d.featured.focusY),
       eyebrow: mergeStr(featured.eyebrow, d.featured.eyebrow),
       title: mergeStr(featured.title, d.featured.title),
       titleEm: mergeStr(featured.titleEm, d.featured.titleEm),
@@ -255,6 +291,8 @@ export function mergeContent(sections: Record<string, unknown>): SiteContent {
     trust: { items: mergeTrustItems(trust.items, d.trust.items) },
     lookbookCover: {
       imageUrl: mergeImg(lookbookCover.imageUrl, d.lookbookCover.imageUrl),
+      focusX: mergeNum(lookbookCover.focusX, d.lookbookCover.focusX),
+      focusY: mergeNum(lookbookCover.focusY, d.lookbookCover.focusY),
       masthead: mergeStr(lookbookCover.masthead, d.lookbookCover.masthead),
       subItems: mergeStrList(lookbookCover.subItems, d.lookbookCover.subItems),
     },
