@@ -9,6 +9,8 @@ vi.mock('../lib/uploads', () => ({
   uploadProductImage: vi.fn(async () => ({
     publicUrl: 'https://fashion-uploads.s3.ap-south-1.amazonaws.com/products/2026/07/abc.jpg',
     pose: 'front',
+    color: 'Emerald',
+    colorHex: '#0f6b4f',
   })),
 }));
 
@@ -68,7 +70,7 @@ function renderEdit(product: ProductFixture) {
 }
 
 interface PutBody {
-  images: { url: string; pose: string }[];
+  images: { url: string; pose: string; color: string; colorHex: string }[];
   fabric: string;
   costPrice: number | null;
   salePrice: number | null;
@@ -129,7 +131,7 @@ describe('ProductEdit', () => {
       flag: string | null;
       salePrice: number | null;
       costPrice: number | null;
-      images: { url: string; pose: string }[];
+      images: { url: string; pose: string; color: string; colorHex: string }[];
       active: boolean;
       collection: string;
       craft: string;
@@ -149,7 +151,9 @@ describe('ProductEdit', () => {
     expect(body.flag).toBeNull();
     expect(body.salePrice).toBeNull();
     expect(body.costPrice).toBe(500000);
-    expect(body.images).toEqual([{ url: 'https://cdn.example/pasted.jpg', pose: '' }]);
+    expect(body.images).toEqual([
+      { url: 'https://cdn.example/pasted.jpg', pose: '', color: '', colorHex: '' },
+    ]);
     // New pieces start hidden (TA-004) — publishing is an explicit choice.
     expect(body.active).toBe(false);
     expect(body.collection).toBe('The Verdant Edit');
@@ -340,9 +344,9 @@ describe('ProductEdit', () => {
       makeProduct({
         imageUrl: 'https://cdn.example/a.jpg',
         images: [
-          { url: 'https://cdn.example/a.jpg', pose: 'front' },
-          { url: 'https://cdn.example/b.jpg', pose: 'back' },
-          { url: 'https://cdn.example/c.jpg', pose: '' },
+          { url: 'https://cdn.example/a.jpg', pose: 'front', color: 'Emerald', colorHex: '#0f6b4f' },
+          { url: 'https://cdn.example/b.jpg', pose: 'back', color: 'Emerald', colorHex: '#0f6b4f' },
+          { url: 'https://cdn.example/c.jpg', pose: '', color: '', colorHex: '' },
         ],
       }),
     );
@@ -367,8 +371,8 @@ describe('ProductEdit', () => {
 
     const body = calls.find((c) => c.method === 'PUT')?.body as PutBody;
     expect(body.images).toEqual([
-      { url: 'https://cdn.example/b.jpg', pose: 'back' },
-      { url: 'https://cdn.example/a.jpg', pose: 'front' },
+      { url: 'https://cdn.example/b.jpg', pose: 'back', color: 'Emerald', colorHex: '#0f6b4f' },
+      { url: 'https://cdn.example/a.jpg', pose: 'front', color: 'Emerald', colorHex: '#0f6b4f' },
     ]);
   });
 
@@ -380,7 +384,9 @@ describe('ProductEdit', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save Piece' }));
 
     const body = calls.find((c) => c.method === 'PUT')?.body as PutBody;
-    expect(body.images).toEqual([{ url: 'https://cdn.example/legacy.jpg', pose: '' }]);
+    expect(body.images).toEqual([
+      { url: 'https://cdn.example/legacy.jpg', pose: '', color: '', colorHex: '' },
+    ]);
   });
 
   it('uploads picked photos one at a time and appends them to the gallery', async () => {
@@ -412,9 +418,30 @@ describe('ProductEdit', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Add Piece' }));
     const body = calls.find((c) => c.method === 'POST')?.body as PutBody;
+    // the AI-read colour rides along from the upload into the saved gallery
     expect(body.images).toEqual([
-      { url: UPLOADED_URL, pose: 'front' },
-      { url: UPLOADED_URL, pose: 'front' },
+      { url: UPLOADED_URL, pose: 'front', color: 'Emerald', colorHex: '#0f6b4f' },
+      { url: UPLOADED_URL, pose: 'front', color: 'Emerald', colorHex: '#0f6b4f' },
+    ]);
+  });
+
+  it('lets the AI-read photo colour be corrected, keeping the swatch hex', async () => {
+    seedAdminAuth();
+    const calls = renderEdit(
+      makeProduct({
+        images: [{ url: 'https://cdn.example/a.jpg', pose: 'front', color: 'Sage', colorHex: '#9caf88' }],
+      }),
+    );
+
+    const colour = await screen.findByLabelText('Colour of photo 1');
+    expect(colour).toHaveValue('Sage');
+    await userEvent.clear(colour);
+    await userEvent.type(colour, 'Moss');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Piece' }));
+
+    const body = calls.find((c) => c.method === 'PUT')?.body as PutBody;
+    expect(body.images).toEqual([
+      { url: 'https://cdn.example/a.jpg', pose: 'front', color: 'Moss', colorHex: '#9caf88' },
     ]);
   });
 });

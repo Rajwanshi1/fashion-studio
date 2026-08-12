@@ -326,6 +326,98 @@ describe('PDP', () => {
     });
   });
 
+  describe('photo colour swatches', () => {
+    const setRoutes = (url: string) => {
+      if (url.includes('/api/products/fern-zardozi-set-fern')) return DETAIL_SET;
+      if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+      if (url.includes('/api/categories')) return [];
+      return undefined;
+    };
+    /** Inline background, tolerant of jsdom's hex → rgb() normalization. */
+    const bg = (el: HTMLElement) => el.getAttribute('style') ?? '';
+
+    it('one swatch per distinct photo colour, gallery order, filled with the photo hex', async () => {
+      mockFetch(setRoutes);
+      renderApp('/product/fern-zardozi-set-fern');
+      await screen.findByRole('heading', { level: 1, name: 'Fern Zardozi Set' });
+
+      const swatches = within(document.getElementById('swatches')!).getAllByRole('button');
+      // Photos 0-1 share Sage (dedup), photo 3 is colourless (skipped).
+      expect(swatches.map((s) => s.getAttribute('aria-label'))).toEqual(['Sage', 'Antique Gold']);
+      expect(bg(swatches[0])).toMatch(/#9cb6aa|rgb\(156,\s*182,\s*170\)/i);
+      expect(bg(swatches[1])).toMatch(/#c9a55a|rgb\(201,\s*165,\s*90\)/i);
+      // The first photo's colour is pre-selected.
+      expect(swatches[0].className).toContain('active');
+      expect(document.getElementById('colorName')).toHaveTextContent('Sage');
+    });
+
+    it('clicking a swatch selects the colour, jumps the carousel, and the bag snapshots it', async () => {
+      mockFetch(setRoutes);
+      renderApp('/product/fern-zardozi-set-fern');
+      await screen.findByRole('heading', { level: 1, name: 'Fern Zardozi Set' });
+
+      const track = getTrack();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: 'Antique Gold' }));
+
+      // Label + active state follow the pick…
+      expect(document.getElementById('colorName')).toHaveTextContent('Antique Gold');
+      expect(screen.getByRole('button', { name: 'Antique Gold' }).className).toContain('active');
+      // …and the stage jumps to that colour's first photo (index 2).
+      expect(track.scrollLeft).toBe(1200);
+      const thumbs = document.getElementById('thumbs')!;
+      await waitFor(() =>
+        expect(within(thumbs).getByAltText('Fern Zardozi Set — drape').className).toContain(
+          'active',
+        ),
+      );
+
+      // The cart line carries the picked photo colour.
+      await user.click(screen.getByRole('button', { name: 'Add to Bag' }));
+      const stored = JSON.parse(localStorage.getItem('ta.cart') ?? '[]');
+      expect(stored[0]).toMatchObject({ color: 'Antique Gold' });
+    });
+
+    it('falls back to one swatch named after the catalogue colour when no photo carries one', async () => {
+      mockFetch((url) => {
+        if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;
+        if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+        if (url.includes('/api/categories')) return [];
+        return undefined;
+      });
+      renderApp('/product/sage-sequin-jacket-lehenga');
+      await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
+
+      const swatches = within(document.getElementById('swatches')!).getAllByRole('button');
+      expect(swatches).toHaveLength(1);
+      expect(swatches[0]).toHaveAttribute('aria-label', 'Sage');
+      // 'Sage' resolves through the keyword map → green family fill, not c-default.
+      expect(bg(swatches[0])).toMatch(/#4a6741|rgb\(74,\s*103,\s*65\)/i);
+      expect(swatches[0].className).not.toContain('c-default');
+      expect(document.getElementById('colorName')).toHaveTextContent('Sage');
+    });
+
+    it('a photo colour outside the keyword map (and without a hex) gets the default class', async () => {
+      const detail = {
+        ...DETAIL_SET,
+        imageUrl: '/img/monsoon.jpg',
+        images: [{ url: '/img/monsoon.jpg', pose: '', color: 'Monsoon Sky', colorHex: '' }],
+      };
+      mockFetch((url) => {
+        if (url.includes('/api/products/fern-zardozi-set-fern')) return detail;
+        if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+        if (url.includes('/api/categories')) return [];
+        return undefined;
+      });
+      renderApp('/product/fern-zardozi-set-fern');
+      await screen.findByRole('heading', { level: 1, name: 'Fern Zardozi Set' });
+
+      const swatch = screen.getByRole('button', { name: 'Monsoon Sky' });
+      expect(swatch.className).toContain('c-default');
+      expect(bg(swatch)).toBe('');
+    });
+  });
+
   it('disables out-of-stock sizes', async () => {
     mockFetch((url) => {
       if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;

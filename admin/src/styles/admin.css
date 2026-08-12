@@ -1279,5 +1279,16 @@ select.inp {
 /* Editable pose tag under each gallery thumb */
 .thumb-pose { margin-top: 0.3rem; font-size: 0.72rem; padding: 0.25rem 0.4rem; width: 100%; }
 
+/* Editable colour below the pose tag; the dot previews the AI-read colorHex */
+.thumb-color-row { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.3rem; }
+.thumb-swatch {
+  flex: none;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+}
+.thumb-color { font-size: 0.72rem; padding: 0.25rem 0.4rem; width: 100%; min-width: 0; }
+
 /* Validation summaries list every problem at once */
 .form-err p { margin: 0.15rem 0; }

@@ -24,7 +24,12 @@ const P1 = {
   salePrice: null,
   costPrice: null,
   // Five frames on purpose: the table shows the first three.
-  images: [1, 2, 3, 4, 5].map((n) => ({ url: `https://cdn.test/emerald-${n}.jpg`, pose: '' })),
+  images: [1, 2, 3, 4, 5].map((n) => ({
+    url: `https://cdn.test/emerald-${n}.jpg`,
+    pose: '',
+    color: '',
+    colorHex: '',
+  })),
   active: true,
   variants: [
     { id: 'v1', productId: 'p1', size: 'S', stock: 3 },

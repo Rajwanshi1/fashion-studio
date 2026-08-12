@@ -35,6 +35,9 @@ export interface CatalogAi {
  * colour words: 'multi' outranks everything (a printed piece is multi-colour
  * whatever else is named), and pink is checked before red so "Cherry Pink" maps
  * to pink rather than red.
+ *
+ * Hand-mirrored into frontend/src/lib/colors.ts (PDP swatch-fill fallback) —
+ * keep the two in sync.
  */
 const COLOR_KEYWORDS: ReadonlyArray<readonly [ColorFamily, readonly string[]]> = [
   ['multi', ['multi', 'multicolor', 'multi-color', 'ombre', 'print', 'printed']],

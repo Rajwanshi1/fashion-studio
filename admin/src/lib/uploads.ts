@@ -142,6 +142,10 @@ export interface ProductImagePresign {
   publicUrl: string;
   /** Pose Claude read off the photo ('front', 'drape', …); null when unnamed. */
   pose?: string | null;
+  /** Colour name Claude read off the photo ("Maroon"); null when unnamed. */
+  color?: string | null;
+  /** '#rrggbb' swatch fill for that colour; null when unnamed. */
+  colorHex?: string | null;
 }
 
 /**
@@ -167,14 +171,14 @@ function base64(bytes: Uint8Array): string {
  *
  * Passing `productName` opts into AI naming: the photo travels along as base64
  * so the server can name the object after what it shows ("emerald-gown-front")
- * instead of a uuid, and answers with the pose it read. That body runs a few
- * MB, so a failed presign is retried once WITHOUT the naming fields — a name
- * is a nicety, the upload is not.
+ * instead of a uuid, and answers with the pose and colour it read. That body
+ * runs a few MB, so a failed presign is retried once WITHOUT the naming fields
+ * (pose/colour come back null) — a name is a nicety, the upload is not.
  */
 export async function uploadProductImage(
   file: File,
   productName?: string,
-): Promise<{ publicUrl: string; pose: string | null }> {
+): Promise<{ publicUrl: string; pose: string | null; color: string | null; colorHex: string | null }> {
   const { blob, contentType } = await prepareImage(file);
   const name = productName?.trim() ?? '';
   const plainBody = { contentType };
@@ -209,5 +213,10 @@ export async function uploadProductImage(
     }
   }
   if (!res.ok) throw new Error(`Photo upload failed (${res.status})`);
-  return { publicUrl: presign.publicUrl, pose: presign.pose ?? null };
+  return {
+    publicUrl: presign.publicUrl,
+    pose: presign.pose ?? null,
+    color: presign.color ?? null,
+    colorHex: presign.colorHex ?? null,
+  };
 }
