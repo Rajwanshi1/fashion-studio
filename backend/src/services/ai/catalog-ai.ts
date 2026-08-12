@@ -14,6 +14,10 @@ import { ColorFamily } from '../../types';
 export interface ImageNameResult {
   fileSlug: string;
   pose: string | null;
+  /** Shopper-facing dominant garment colour, e.g. "Cherry Pink"; null when unsure. */
+  colorName: string | null;
+  /** Lowercase '#rrggbb' of that colour; null when unsure. */
+  colorHex: string | null;
 }
 
 export interface CatalogAi {

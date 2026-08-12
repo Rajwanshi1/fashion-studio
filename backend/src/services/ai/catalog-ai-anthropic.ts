@@ -111,7 +111,14 @@ export class AnthropicCatalogAi implements CatalogAi {
 
     const pose = answer.pose;
     const validPose = typeof pose === 'string' && (POSES as readonly string[]).includes(pose) ? pose : null;
-    return { fileSlug, pose: validPose };
+
+    // Colour fields are best-effort extras: anything off-shape becomes null
+    // rather than failing the naming (same stance as the pose re-check).
+    const rawName = typeof answer.color_name === 'string' ? answer.color_name.trim() : '';
+    const colorName = rawName && rawName.length <= 40 ? rawName : null;
+    const rawHex = typeof answer.color_hex === 'string' ? answer.color_hex.trim().toLowerCase() : '';
+    const colorHex = /^#[0-9a-f]{6}$/.test(rawHex) ? rawHex : null;
+    return { fileSlug, pose: validPose, colorName, colorHex };
   }
 
   /** One structured-output call. Returns the parsed object, or null on any failure. */

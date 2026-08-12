@@ -455,7 +455,12 @@ export class FakeProductsRepo implements ProductsRepo {
       colorFamily: input.colorFamily ?? null,
       salePrice: input.salePrice ?? null,
       costPrice: input.costPrice ?? null,
-      images: (input.images ?? []).map((im) => ({ url: im.url, pose: im.pose ?? '' })),
+      images: (input.images ?? []).map((im) => ({
+        url: im.url,
+        pose: im.pose ?? '',
+        color: im.color ?? '',
+        colorHex: im.colorHex ?? '',
+      })),
       components: toComponents(input.components),
       // Mirrors the real repo: new pieces start hidden unless explicitly published.
       active: input.active ?? false,
@@ -488,7 +493,12 @@ export class FakeProductsRepo implements ProductsRepo {
     }
     // A gallery is replaced wholesale and re-points the primary photo.
     if (input.images !== undefined) {
-      p.images = input.images.map((im) => ({ url: im.url, pose: im.pose ?? '' }));
+      p.images = input.images.map((im) => ({
+        url: im.url,
+        pose: im.pose ?? '',
+        color: im.color ?? '',
+        colorHex: im.colorHex ?? '',
+      }));
       p.imageUrl = p.images[0]?.url ?? null;
     }
     // The set is replaced wholesale, like the gallery.

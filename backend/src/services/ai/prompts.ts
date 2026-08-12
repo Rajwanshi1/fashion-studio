@@ -278,8 +278,17 @@ const imageNameSchema: Record<string, unknown> = {
         'kebab-case SEO file name: colour + garment + pose, lowercase a-z0-9 and hyphens only, at most 6 words, e.g. "cherry-pink-anarkali-front"',
     },
     pose: { enum: ['front', 'back', 'side', 'detail', 'drape', 'flat', null] },
+    color_name: {
+      type: ['string', 'null'],
+      description:
+        'shopper-facing display name of the garment\'s dominant colour, 1-3 title-cased words, e.g. "Cherry Pink"; null when unsure',
+    },
+    color_hex: {
+      type: ['string', 'null'],
+      description: 'CSS hex of that dominant garment colour, "#rrggbb"; null when unsure',
+    },
   },
-  required: ['file_slug', 'pose'],
+  required: ['file_slug', 'pose', 'color_name', 'color_hex'],
 };
 
 const imageNamePrompt = (productName: string) => `You are naming a photo file for an Indian fashion boutique's online shop. The name becomes the real object key, so it should read well to a search engine and to a person scanning a folder.
@@ -295,7 +304,9 @@ Return:
   - "detail" — a close-up of embroidery, fabric, trim or beadwork
   - "drape" — a fabric or styling shot: the drape, fall or arrangement of the cloth rather than a full pose
   - "flat" — a flat-lay, hanger or mannequin shot with no model
-  - null if the photo does not clearly fit any of these.`;
+  - null if the photo does not clearly fit any of these.
+- color_name: the dominant colour of the GARMENT in this photo (never the backdrop or the model's skin), as a shopper would name it on a product page: one to three title-cased words, e.g. "Maroon", "Cherry Pink", "Antique Gold". Prefer the boutique's own wording when the product name carries a colour the photo agrees with. null when the garment's colour is unclear.
+- color_hex: a CSS "#rrggbb" hex that honestly represents that dominant garment colour as seen in the photo. null when unsure.`;
 
 /** Free-text colour -> one of the 12 canonical families. Text only, no image. */
 export const COLOR_FAMILY_SPEC: CatalogSpec<string> = {

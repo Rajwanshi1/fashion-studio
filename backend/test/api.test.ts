@@ -811,7 +811,7 @@ describe('API', () => {
           active: true,
           imageUrl: 'https://cdn.test/legacy.jpg', // a gallery always wins
           images: [
-            { url: 'https://cdn.test/a.jpg', pose: 'front' },
+            { url: 'https://cdn.test/a.jpg', pose: 'front', color: 'Sage', colorHex: '#9cb6aa' },
             { url: 'https://cdn.test/b.jpg' },
             { url: 'https://cdn.test/c.jpg', pose: 'detail' },
           ],
@@ -820,9 +820,9 @@ describe('API', () => {
       expect(created.status).toBe(201);
       const product = await created.json();
       expect(product.images).toEqual([
-        { url: 'https://cdn.test/a.jpg', pose: 'front' },
-        { url: 'https://cdn.test/b.jpg', pose: '' },
-        { url: 'https://cdn.test/c.jpg', pose: 'detail' },
+        { url: 'https://cdn.test/a.jpg', pose: 'front', color: 'Sage', colorHex: '#9cb6aa' },
+        { url: 'https://cdn.test/b.jpg', pose: '', color: '', colorHex: '' },
+        { url: 'https://cdn.test/c.jpg', pose: 'detail', color: '', colorHex: '' },
       ]);
       expect(product.imageUrl).toBe('https://cdn.test/a.jpg');
 
@@ -919,13 +919,20 @@ describe('API', () => {
 
       const naming = withAi({
         colorFamily: async () => null,
-        nameProductImage: async () => ({ fileSlug: 'Sage Sequin  Lehenga — Front!', pose: 'front' }),
+        nameProductImage: async () => ({
+          fileSlug: 'Sage Sequin  Lehenga — Front!',
+          pose: 'front',
+          colorName: 'Sage',
+          colorHex: '#9cb6aa',
+        }),
       });
       const res = await presign(naming, named);
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.key).toMatch(/^products\/\d{4}\/\d{2}\/sage-sequin-lehenga-front-[0-9a-f]{6}\.jpg$/);
       expect(body.pose).toBe('front');
+      expect(body.color).toBe('Sage');
+      expect(body.colorHex).toBe('#9cb6aa');
       expect(body.publicUrl).toContain(encodeURIComponent(body.key));
 
       // Unusable name, thrown error, and no AI at all: the uuid key, pose null.
