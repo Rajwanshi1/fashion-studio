@@ -43,7 +43,7 @@ describe('PDP', () => {
     expect(screen.getByText('(1)')).toBeInTheDocument();
   });
 
-  it('set includes: pieces default on, unticking reprices, cart gets the selection', async () => {
+  it('this order contains: pieces default on, unticking reprices, cart gets the selection', async () => {
     mockFetch((url) => {
       if (url.includes('/api/products/fern-zardozi-set-fern')) return DETAIL_SET;
       if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
@@ -55,6 +55,7 @@ describe('PDP', () => {
     await screen.findByRole('heading', { level: 1, name: 'Fern Zardozi Set' });
 
     // Full set by default: 150000 + 12000 + 24000 rupees.
+    expect(screen.getByText('This order contains')).toBeInTheDocument();
     expect(screen.getByText('₹1,86,000')).toBeInTheDocument();
     const dupatta = screen.getByRole('checkbox', { name: /Dupatta/ });
     const jacket = screen.getByRole('checkbox', { name: /Jacket/ });
@@ -68,15 +69,53 @@ describe('PDP', () => {
 
     // The cart line carries the selection and the re-priced unit.
     await user.click(screen.getByRole('button', { name: 'Add to Bag' }));
-    expect(screen.getByText('Sage · Size M · Qty 1 · With dupatta')).toBeInTheDocument();
+    expect(screen.getByText('Sage · Size M · Qty 1 · With Dupatta')).toBeInTheDocument();
     const stored = JSON.parse(localStorage.getItem('ta.cart') ?? '[]');
     expect(stored[0]).toMatchObject({
-      includeDupatta: true,
-      includeJacket: false,
-      dupattaPrice: 1200000,
-      jacketPrice: null,
+      includedComponents: ['Dupatta'],
+      excludedComponents: ['Jacket'],
       unitPrice: 16200000,
     });
+  });
+
+  it('this order contains: required pieces render as plain numbered lines', async () => {
+    mockFetch((url) => {
+      if (url.includes('/api/products/fern-zardozi-set-fern')) return DETAIL_SET;
+      if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+      if (url.includes('/api/categories')) return [];
+      return undefined;
+    });
+
+    renderApp('/product/fern-zardozi-set-fern');
+    await screen.findByRole('heading', { level: 1, name: 'Fern Zardozi Set' });
+
+    // Every component renders as a numbered row, in display order.
+    const rows = Array.from(document.querySelectorAll('.set-includes > *')) as HTMLElement[];
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveTextContent('1.');
+    expect(rows[0]).toHaveTextContent('Lehenga');
+    expect(rows[1]).toHaveTextContent('2.');
+    expect(rows[2]).toHaveTextContent('3.');
+    // The required Lehenga is a plain line — no checkbox, always ships.
+    expect(within(rows[0]).queryByRole('checkbox')).toBeNull();
+    // The optional priced pieces keep their tickable checkboxes.
+    expect(within(rows[1]).getByRole('checkbox')).toBeInTheDocument();
+    expect(within(rows[2]).getByRole('checkbox')).toBeInTheDocument();
+  });
+
+  it('hides "This order contains" when the piece has no component rows', async () => {
+    mockFetch((url) => {
+      if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;
+      if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+      if (url.includes('/api/categories')) return [];
+      return undefined;
+    });
+
+    renderApp('/product/sage-sequin-jacket-lehenga');
+    await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
+
+    expect(screen.queryByText('This order contains')).not.toBeInTheDocument();
+    expect(document.querySelector('.set-includes')).toBeNull();
   });
 
   it('renders one thumb per gallery image, poses in the alt text, and syncs the carousel', async () => {
@@ -280,7 +319,11 @@ describe('PDP', () => {
     // The bag carries the sale-adjusted unit price the server recomputes.
     await user.click(screen.getByRole('button', { name: 'Add to Bag' }));
     const stored = JSON.parse(localStorage.getItem('ta.cart') ?? '[]');
-    expect(stored[0]).toMatchObject({ unitPrice: 13200000, dupattaPrice: 1200000, jacketPrice: null });
+    expect(stored[0]).toMatchObject({
+      unitPrice: 13200000,
+      includedComponents: ['Dupatta'],
+      excludedComponents: ['Jacket'],
+    });
   });
 
   it('disables out-of-stock sizes', async () => {

@@ -8,9 +8,9 @@ export function formatINR(paise: number): string {
 }
 
 /** Full-set price shown on cards and the PDP default: base garment plus the
- *  add-ons that are included by default (dupatta/jacket). */
-export function displayPrice(p: { price: number; dupattaPrice: number | null; jacketPrice: number | null }): number {
-  return p.price + (p.dupattaPrice ?? 0) + (p.jacketPrice ?? 0);
+ *  optional priced components that are included by default. */
+export function displayPrice(p: { price: number; addonsTotal: number }): number {
+  return p.price + p.addonsTotal;
 }
 
 /** Base garment price actually charged: a sale discounts the BASE price only,
@@ -23,12 +23,10 @@ export function effectiveBasePrice(p: { price: number; flag: ProductFlag; salePr
 /** Full-set price at the sale price (add-ons at full price), or null when the
  *  piece is not on sale — in which case displayPrice() is the only price shown. */
 export function displaySalePrice(p: {
-  price: number;
   flag: ProductFlag;
   salePrice: number | null;
-  dupattaPrice: number | null;
-  jacketPrice: number | null;
+  addonsTotal: number;
 }): number | null {
   if (p.flag !== 'sale' || p.salePrice === null) return null;
-  return p.salePrice + (p.dupattaPrice ?? 0) + (p.jacketPrice ?? 0);
+  return p.salePrice + p.addonsTotal;
 }

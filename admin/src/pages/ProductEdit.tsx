@@ -29,6 +29,9 @@ const FABRICS = ['Silk', 'Cotton'];
 /** Matches the server's images cap (productBaseSchema .max(12)). */
 const MAX_IMAGES = 12;
 
+/** Matches the server's components cap (productBaseSchema .max(10)). */
+const MAX_COMPONENTS = 10;
+
 interface FormState {
   name: string;
   categorySlug: string;
@@ -48,9 +51,8 @@ interface FormState {
   craft: string;
   fabric: string;
   occasion: string;
-  /** Rupees as typed; empty = the set has no dupatta/jacket, '0' = included free. */
-  dupattaRupees: string;
-  jacketRupees: string;
+  /** "This order contains" rows; priceRupees as typed, meaningful only when optional. */
+  components: { id: string; name: string; optional: boolean; priceRupees: string }[];
 }
 
 const FLAG_OPTIONS: [FormState['flag'], string, string][] = [
@@ -79,8 +81,7 @@ const EMPTY_FORM: FormState = {
   craft: '',
   fabric: '',
   occasion: '',
-  dupattaRupees: '',
-  jacketRupees: '',
+  components: [],
 };
 
 const SALE_ERROR = 'Sale price must be below the regular price';
@@ -114,6 +115,19 @@ const galleryImage = (url: string, pose: string): GalleryImage => ({
   id: crypto.randomUUID(),
   url,
   pose,
+});
+
+/** Component row with a client-side id for stable list keys — the id never
+ *  leaves the form (the save payload strips back to {name, optional, price}). */
+const componentRow = (
+  name: string,
+  optional: boolean,
+  priceRupees: string,
+): FormState['components'][number] => ({
+  id: crypto.randomUUID(),
+  name,
+  optional,
+  priceRupees,
 });
 
 export default function ProductEdit() {
@@ -207,8 +221,7 @@ export default function ProductEdit() {
           craft: product.craft,
           fabric: product.fabric,
           occasion: product.occasion,
-          dupattaRupees: rupees(product.dupattaPrice),
-          jacketRupees: rupees(product.jacketPrice),
+          components: product.components.map((c) => componentRow(c.name, c.optional, rupees(c.price))),
         };
         const nextStocks = Object.fromEntries(product.variants.map((v) => [v.id, String(v.stock)]));
         setForm(nextForm);
@@ -285,6 +298,21 @@ export default function ProductEdit() {
     return Number.isFinite(paise) && paise >= 0 ? paise : undefined;
   };
 
+  const setComponent = (index: number, patch: Partial<FormState['components'][number]>) =>
+    setForm((f) => ({
+      ...f,
+      components: f.components.map((c, x) => (x === index ? { ...c, ...patch } : c)),
+    }));
+
+  const moveComponent = (from: number, to: number) =>
+    setForm((f) => ({ ...f, components: moveItem(f.components, from, to) }));
+
+  const removeComponent = (index: number) =>
+    setForm((f) => ({ ...f, components: f.components.filter((_, i) => i !== index) }));
+
+  const addComponent = () =>
+    setForm((f) => ({ ...f, components: [...f.components, componentRow('', false, '')] }));
+
   /** Uploads run one at a time — the vision naming call is per photo. */
   const onPhotosPicked = async (e: ChangeEvent<HTMLInputElement>) => {
     let files = Array.from(e.target.files ?? []);
@@ -334,10 +362,12 @@ export default function ProductEdit() {
       problems.push('Enter a valid price in rupees');
     }
     if (saleError) problems.push(saleError);
-    const dupattaPrice = addonPaise(form.dupattaRupees);
-    const jacketPrice = addonPaise(form.jacketRupees);
-    if (dupattaPrice === undefined || jacketPrice === undefined) {
-      problems.push('Set-includes prices must be 0 or more — leave blank when the set has no such piece');
+    const components = form.components.map(({ name, optional, priceRupees }, i) => {
+      if (!name.trim()) problems.push(`Component ${i + 1} needs a name`);
+      return { name: name.trim(), optional, price: optional ? addonPaise(priceRupees) : null };
+    });
+    if (components.some((c) => c.price === undefined)) {
+      problems.push('Component prices must be 0 or more — leave blank when the piece has no separate price');
     }
     const costPrice = addonPaise(form.costRupees);
     if (costPrice === undefined) {
@@ -364,8 +394,7 @@ export default function ProductEdit() {
       craft: form.craft.trim(),
       fabric: form.fabric.trim(),
       occasion: form.occasion.trim(),
-      dupattaPrice,
-      jacketPrice,
+      components,
     };
 
     setBusy(true);
@@ -670,42 +699,87 @@ export default function ProductEdit() {
                 {saleError}
               </div>
             )}
-            <p className="hint">Dupatta and jacket add-ons are never discounted.</p>
+            <p className="hint">Component add-ons are never discounted.</p>
           </>
         )}
 
-        <p className="section-label">Set includes</p>
-        <div className="grid2">
-          <div className="field">
-            <label className="lab" htmlFor="p-dupatta">
-              Dupatta price (₹ — blank if no dupatta, 0 if included free)
-            </label>
-            <input
-              id="p-dupatta"
-              className="inp"
-              type="number"
-              min="0"
-              step="1"
-              inputMode="numeric"
-              value={form.dupattaRupees}
-              onChange={(e) => set('dupattaRupees', e.target.value)}
-            />
+        <p className="section-label">This order contains</p>
+        <div className="field">
+          <p className="hint">
+            Every piece of the set, in display order. Optional pieces the customer can
+            untick; price them in ₹ (blank = no separate price, 0 = included free).
+          </p>
+          <div className="row-list">
+            {form.components.map((c, i) => (
+              <div className="row-item component-row" key={c.id}>
+                <input
+                  className="inp"
+                  aria-label={`Component ${i + 1} name`}
+                  maxLength={40}
+                  value={c.name}
+                  onChange={(e) => setComponent(i, { name: e.target.value })}
+                />
+                <label className="check" title="Customer can remove it">
+                  <input
+                    type="checkbox"
+                    checked={c.optional}
+                    onChange={(e) => setComponent(i, { optional: e.target.checked })}
+                  />
+                  Optional
+                </label>
+                {c.optional && (
+                  <input
+                    className="inp price"
+                    type="number"
+                    min="0"
+                    step="1"
+                    inputMode="numeric"
+                    // "(₹)" not "(₹ rupees)": the base-price field's accessible
+                    // name is "Price (₹ rupees)" and label lookups match by
+                    // substring, so the row labels must not contain it.
+                    aria-label={`Component ${i + 1} price (₹)`}
+                    placeholder="0 = included free"
+                    value={c.priceRupees}
+                    onChange={(e) => setComponent(i, { priceRupees: e.target.value })}
+                  />
+                )}
+                <button
+                  type="button"
+                  className="row-btn"
+                  aria-label={`Move component ${i + 1} up`}
+                  disabled={i === 0}
+                  onClick={() => moveComponent(i, i - 1)}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className="row-btn"
+                  aria-label={`Move component ${i + 1} down`}
+                  disabled={i === form.components.length - 1}
+                  onClick={() => moveComponent(i, i + 1)}
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  className="row-btn"
+                  aria-label={`Remove component ${i + 1}`}
+                  onClick={() => removeComponent(i)}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
           </div>
-          <div className="field">
-            <label className="lab" htmlFor="p-jacket">
-              Jacket price (₹ — blank if no jacket, 0 if included free)
-            </label>
-            <input
-              id="p-jacket"
-              className="inp"
-              type="number"
-              min="0"
-              step="1"
-              inputMode="numeric"
-              value={form.jacketRupees}
-              onChange={(e) => set('jacketRupees', e.target.value)}
-            />
-          </div>
+          <button
+            type="button"
+            className="btn-outline fit row-add"
+            disabled={form.components.length >= MAX_COMPONENTS}
+            onClick={addComponent}
+          >
+            Add component
+          </button>
         </div>
 
         <p className="section-label">Internal</p>

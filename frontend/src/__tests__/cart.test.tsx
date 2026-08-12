@@ -23,10 +23,8 @@ const base: Omit<CartItem, 'qty'> = {
   color: 'Sage',
   unitPrice: 18400000,
   imageUrl: null,
-  includeDupatta: false,
-  includeJacket: false,
-  dupattaPrice: null,
-  jacketPrice: null,
+  includedComponents: [],
+  excludedComponents: [],
   measurements: '',
 };
 const other: Omit<CartItem, 'qty'> = {
@@ -35,14 +33,28 @@ const other: Omit<CartItem, 'qty'> = {
   size: 'M',
   unitPrice: 17200000,
 };
-// Same variant as `base`, but with the set pieces kept — a distinct line.
-const fullSet: Omit<CartItem, 'qty'> = {
+// Same variant as `base`, but with the optional pieces unticked — a distinct line.
+const trimmed: Omit<CartItem, 'qty'> = {
   ...base,
-  unitPrice: 18400000 + 1200000 + 2400000,
-  includeDupatta: true,
-  includeJacket: true,
-  dupattaPrice: 1200000,
-  jacketPrice: 2400000,
+  unitPrice: 18400000 - 1200000 - 2400000,
+  includedComponents: [],
+  excludedComponents: ['Dupatta', 'Jacket'],
+};
+// The pre-components line shape older releases persisted (see load()'s normalisers).
+const legacyLine = {
+  variantId: 'v1',
+  productId: 'p1',
+  productSlug: 'sage-sequin-jacket-lehenga',
+  name: 'Sage Sequin Jacket Lehenga',
+  size: 'S',
+  color: 'Sage',
+  unitPrice: 18400000,
+  imageUrl: null,
+  includeDupatta: false,
+  includeJacket: false,
+  dupattaPrice: null as number | null,
+  jacketPrice: null as number | null,
+  measurements: '',
 };
 // Same variant as `base`, with a made-to-measure note — also a distinct line.
 const noted: Omit<CartItem, 'qty'> = {
@@ -63,13 +75,13 @@ describe('cart context', () => {
   it('keeps the same variant with a different set selection as its own line', () => {
     const { result } = renderHook(() => useCart(), { wrapper });
     act(() => result.current.add(base));
-    act(() => result.current.add(fullSet));
+    act(() => result.current.add(trimmed));
     expect(result.current.items).toHaveLength(2);
-    expect(result.current.subtotal).toBe(18400000 + 22000000);
+    expect(result.current.subtotal).toBe(18400000 + 14800000);
     // Removing one line leaves the other untouched.
-    act(() => result.current.remove(cartLineKey(fullSet)));
+    act(() => result.current.remove(cartLineKey(trimmed)));
     expect(result.current.items).toHaveLength(1);
-    expect(result.current.items[0].includeDupatta).toBe(false);
+    expect(result.current.items[0].excludedComponents).toEqual([]);
   });
 
   it('merges lines with the identical measurements note', () => {
@@ -171,12 +183,10 @@ describe('cart context', () => {
     expect(result.current.items).toHaveLength(1);
     const item = result.current.items[0];
     // Old unitPrice was base-only, so nothing reads as included.
-    expect(item.includeDupatta).toBe(false);
-    expect(item.includeJacket).toBe(false);
-    expect(item.dupattaPrice).toBeNull();
-    expect(item.jacketPrice).toBeNull();
+    expect(item.includedComponents).toEqual([]);
+    expect(item.excludedComponents).toEqual(['dupatta', 'jacket']);
     expect(item.measurements).toBe('');
-    expect(cartLineKey(item)).toBe('v1:00:');
+    expect(cartLineKey(item)).toBe('v1:dupatta,jacket:');
     expect(result.current.subtotal).toBe(2 * 18400000);
   });
 
@@ -184,13 +194,31 @@ describe('cart context', () => {
     // Set-includes era shape: addon fields present, measurements missing.
     localStorage.setItem(
       'ta.cart',
-      JSON.stringify([{ ...base, includeDupatta: true, dupattaPrice: 1200000, qty: 1, measurements: undefined }]),
+      JSON.stringify([{ ...legacyLine, includeDupatta: true, dupattaPrice: 1200000, qty: 1, measurements: undefined }]),
     );
     const { result } = renderHook(() => useCart(), { wrapper });
     expect(result.current.items).toHaveLength(1);
     const item = result.current.items[0];
-    expect(item.includeDupatta).toBe(true); // untouched by the older normaliser
+    expect(item.includedComponents).toEqual(['dupatta']); // untouched by the older normaliser
     expect(item.measurements).toBe('');
-    expect(cartLineKey(item)).toBe('v1:10:');
+    expect(cartLineKey(item)).toBe('v1:jacket:');
+  });
+
+  it('migrates set-includes era carts onto the component-name arrays', () => {
+    // Set-includes era shape: include flags + addon prices, no component arrays.
+    localStorage.setItem(
+      'ta.cart',
+      JSON.stringify([
+        { ...legacyLine, includeDupatta: true, includeJacket: false, dupattaPrice: 1200000, jacketPrice: null, unitPrice: 19600000, qty: 1 },
+      ]),
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    expect(result.current.items).toHaveLength(1);
+    const item = result.current.items[0];
+    expect(item.includedComponents).toEqual(['dupatta']);
+    expect(item.excludedComponents).toEqual(['jacket']);
+    expect(item.unitPrice).toBe(19600000); // snapshotted price stays valid
+    expect(item).not.toHaveProperty('includeDupatta');
+    expect(cartLineKey(item)).toBe('v1:jacket:');
   });
 });

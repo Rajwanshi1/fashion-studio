@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { MARQUEE_MIN_CHARS, fillTrack, useSiteContent } from '../lib/content';
-import { displayPrice } from '../lib/format';
+import { effectiveBasePrice } from '../lib/format';
 import type { Category, ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useCartDrawer } from '../components/CartDrawer';
@@ -77,12 +77,12 @@ export default function Home() {
         name: detail.name,
         size: variant.size,
         color: detail.color,
-        unitPrice: displayPrice(detail),
+        unitPrice: effectiveBasePrice(detail) + detail.addonsTotal,
         imageUrl: detail.imageUrl,
-        includeDupatta: detail.dupattaPrice != null,
-        includeJacket: detail.jacketPrice != null,
-        dupattaPrice: detail.dupattaPrice,
-        jacketPrice: detail.jacketPrice,
+        includedComponents: detail.components
+          .filter((c) => c.optional && c.price != null)
+          .map((c) => c.name),
+        excludedComponents: [],
         measurements: '',
       });
       showToast('Added to your bag');

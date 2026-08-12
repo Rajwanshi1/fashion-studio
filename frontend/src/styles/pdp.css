@@ -58,6 +58,8 @@
 .page-pdp .set-includes { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 1.6rem; }
 .page-pdp .set-includes .check { display: flex; gap: 0.6rem; align-items: center; font-size: var(--t-sm); color: var(--ink-soft); cursor: pointer; }
 .page-pdp .set-includes .check input { accent-color: var(--forest-700); width: 15px; height: 15px; flex: none; }
+.page-pdp .set-includes .piece { display: flex; gap: 0.6rem; align-items: center; font-size: var(--t-sm); color: var(--ink-soft); }
+.page-pdp .set-includes .num { flex: none; min-width: 1.1em; color: var(--ink-soft); opacity: 0.55; font-variant-numeric: tabular-nums; }
 
 .page-pdp .mtm-panel { background: var(--celadon-50); border: 1px solid var(--hairline); padding: 1rem 1.2rem; margin-bottom: 1.6rem; }
 .page-pdp .mtm-panel p { margin: 0 0 0.8rem; font-size: var(--t-sm); color: var(--ink-soft); }

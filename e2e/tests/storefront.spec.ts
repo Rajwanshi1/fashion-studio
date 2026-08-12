@@ -184,3 +184,37 @@ test('registered customer sees their order in the account, and can manage the wi
 
   await restockAfterOrder(request, PISTACHIO_ANARKALI, size);
 });
+
+// ---------------------------------------------------------------------------
+// Spec — "This order contains": every piece listed, unticking reprices
+// ---------------------------------------------------------------------------
+
+test('PDP components: pieces are listed and unticking an optional one reprices', async ({
+  page,
+}) => {
+  // Zardozi Court Lehenga: base ₹1,84,000 + optional Dupatta ₹12,000. Nothing
+  // is ordered here, so no stock needs restoring.
+  await page.goto('/product/zardozi-court-lehenga-sage');
+  await expect(page.getByRole('heading', { name: SAGE_LEHENGA, level: 1 })).toBeVisible();
+  await expect(page.getByText('This order contains')).toBeVisible();
+
+  const includes = page.locator('.set-includes');
+  const pieces = includes.locator('.piece');
+  await expect(pieces).toHaveCount(2);
+  await expect(pieces.nth(0)).toContainText('Lehenga');
+  await expect(pieces.nth(1)).toContainText('Blouse');
+  const dupatta = includes.locator('label.check').filter({ hasText: 'Dupatta' });
+  await expect(dupatta).toContainText('₹12,000');
+  await expect(dupatta.getByRole('checkbox')).toBeChecked();
+
+  const price = page.locator('.pdp .info .price');
+  await expect(price).toContainText('₹1,96,000');
+  await dupatta.getByRole('checkbox').uncheck();
+  await expect(price).toContainText('₹1,84,000');
+
+  await selectFirstAvailableSize(page);
+  await page.getByRole('button', { name: 'Add to Bag' }).click();
+  const drawer = cartDrawer(page);
+  await expect(drawer).toContainText(SAGE_LEHENGA);
+  await expect(drawer.locator('.cd-subval')).toContainText('₹1,84,000');
+});

@@ -7,6 +7,10 @@ describe('Orders', () => {
     seedAdminAuth();
     const order = makeOrder({ status: 'paid' });
     order.items[0].measurements = 'bust 36in, waist 30in';
+    order.items[0].components = [
+      { name: 'dupatta', price: 0 },
+      { name: 'jacket', price: 1200000 },
+    ];
     const { calls } = mockFetch((url, init) => {
       if (url.endsWith('/api/admin/orders') && (init?.method ?? 'GET') === 'GET') {
         return { json: [order] };
@@ -27,6 +31,8 @@ describe('Orders', () => {
     // expand → detail pane with items (incl. the measurements note) + address + status select
     await userEvent.click(cell);
     expect(screen.getByText('Emerald Court Gown')).toBeInTheDocument();
+    // kept add-ons render by name from the order-time snapshot
+    expect(screen.getByText(/· with dupatta & jacket/)).toBeInTheDocument();
     expect(screen.getByText('bust 36in, waist 30in')).toBeInTheDocument();
     expect(screen.getByText(/14 Altamount Road/)).toBeInTheDocument();
 
@@ -127,8 +133,7 @@ describe('Orders', () => {
           color: '',
           unitPrice: 18400000,
           quantity: 1,
-          dupattaPrice: null,
-          jacketPrice: null,
+          components: [],
           imageUrl: null,
           measurements: '',
         },

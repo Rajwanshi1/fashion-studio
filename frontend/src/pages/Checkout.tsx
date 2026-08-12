@@ -79,8 +79,7 @@ export default function Checkout() {
           items: items.map((i) => ({
             variantId: i.variantId,
             quantity: i.qty,
-            includeDupatta: i.includeDupatta,
-            includeJacket: i.includeJacket,
+            excludedComponents: i.excludedComponents.length ? i.excludedComponents : undefined, // omit empties
             measurements: i.measurements || undefined, // omit empties
           })),
         });
@@ -543,10 +542,8 @@ export default function Checkout() {
                   <div className="cn">{i.name}</div>
                   <div className="ca">
                     {i.color} · Size {i.size} · Qty {i.qty}
-                    {(i.includeDupatta || i.includeJacket) &&
-                      ` · With ${[i.includeDupatta && 'dupatta', i.includeJacket && 'jacket']
-                        .filter(Boolean)
-                        .join(' & ')}`}
+                    {i.includedComponents.length > 0 &&
+                      ` · With ${i.includedComponents.join(' & ')}`}
                   </div>
                   {i.measurements && <div className="line-note">{i.measurements}</div>}
                 </div>

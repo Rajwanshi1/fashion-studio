@@ -67,14 +67,15 @@ describe('checkout', () => {
     expect(String(confirmCall?.[1]?.body)).toContain('"outcome":"success"');
   });
 
-  it('sends measurements for noted lines and omits it for plain ones', async () => {
-    seedCart(); // line 1: plain, no note
+  it('sends measurements and excluded components per line, omitting empties', async () => {
+    seedCart(); // line 1: plain, no note, nothing unticked
     const cart = JSON.parse(localStorage.getItem('ta.cart') ?? '[]');
     cart.push({
       ...cart[0],
       variantId: 'v4',
       size: 'Custom',
       measurements: 'bust 36in, waist 30in',
+      excludedComponents: ['Jacket'],
     });
     localStorage.setItem('ta.cart', JSON.stringify(cart));
     const fetchMock = mockFetch(checkoutRoutes);
@@ -91,7 +92,9 @@ describe('checkout', () => {
     const body = JSON.parse(String(orderCall?.[1]?.body));
     expect(body.items).toHaveLength(2);
     expect(body.items[0]).not.toHaveProperty('measurements'); // empty note omitted
+    expect(body.items[0]).not.toHaveProperty('excludedComponents'); // nothing unticked omitted
     expect(body.items[1].measurements).toBe('bust 36in, waist 30in');
+    expect(body.items[1].excludedComponents).toEqual(['Jacket']);
   });
 
   it('payments disabled: 503 from checkout shows the coming-soon notice, order saved', async () => {
