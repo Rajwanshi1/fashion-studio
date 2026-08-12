@@ -13,8 +13,7 @@ function makeItem(over: Partial<OrderItem> = {}): OrderItem {
     unitPrice: 700000,
     quantity: 1,
     imageUrl: null,
-    dupattaPrice: null,
-    jacketPrice: null,
+    components: [],
     ...over,
   };
 }
@@ -120,8 +119,11 @@ describe('buildInvoiceModel', () => {
           productName: 'Anarkali Set',
           size: 'M',
           color: 'Sage',
-          dupattaPrice: 150000,
-          jacketPrice: 0,
+          // Lowercase names: exactly what the 013 backfill writes for old rows.
+          components: [
+            { name: 'dupatta', price: 150000 },
+            { name: 'jacket', price: 0 },
+          ],
           unitPrice: 1849000,
           quantity: 2,
         }),
@@ -174,7 +176,14 @@ describe('renderInvoicePdf', () => {
       deliveryFee: 25000,
       gstAmount: 35000,
       notes: '',
-      items: [makeItem({ productName: 'Anarkali Set', size: 'M', color: 'Sage', dupattaPrice: 150000 })],
+      items: [
+        makeItem({
+          productName: 'Anarkali Set',
+          size: 'M',
+          color: 'Sage',
+          components: [{ name: 'dupatta', price: 150000 }],
+        }),
+      ],
     });
     const pdf = await renderInvoicePdf(online);
     expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');

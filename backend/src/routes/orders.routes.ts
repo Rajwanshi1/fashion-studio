@@ -24,6 +24,12 @@ const createOrderSchema = z.object({
     z.object({
       variantId: z.string().min(1),
       quantity: z.number().int().min(1),
+      // Optional set pieces the shopper unticked; everything else is included.
+      excludedComponents: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+      // Deprecated pre-components booleans, still accepted for one release so a
+      // cached old SPA can't silently overcharge (zod would strip them and the
+      // order would include pieces the shopper unticked). Remove with the
+      // legacy-column drop chore.
       includeDupatta: z.boolean().optional(),
       includeJacket: z.boolean().optional(),
       // 500 keeps a 10-line order well under the prod WAF's 8KB body cap.
@@ -32,12 +38,27 @@ const createOrderSchema = z.object({
   ),
 });
 
+type OrderItemBody = z.infer<typeof createOrderSchema>['items'][number];
+
+/** Maps the deprecated include booleans onto excludedComponents. */
+function withLegacyExcludes(item: OrderItemBody): OrderItemBody {
+  const excluded = [...(item.excludedComponents ?? [])];
+  if (item.includeDupatta === false) excluded.push('dupatta');
+  if (item.includeJacket === false) excluded.push('jacket');
+  const { includeDupatta, includeJacket, ...rest } = item;
+  return excluded.length ? { ...rest, excludedComponents: excluded } : rest;
+}
+
 export function orderRoutes(orders: OrdersService, jwtSecret: string) {
   const r = new Hono<AuthEnv>();
 
   r.post('/orders', optionalAuth(jwtSecret), zValidator('json', createOrderSchema, zodHook), async (c) => {
     const body = c.req.valid('json');
-    const order = await orders.createOrder({ ...body, userId: c.var.user?.id ?? null });
+    const order = await orders.createOrder({
+      ...body,
+      items: body.items.map(withLegacyExcludes),
+      userId: c.var.user?.id ?? null,
+    });
     return c.json(order, 201);
   });
 

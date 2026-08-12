@@ -179,12 +179,21 @@ const productBaseSchema = z.object({
   craft: z.string().optional(),
   fabric: z.string().optional(),
   occasion: z.string().optional(),
-  // null = no such piece in the set; 0 = included at no extra cost.
-  dupattaPrice: z.number().int().min(0).nullable().optional(),
-  jacketPrice: z.number().int().min(0).nullable().optional(),
   // Discounted BASE price — add-ons are never discounted.
   salePrice: z.number().int().positive().nullable().optional(),
   costPrice: z.number().int().min(0).nullable().optional(),
+  // "This order contains" rows. Tight caps keep product writes inside the WAF
+  // body budget. price: null = no separate price, 0 = included at no extra cost.
+  components: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(40),
+        optional: z.boolean().optional(),
+        price: z.number().int().min(0).nullable().optional(),
+      }),
+    )
+    .max(10)
+    .optional(),
   images: z.array(z.object({ url: z.string().min(1), pose: z.string().optional() })).max(12).optional(),
   variants: z.array(z.object({ size: z.string().min(1), stock: z.number().int().min(0) })).optional(),
 });

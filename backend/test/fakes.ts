@@ -16,6 +16,7 @@ import type {
   BulkUpdateResult,
   CreateCategoryInput,
   CreateProductInput,
+  ProductComponentInput,
   ProductsRepo,
   UpdateProductInput,
   VariantForOrder,
@@ -255,6 +256,10 @@ export class FakeGoogleVerifier {
   };
 }
 
+/** Default-included add-ons — mirrors the repo's ADDONS_TOTAL_SQL subselect. */
+const addonsTotal = (p: AdminProduct) =>
+  p.components.reduce((sum, c) => sum + (c.optional ? (c.price ?? 0) : 0), 0);
+
 function toSummary(p: AdminProduct): ProductSummary {
   return {
     id: p.id,
@@ -268,8 +273,7 @@ function toSummary(p: AdminProduct): ProductSummary {
     categoryName: p.categoryName,
     collection: p.collection,
     occasion: p.occasion,
-    dupattaPrice: p.dupattaPrice,
-    jacketPrice: p.jacketPrice,
+    addonsTotal: addonsTotal(p),
     colorFamily: p.colorFamily,
     salePrice: p.salePrice,
   };
@@ -280,7 +284,16 @@ const effectivePrice = (p: AdminProduct) =>
   p.flag === 'sale' && p.salePrice != null ? p.salePrice : p.price;
 
 /** Full-set price (effective base + default-included add-ons), mirroring the SQL price sort. */
-const setPrice = (p: AdminProduct) => effectivePrice(p) + (p.dupattaPrice ?? 0) + (p.jacketPrice ?? 0);
+const setPrice = (p: AdminProduct) => effectivePrice(p) + addonsTotal(p);
+
+/** Mirrors the repo's replaceComponents: ids minted, price kept on optional rows only. */
+const toComponents = (components: ProductComponentInput[] | undefined) =>
+  (components ?? []).map((c) => ({
+    id: nextId('pc'),
+    name: c.name,
+    optional: c.optional ?? false,
+    price: c.optional ? (c.price ?? null) : null,
+  }));
 
 type FakeProduct = AdminProduct & { deletedAt: string | null };
 
@@ -376,8 +389,7 @@ export class FakeProductsRepo implements ProductsRepo {
             // Mirrors the repo's sale CASE: checkout charges the sale price.
             unitPrice: effectivePrice(p),
             imageUrl: p.imageUrl,
-            dupattaPrice: p.dupattaPrice,
-            jacketPrice: p.jacketPrice,
+            components: p.components.map(({ name, optional, price }) => ({ name, optional, price })),
           });
         }
       }
@@ -440,12 +452,11 @@ export class FakeProductsRepo implements ProductsRepo {
       craft: input.craft ?? '',
       fabric: input.fabric ?? '',
       occasion: input.occasion ?? '',
-      dupattaPrice: input.dupattaPrice ?? null,
-      jacketPrice: input.jacketPrice ?? null,
       colorFamily: input.colorFamily ?? null,
       salePrice: input.salePrice ?? null,
       costPrice: input.costPrice ?? null,
       images: (input.images ?? []).map((im) => ({ url: im.url, pose: im.pose ?? '' })),
+      components: toComponents(input.components),
       // Mirrors the real repo: new pieces start hidden unless explicitly published.
       active: input.active ?? false,
       variants: sizes.map((v) => ({ id: nextId('v'), productId: id, size: v.size, stock: v.stock })),
@@ -469,7 +480,7 @@ export class FakeProductsRepo implements ProductsRepo {
     }
     const keys = [
       'name', 'description', 'details', 'price', 'color', 'flag', 'imageUrl', 'active',
-      'collection', 'craft', 'fabric', 'occasion', 'dupattaPrice', 'jacketPrice',
+      'collection', 'craft', 'fabric', 'occasion',
       'salePrice', 'costPrice', 'colorFamily',
     ] as const;
     for (const key of keys) {
@@ -479,6 +490,10 @@ export class FakeProductsRepo implements ProductsRepo {
     if (input.images !== undefined) {
       p.images = input.images.map((im) => ({ url: im.url, pose: im.pose ?? '' }));
       p.imageUrl = p.images[0]?.url ?? null;
+    }
+    // The set is replaced wholesale, like the gallery.
+    if (input.components !== undefined) {
+      p.components = toComponents(input.components);
     }
     return structuredClone(p);
   }
@@ -676,6 +691,7 @@ export class FakeOrdersRepo implements OrdersRepo {
             unitPrice: it.unitPrice,
             quantity: it.quantity,
             imageUrl: it.imageUrl ?? null,
+            components: [],
             measurements: '',
           }),
         ),
@@ -1432,8 +1448,11 @@ export async function seedSetProduct(products: FakeProductsRepo, categoryId: str
     craft: 'Zardozi',
     fabric: 'Tissue',
     occasion: 'Wedding',
-    dupattaPrice: 1200000,
-    jacketPrice: 2400000,
+    components: [
+      { name: 'Lehenga' },
+      { name: 'Dupatta', optional: true, price: 1200000 },
+      { name: 'Jacket', optional: true, price: 2400000 },
+    ],
     variants: [{ size: 'M', stock: 10 }],
   });
 }

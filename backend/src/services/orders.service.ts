@@ -35,9 +35,10 @@ export interface CreateOrderInput {
   items: {
     variantId: string;
     quantity: number;
-    /** Set pieces are included unless explicitly opted out. */
-    includeDupatta?: boolean;
-    includeJacket?: boolean;
+    /** Names of the optional set pieces the shopper UNTICKED — everything else
+     *  is included. Matched trim/case-insensitively against the product's
+     *  optional components; unknown names are ignored. */
+    excludedComponents?: string[];
     /** Free-text made-to-measure note; part of line identity. */
     measurements?: string;
   }[];
@@ -154,21 +155,23 @@ export function createOrdersService(deps: {
 }): OrdersService {
   const service: OrdersService = {
     async createOrder(input) {
-      // Merge duplicate lines per variant + set-includes + measurements combo:
+      // Merge duplicate lines per variant + set-selection + measurements combo:
       // the same variant with and without a dupatta — or with a different
       // made-to-measure note — is two distinct order lines.
       const combos = new Map<
         string,
-        { variantId: string; dupatta: boolean; jacket: boolean; measurements: string; qty: number }
+        { variantId: string; excluded: Set<string>; measurements: string; qty: number }
       >();
       for (const item of input.items ?? []) {
-        const dupatta = item.includeDupatta !== false; // default: included
-        const jacket = item.includeJacket !== false;
+        // Everything is included unless explicitly unticked.
+        const excluded = new Set(
+          (item.excludedComponents ?? []).map((name) => name.trim().toLowerCase()).filter(Boolean),
+        );
         const measurements = (item.measurements ?? '').trim();
-        const key = `${item.variantId}|${dupatta ? 1 : 0}${jacket ? 1 : 0}|${measurements}`;
+        const key = `${item.variantId}|${[...excluded].sort().join(',')}|${measurements}`;
         const existing = combos.get(key);
         if (existing) existing.qty += item.quantity;
-        else combos.set(key, { variantId: item.variantId, dupatta, jacket, measurements, qty: item.quantity });
+        else combos.set(key, { variantId: item.variantId, excluded, measurements, qty: item.quantity });
       }
       if (combos.size === 0) {
         throw new DomainError('EMPTY_ORDER', 'Order must contain at least one item');
@@ -193,23 +196,23 @@ export function createOrdersService(deps: {
           }
         }
 
-        // Prices always come from the DB, never the client. An opt-in only
-        // counts when the product actually has that piece in its set.
+        // Prices always come from the DB, never the client. An exclusion only
+        // counts against optional priced pieces the product actually has.
         const items = [...combos.values()].map((combo) => {
           const v = byId.get(combo.variantId)!;
-          const dupattaPrice = combo.dupatta && v.dupattaPrice != null ? v.dupattaPrice : null;
-          const jacketPrice = combo.jacket && v.jacketPrice != null ? v.jacketPrice : null;
+          const kept = v.components
+            .filter((c) => c.optional && c.price != null && !combo.excluded.has(c.name.trim().toLowerCase()))
+            .map((c) => ({ name: c.name, price: c.price! }));
           return {
             productId: v.productId,
             variantId: v.id,
             productName: v.productName,
             size: v.size,
             color: v.color,
-            unitPrice: v.unitPrice + (dupattaPrice ?? 0) + (jacketPrice ?? 0),
+            unitPrice: v.unitPrice + kept.reduce((sum, c) => sum + c.price, 0),
             quantity: combo.qty,
             imageUrl: v.imageUrl,
-            dupattaPrice,
-            jacketPrice,
+            components: kept,
             // Display-only free text — prices still come exclusively from the DB rows.
             measurements: combo.measurements,
           };
