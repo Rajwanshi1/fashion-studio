@@ -182,7 +182,8 @@ describe('ProductEdit', () => {
     expect(body.price).toBe(18400000);
     // the category comes straight off the product — no id resolution dance
     expect(body.categorySlug).toBe('gowns');
-    expect(body).not.toHaveProperty('slug');
+    // The PUT now carries the slug (renames create server-side aliases).
+    expect(body.slug).toBe('emerald-court-gown');
     expect(body.costPrice).toBeNull(); // untouched blank stays null
 
     const patches = calls.filter((c) => c.method === 'PATCH');

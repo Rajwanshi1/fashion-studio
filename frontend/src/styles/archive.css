@@ -1,0 +1,16 @@
+/* The Archive — the permanent record of every edition. */
+.page-archive .archive { display: grid; gap: clamp(2.4rem, 6vw, 4.5rem); padding-bottom: var(--section-y); }
+
+.page-archive .vol { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: clamp(1.4rem, 3.5vw, 3rem); align-items: center; }
+.page-archive .vol.flip { grid-template-columns: 0.9fr 1.1fr; }
+.page-archive .vol.flip .img-slot { order: 2; }
+@media (max-width: 760px) {
+  .page-archive .vol, .page-archive .vol.flip { grid-template-columns: 1fr; }
+  .page-archive .vol.flip .img-slot { order: 0; }
+}
+
+.page-archive .vol .img-slot { width: 100%; aspect-ratio: 4 / 3; }
+.page-archive .vol-text h2 { font-family: var(--serif-soft); font-weight: 300; font-size: clamp(1.9rem, 4vw, 3rem); line-height: 1.12; margin: 0.7rem 0 1rem; }
+.page-archive .vol-text p { color: var(--ink-soft); max-width: 48ch; margin-bottom: 1.1rem; }
+.page-archive .vol-meta { display: flex; flex-wrap: wrap; gap: 0.4rem 0; font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); margin-bottom: 1.4rem; }
+.page-archive .vol-meta span + span::before { content: '·'; margin: 0 0.6em; color: var(--gold); }

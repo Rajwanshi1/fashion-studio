@@ -51,6 +51,7 @@ export default function Nav({ home = false }: NavProps) {
         <div className="nav-links left">
           <Link to="/collection">The Collection</Link>
           <Link to="/lookbook">Lookbook</Link>
+          <Link to="/archive">Archive</Link>
           <Link to="/the-house">The House</Link>
         </div>
         <div className="wordmark">

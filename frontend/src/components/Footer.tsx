@@ -50,6 +50,7 @@ export default function Footer({ mark = false }: FooterProps) {
           <h5>The House</h5>
           <Link to="/the-house">Our Story</Link>
           <Link to="/lookbook">Lookbook</Link>
+          <Link to="/archive">The Archive</Link>
           <Link to="/contact">Made to Order</Link>
           <Link to="/client-care">Client Care</Link>
         </div>

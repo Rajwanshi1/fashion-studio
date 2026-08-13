@@ -61,6 +61,16 @@ export const SECTION_SCHEMAS = {
     addressLines: z.array(str).max(4), phone: str, email: str,
     collectionName: str, leadStandard: str, leadCustom: str,
   }).partial().strict(),
+  // The permanent archive: every edition ever made, never deleted. Piece
+  // counts are computed from the catalogue by the storefront — not stored.
+  // Budget: 6 volumes of short copy sits far under MAX_SECTION_BYTES.
+  archive: z.object({
+    intro: copy,
+    volumes: z.array(z.object({
+      imageUrl: image, focusX: pct, focusY: pct, volumeNo: str, title: str,
+      season: str, copy, collections: z.array(str).max(8), status: str,
+    }).partial().strict()).max(6),
+  }).partial().strict(),
 } as const;
 
 export type SectionKey = keyof typeof SECTION_SCHEMAS;

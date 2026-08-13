@@ -22,6 +22,22 @@ export interface Look {
   ctaHref: string;
 }
 
+/** One edition in the permanent archive. Piece counts are computed from the
+ *  catalogue by the Archive page — never typed here (audit §06: the archive is
+ *  the proof, and invented numbers would rot it). */
+export interface ArchiveVolume {
+  imageUrl: string | null;
+  focusX: number;
+  focusY: number;
+  volumeNo: string;
+  title: string;
+  season: string;
+  copy: string;
+  /** The products.collection values (sub-collections) this volume spans. */
+  collections: string[];
+  status: string;
+}
+
 export interface SiteContent {
   hero: {
     imageUrl: string | null;
@@ -70,6 +86,8 @@ export interface SiteContent {
     leadStandard: string;
     leadCustom: string;
   };
+  /** The permanent record: every edition the house has made, never deleted. */
+  archive: { intro: string; volumes: ArchiveVolume[] };
 }
 
 /** The storefront's built-in copy — copied verbatim from the hardcoded strings
@@ -173,6 +191,23 @@ export const DEFAULT_CONTENT: SiteContent = {
     leadStandard: '4–6 weeks',
     leadCustom: '6–8 weeks',
   },
+  archive: {
+    intro:
+      'Nothing leaves this page. Every edition the house makes stays in the archive — available, resting or sold out — because the archive is the proof.',
+    volumes: [
+      {
+        imageUrl: null,
+        focusX: 50,
+        focusY: 50,
+        volumeNo: 'Volume 01',
+        title: 'Rang Mehfil',
+        season: 'Festive 2026',
+        copy: 'Hand-embroidered kurta sets in purple, maroon, ruby pink and ivory — the first edition of the house, cut in the Bapu Nagar workroom.',
+        collections: ['Jharokha', 'Saaz', 'Meher', 'Gul', 'Bahaar'],
+        status: 'Available, made to order',
+      },
+    ],
+  },
 };
 
 const EMPTY_LOOK: Look = {
@@ -267,6 +302,38 @@ function mergeLooks(v: unknown, d: Look[]): Look[] {
   return looks;
 }
 
+const EMPTY_VOLUME: ArchiveVolume = {
+  imageUrl: null, focusX: 50, focusY: 50, volumeNo: '', title: '', season: '',
+  copy: '', collections: [], status: '',
+};
+
+function mergeVolume(v: unknown, d: ArchiveVolume): ArchiveVolume {
+  const o = obj(v);
+  return {
+    imageUrl: mergeImg(o.imageUrl, d.imageUrl),
+    focusX: mergeNum(o.focusX, d.focusX),
+    focusY: mergeNum(o.focusY, d.focusY),
+    volumeNo: mergeStr(o.volumeNo, d.volumeNo),
+    title: mergeStr(o.title, d.title),
+    season: mergeStr(o.season, d.season),
+    copy: mergeStr(o.copy, d.copy),
+    collections: mergeStrList(o.collections, d.collections),
+    status: mergeStr(o.status, d.status),
+  };
+}
+
+/** Archive volumes merge per index over the defaults; extra volumes (Vol 02
+ *  onward) are kept as sent — the archive only ever grows. */
+function mergeVolumes(v: unknown, d: ArchiveVolume[]): ArchiveVolume[] {
+  const arr = Array.isArray(v) ? v : [];
+  const length = Math.max(d.length, arr.length);
+  const volumes: ArchiveVolume[] = [];
+  for (let i = 0; i < length; i += 1) {
+    volumes.push(mergeVolume(arr[i], d[i] ?? EMPTY_VOLUME));
+  }
+  return volumes;
+}
+
 /** Layer the admin's overrides over DEFAULT_CONTENT. Unknown sections, junk
  *  values and blank strings are ignored — the default always wins. */
 export function mergeContent(sections: Record<string, unknown>): SiteContent {
@@ -282,6 +349,7 @@ export function mergeContent(sections: Record<string, unknown>): SiteContent {
   const ticker = obj(s.ticker);
   const footer = obj(s.footer);
   const facts = obj(s.facts);
+  const archive = obj(s.archive);
 
   return {
     hero: {
@@ -336,6 +404,10 @@ export function mergeContent(sections: Record<string, unknown>): SiteContent {
       collectionName: mergeStr(facts.collectionName, d.facts.collectionName),
       leadStandard: mergeStr(facts.leadStandard, d.facts.leadStandard),
       leadCustom: mergeStr(facts.leadCustom, d.facts.leadCustom),
+    },
+    archive: {
+      intro: mergeStr(archive.intro, d.archive.intro),
+      volumes: mergeVolumes(archive.volumes, d.archive.volumes),
     },
   };
 }

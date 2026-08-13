@@ -8,6 +8,7 @@ import BrandLogo from './BrandLogo';
 const LINKS = [
   { t: 'The Collection', h: '/collection' },
   { t: 'Lookbook', h: '/lookbook' },
+  { t: 'Archive', h: '/archive' },
   { t: 'The House', h: '/the-house' },
   { t: 'Client Care', h: '/client-care' },
 ];

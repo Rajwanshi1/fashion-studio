@@ -8,6 +8,7 @@ import { WishlistProvider } from './lib/wishlist';
 import { ToastProvider } from './components/Toast';
 import { CartDrawerProvider } from './components/CartDrawer';
 import Home from './pages/Home';
+import Archive from './pages/Archive';
 import Collection from './pages/Collection';
 import Product from './pages/Product';
 import CartPage from './pages/CartPage';
@@ -60,9 +61,9 @@ export function AppRoutes() {
       <Routes>
         <Route path="/" element={<Home />} />
         {/* The old editorial /collections page invented five editions that
-            never existed (audit §02) — the real catalogue is the honest
-            destination until /archive ships. */}
-        <Route path="/collections" element={<Navigate to="/collection" replace />} />
+            never existed (audit §02) — the archive is the honest replacement. */}
+        <Route path="/collections" element={<Navigate to="/archive" replace />} />
+        <Route path="/archive" element={<Archive />} />
         {/* Slugless: the whole catalogue, and the state a category clears to. */}
         <Route path="/collection" element={<Collection />} />
         <Route path="/collection/:categorySlug" element={<Collection />} />

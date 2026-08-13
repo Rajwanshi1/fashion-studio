@@ -12,6 +12,7 @@
 import { Fragment } from 'react';
 import { SECTION_DEFAULTS } from '../lib/siteContent';
 import type {
+  ArchiveContent,
   FactsContent,
   FeaturedContent,
   FooterContent,
@@ -374,6 +375,30 @@ export function LookbookPreview({
 /* ---- Brand facts — not a storefront-markup mirror: the facts render inside
    existing pages (Contact, PDP, shop), so the canvas shows them as a plain
    card of label/value rows. ---- */
+
+/* ---- The Archive — plain-card preview (the /archive page's own layout is
+   not mirrored in storefront.css; counts come from the catalogue at render
+   time, so the preview shows the volume copy only). ---- */
+
+export function ArchivePreview({ archive }: { archive: ArchiveContent }) {
+  return (
+    <div className="archive-preview" style={{ padding: '1.2rem 1.4rem', background: '#fff' }}>
+      <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', fontStyle: 'italic' }}>{archive.intro}</p>
+      {archive.volumes.map((vol, i) => (
+        <div key={`${vol.volumeNo}-${i}`} style={{ marginBottom: '0.9rem' }}>
+          <p style={{ margin: 0, fontSize: '0.72rem', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+            {vol.volumeNo}
+            {vol.season && <> · {vol.season}</>}
+          </p>
+          <p style={{ margin: '0.15rem 0', fontSize: '1.05rem' }}>{vol.title}</p>
+          <p style={{ margin: 0, fontSize: '0.8rem', color: '#555' }}>
+            {[vol.collections.join(' · '), vol.status].filter(Boolean).join(' — ')}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function FactsPreview({ facts }: { facts: FactsContent }) {
   const rows: Array<[string, string]> = [

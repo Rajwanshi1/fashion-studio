@@ -23,9 +23,10 @@ export type SectionKey =
   | 'lookbook'
   | 'ticker'
   | 'footer'
-  | 'facts';
+  | 'facts'
+  | 'archive';
 
-export type FieldType = 'text' | 'textarea' | 'image' | 'stringList' | 'trustItems' | 'looks';
+export type FieldType = 'text' | 'textarea' | 'image' | 'stringList' | 'trustItems' | 'looks' | 'volumes';
 
 export interface FieldConfig {
   name: string;
@@ -143,6 +144,15 @@ export const SECTIONS: SectionConfig[] = [
       { name: 'leadCustom', label: 'Lead time — made to measure', type: 'text' },
     ],
   },
+  {
+    key: 'archive',
+    title: 'The Archive',
+    blurb: '/archive · every edition, forever',
+    fields: [
+      { name: 'intro', label: 'Intro', type: 'textarea', hint: 'The archive is never-delete: editions are added, not removed.' },
+      { name: 'volumes', label: 'Volumes', type: 'volumes', hint: 'Up to 6. Piece counts come from the catalogue — never typed.', focus: true },
+    ],
+  },
 ];
 
 /**
@@ -246,6 +256,23 @@ export const SECTION_DEFAULTS = {
     collectionName: 'Rang Mehfil',
     leadStandard: '4–6 weeks',
     leadCustom: '6–8 weeks',
+  },
+  archive: {
+    intro:
+      'Nothing leaves this page. Every edition the house makes stays in the archive — available, resting or sold out — because the archive is the proof.',
+    volumes: [
+      {
+        imageUrl: null,
+        focusX: 50,
+        focusY: 50,
+        volumeNo: 'Volume 01',
+        title: 'Rang Mehfil',
+        season: 'Festive 2026',
+        copy: 'Hand-embroidered kurta sets in purple, maroon, ruby pink and ivory — the first edition of the house, cut in the Bapu Nagar workroom.',
+        collections: ['Jharokha', 'Saaz', 'Meher', 'Gul', 'Bahaar'],
+        status: 'Available, made to order',
+      },
+    ],
   },
 } satisfies { [K in SectionKey]: EffectiveContent[K] };
 
@@ -395,6 +422,24 @@ export interface FactsContent {
   leadCustom: string;
 }
 
+export interface ArchiveVolumeContent {
+  imageUrl: string | null;
+  focusX: number;
+  focusY: number;
+  volumeNo: string;
+  title: string;
+  season: string;
+  copy: string;
+  /** products.collection values (sub-collections) this volume spans. */
+  collections: string[];
+  status: string;
+}
+
+export interface ArchiveContent {
+  intro: string;
+  volumes: ArchiveVolumeContent[];
+}
+
 export interface EffectiveContent {
   hero: HeroContent;
   featured: FeaturedContent;
@@ -405,6 +450,7 @@ export interface EffectiveContent {
   ticker: { items: string[] };
   footer: FooterContent;
   facts: FactsContent;
+  archive: ArchiveContent;
 }
 
 /** Every section's effective content in one typed bundle, for the canvas. */
@@ -422,5 +468,6 @@ export function effectiveContent(
     ticker: value('ticker') as unknown as { items: string[] },
     footer: value('footer') as unknown as FooterContent,
     facts: value('facts') as unknown as FactsContent,
+    archive: value('archive') as unknown as ArchiveContent,
   };
 }

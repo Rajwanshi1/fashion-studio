@@ -22,6 +22,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import { useUnsavedGuard } from '../lib/useUnsavedGuard';
 import { SECTIONS, SECTION_DEFAULTS } from '../lib/siteContent';
 import type {
+  ArchiveVolumeContent,
   FieldConfig,
   LookContent,
   SectionConfig,
@@ -34,6 +35,7 @@ import type { PreviewDevice } from '../preview/PreviewFrame';
 // The one shape both the form and the previews speak — siteContent.ts owns it.
 type TrustItem = TrustItemContent;
 type Look = LookContent;
+type Volume = ArchiveVolumeContent;
 
 type FormState = Record<string, unknown>;
 
@@ -63,6 +65,8 @@ function maxLengthFor(name: string): number {
 /** Fixed counts the schemas insist on. */
 const TRUST_COUNT = 3;
 const LOOK_COUNT = 7;
+/** The archive grows a volume per season; the schema caps the list at 6. */
+const VOLUME_MAX = 6;
 
 /** The two looks the storefront prints a caption under. */
 const CAPTIONED_LOOKS = new Set([0, 3]);
@@ -140,6 +144,29 @@ function mergeLooks(stored: unknown, fallback: unknown): Look[] {
   });
 }
 
+/** Volumes are not a fixed count — the archive only grows. Rows past the
+ *  defaults are kept as stored (merged over an empty volume). */
+function mergeVolumes(stored: unknown, fallback: unknown): Volume[] {
+  const defaults = Array.isArray(fallback) ? fallback : [];
+  const rows = Array.isArray(stored) ? stored : [];
+  const length = Math.max(defaults.length, rows.length);
+  return Array.from({ length }, (_, i) => {
+    const row = isRecord(rows[i]) ? rows[i] : {};
+    const def = isRecord(defaults[i]) ? defaults[i] : {};
+    return {
+      imageUrl: mergeImg(row.imageUrl, def.imageUrl),
+      focusX: mergeNum(row.focusX, def.focusX),
+      focusY: mergeNum(row.focusY, def.focusY),
+      volumeNo: mergeStr(row.volumeNo, def.volumeNo),
+      title: mergeStr(row.title, def.title),
+      season: mergeStr(row.season, def.season),
+      copy: mergeStr(row.copy, def.copy),
+      collections: mergeList(row.collections, def.collections),
+      status: mergeStr(row.status, def.status),
+    };
+  });
+}
+
 /** Effective content for one section, ready to edit. */
 function buildForm(config: SectionConfig, stored: Record<string, unknown> | null): FormState {
   // Widened: the form reads fields by dynamic name, off the schema config.
@@ -166,6 +193,9 @@ function buildForm(config: SectionConfig, stored: Record<string, unknown> | null
       case 'looks':
         form[field.name] = mergeLooks(value, fallback);
         break;
+      case 'volumes':
+        form[field.name] = mergeVolumes(value, fallback);
+        break;
       default:
         form[field.name] = mergeStr(value, fallback);
     }
@@ -189,6 +219,9 @@ const trustOf = (form: FormState, name: string): TrustItem[] =>
 
 const looksOf = (form: FormState, name: string): Look[] =>
   Array.isArray(form[name]) ? (form[name] as Look[]) : [];
+
+const volumesOf = (form: FormState, name: string): Volume[] =>
+  Array.isArray(form[name]) ? (form[name] as Volume[]) : [];
 
 const pctOf = (form: FormState, name: string): number => {
   const value = form[name];
@@ -231,6 +264,21 @@ function payload(config: SectionConfig, form: FormState): Record<string, unknown
             title,
             copy,
             ctaHref,
+          }));
+        break;
+      case 'volumes':
+        body[field.name] = volumesOf(form, field.name)
+          .slice(0, VOLUME_MAX)
+          .map(({ imageUrl, focusX, focusY, volumeNo, title, season, copy, collections, status }) => ({
+            imageUrl,
+            focusX: clampPct(focusX),
+            focusY: clampPct(focusY),
+            volumeNo,
+            title,
+            season,
+            copy,
+            collections: collections.map((c) => c.trim()).filter((c) => c !== ''),
+            status,
           }));
         break;
       default:
@@ -682,6 +730,90 @@ function LooksField({
   );
 }
 
+/** The archive's volumes — same patch discipline as LooksField, plus append
+ *  (the archive grows; it never shrinks). Collections are edited as one
+ *  comma-separated line — they must match products.collection values. */
+function VolumesField({
+  label,
+  hint,
+  volumes,
+  withFocus,
+  onUploading,
+  onPatch,
+  onAdd,
+}: {
+  label: string;
+  hint?: string;
+  volumes: Volume[];
+  withFocus: boolean;
+  onUploading: (uploading: boolean) => void;
+  onPatch: (index: number, patch: Partial<Volume>) => void;
+  onAdd: () => void;
+}) {
+  return (
+    <>
+      <span className="lab">{label}</span>
+      {hint && <p className="hint">{hint}</p>}
+      {volumes.map((vol, i) => (
+        <fieldset className="fset look-block" key={i}>
+          <legend className="fset-legend">{vol.volumeNo || `Volume ${i + 1}`}</legend>
+          <ImageField
+            label={`Volume ${i + 1} photo`}
+            value={vol.imageUrl}
+            focusX={withFocus ? vol.focusX : undefined}
+            focusY={withFocus ? vol.focusY : undefined}
+            onFocusChange={withFocus ? (focusX, focusY) => onPatch(i, { focusX, focusY }) : undefined}
+            onUploading={onUploading}
+            onChange={(imageUrl) => onPatch(i, { imageUrl })}
+          />
+          <TextField
+            id={`vol-${i}-no`}
+            label={`Volume ${i + 1} number`}
+            value={vol.volumeNo}
+            onChange={(volumeNo) => onPatch(i, { volumeNo })}
+          />
+          <TextField
+            id={`vol-${i}-title`}
+            label={`Volume ${i + 1} title`}
+            value={vol.title}
+            onChange={(title) => onPatch(i, { title })}
+          />
+          <TextField
+            id={`vol-${i}-season`}
+            label={`Volume ${i + 1} season`}
+            value={vol.season}
+            onChange={(season) => onPatch(i, { season })}
+          />
+          <TextField
+            id={`vol-${i}-copy`}
+            label={`Volume ${i + 1} copy`}
+            multiline
+            value={vol.copy}
+            onChange={(copy) => onPatch(i, { copy })}
+          />
+          <TextField
+            id={`vol-${i}-collections`}
+            label={`Volume ${i + 1} sub-collections (comma-separated)`}
+            value={vol.collections.join(', ')}
+            onChange={(joined) => onPatch(i, { collections: joined.split(',').map((c) => c.trim()) })}
+          />
+          <TextField
+            id={`vol-${i}-status`}
+            label={`Volume ${i + 1} status`}
+            value={vol.status}
+            onChange={(status) => onPatch(i, { status })}
+          />
+        </fieldset>
+      ))}
+      {volumes.length < VOLUME_MAX && (
+        <button type="button" className="btn-line" onClick={onAdd}>
+          Add a volume
+        </button>
+      )}
+    </>
+  );
+}
+
 export default function SiteSectionEdit() {
   const { key } = useParams();
   const navigate = useNavigate();
@@ -751,6 +883,30 @@ export default function SiteSectionEdit() {
           }
         : f,
     );
+
+  const patchVolume = (name: string, index: number, patch: Partial<Volume>) =>
+    setForm((f) =>
+      f
+        ? {
+            ...f,
+            [name]: volumesOf(f, name).map((vol, i) => (i === index ? { ...vol, ...patch } : vol)),
+          }
+        : f,
+    );
+
+  /** New editions are appended — the archive never removes one (audit §06). */
+  const addVolume = (name: string) =>
+    setForm((f) => {
+      if (!f) return f;
+      const volumes = volumesOf(f, name);
+      if (volumes.length >= VOLUME_MAX) return f;
+      const next: Volume = {
+        imageUrl: null, focusX: 50, focusY: 50,
+        volumeNo: `Volume ${String(volumes.length + 1).padStart(2, '0')}`,
+        title: '', season: '', copy: '', collections: [], status: '',
+      };
+      return { ...f, [name]: [...volumes, next] };
+    });
 
   const onUploading = (uploading: boolean) =>
     setUploads((n) => Math.max(0, n + (uploading ? 1 : -1)));
@@ -860,6 +1016,19 @@ export default function SiteSectionEdit() {
             withFocus={Boolean(field.focus)}
             onUploading={onUploading}
             onPatch={(index, patch) => patchLook(field.name, index, patch)}
+          />
+        );
+      case 'volumes':
+        return (
+          <VolumesField
+            key={field.name}
+            label={field.label}
+            hint={field.hint}
+            volumes={volumesOf(state, field.name)}
+            withFocus={Boolean(field.focus)}
+            onUploading={onUploading}
+            onPatch={(index, patch) => patchVolume(field.name, index, patch)}
+            onAdd={() => addVolume(field.name)}
           />
         );
       default:

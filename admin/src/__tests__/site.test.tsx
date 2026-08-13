@@ -5,7 +5,7 @@ import { mockFetch, renderApp, seedAdminAuth } from '../test/utils';
 import { effectiveContent } from '../lib/siteContent';
 import DeviceToggle from '../preview/DeviceToggle';
 
-/** All nine canvas tap targets, by their accessible edit-link names. */
+/** All ten canvas tap targets, by their accessible edit-link names. */
 const EDIT_LINKS = [
   'Hero',
   'Marquee',
@@ -15,6 +15,7 @@ const EDIT_LINKS = [
   'Footer',
   'Lookbook',
   'Announcement Bar',
+  'The Archive',
   'Brand Facts',
 ];
 
@@ -78,7 +79,7 @@ describe('site canvas', () => {
       '/site/marquee',
     );
     expect(screen.getAllByText('Customised')).toHaveLength(1);
-    expect(screen.getAllByText('Default')).toHaveLength(8);
+    expect(screen.getAllByText('Default')).toHaveLength(9);
   });
 
   it('keeps the fixed sections visible as ghosts, not links', async () => {
