@@ -80,6 +80,9 @@ export default function Checkout() {
             variantId: i.variantId,
             quantity: i.qty,
             excludedComponents: i.excludedComponents.length ? i.excludedComponents : undefined, // omit empties
+            // The server 409s if it would charge anything other than this — a
+            // stale cart is asked to review, never silently repriced.
+            expectedUnitPrice: i.unitPrice,
             measurements: i.measurements || undefined, // omit empties
           })),
         });

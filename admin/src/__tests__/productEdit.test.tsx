@@ -223,6 +223,29 @@ describe('ProductEdit', () => {
     expect(await screen.findByRole('heading', { name: 'Products' })).toBeInTheDocument();
   });
 
+  it('blocks the save when two components share a name', async () => {
+    seedAdminAuth();
+    const { calls } = mockFetch((url) => {
+      if (url.endsWith('/api/categories')) return { json: CATEGORIES };
+      if (url.endsWith('/api/admin/products')) return { json: [] };
+      return undefined;
+    });
+
+    renderApp('/products/new');
+    await screen.findByRole('button', { name: /Gowns/ });
+    await userEvent.type(screen.getByLabelText('Name'), 'Twin Gown');
+    await userEvent.click(screen.getByRole('button', { name: /Gowns/ }));
+    await userEvent.type(screen.getByLabelText('Price (₹ rupees)'), '10000');
+    await userEvent.click(screen.getByRole('button', { name: 'Add component' }));
+    await userEvent.type(screen.getByLabelText('Component 1 name'), 'Dupatta');
+    await userEvent.click(screen.getByRole('button', { name: 'Add component' }));
+    // Trim/case-insensitive: checkout keys tick state by name.
+    await userEvent.type(screen.getByLabelText('Component 2 name'), ' dupatta');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Piece' }));
+    expect(await screen.findByText(/Component names must be unique/)).toBeInTheDocument();
+    expect(calls.find((c) => c.method === 'POST')).toBeUndefined();
+  });
+
   it('links the discount percentage and the sale price in both directions', async () => {
     seedAdminAuth();
     const { calls } = mockFetch((url, init) => {

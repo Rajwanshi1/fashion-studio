@@ -147,6 +147,16 @@ const productImagePresignSchema = z
 
 const flagSchema = z.enum(['bestseller', 'new', 'sale']).nullable();
 
+/**
+ * A field the components migration removed. A cached pre-components admin
+ * bundle still sends it on every save — the zod default would strip it
+ * silently and discard the operator's price edit with a 200, so its presence
+ * is an explicit "refresh your tab" failure instead.
+ */
+const legacyRemovedField = z.custom<undefined>((value) => value === undefined, {
+  message: 'Your admin app is out of date — refresh the browser tab and try again',
+});
+
 const productBaseSchema = z.object({
   // The category can be referenced by id or by slug (the admin UI knows slugs).
   categoryId: z.string().min(1).optional(),
@@ -183,7 +193,8 @@ const productBaseSchema = z.object({
   salePrice: z.number().int().positive().nullable().optional(),
   costPrice: z.number().int().min(0).nullable().optional(),
   // "This order contains" rows. Tight caps keep product writes inside the WAF
-  // body budget. price: null = no separate price, 0 = included at no extra cost.
+  // body budget. Optional rows are always priced (blank = 0 = included free);
+  // required rows carry no price — the repo normalizes both.
   components: z
     .array(
       z.object({
@@ -193,7 +204,15 @@ const productBaseSchema = z.object({
       }),
     )
     .max(10)
+    // Checkout exclusions and the PDP tick state are keyed by name, so two
+    // same-named rows would share one checkbox and untick together.
+    .refine(
+      (rows) => new Set(rows.map((row) => row.name.trim().toLowerCase())).size === rows.length,
+      { message: 'Component names must be unique' },
+    )
     .optional(),
+  dupattaPrice: legacyRemovedField,
+  jacketPrice: legacyRemovedField,
   images: z
     .array(
       z.object({

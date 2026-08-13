@@ -375,8 +375,17 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
       await client.query(
         'INSERT INTO product_components (product_id, name, optional, price, position) VALUES ($1, $2, $3, $4, $5)',
         // Price is only meaningful on optional rows — a required piece's cost
-        // lives in the base price, so it is normalized away here.
-        [productId, component.name, component.optional ?? false, component.optional ? (component.price ?? null) : null, position],
+        // lives in the base price, so it is normalized away here. An optional
+        // row is ALWAYS priced (blank = 0, included free): the PDP renders a
+        // checkbox only for priced optional rows, so a null here would promise
+        // "customer can remove it" in admin and never let the customer do so.
+        [
+          productId,
+          component.name,
+          component.optional ?? false,
+          component.optional ? (component.price ?? 0) : null,
+          position,
+        ],
       );
     }
   }
@@ -484,16 +493,19 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
       // unit_price is the EFFECTIVE base price: a piece on sale is charged at
       // its sale price, and every caller (cart, checkout, order snapshot) gets
       // that number for free.
+      // Components ride in the SAME statement as the locked price read: a
+      // second SELECT would use a later READ COMMITTED snapshot, so an admin
+      // save landing between the two could price a line from the old base
+      // price plus the new components — a total no committed product ever had.
       const { rows } = await client.query(
         `SELECT v.id, v.product_id, v.size, v.stock,
-                p.name AS product_name, p.color, ${EFFECTIVE_PRICE} AS unit_price, p.image_url
+                p.name AS product_name, p.color, ${EFFECTIVE_PRICE} AS unit_price, p.image_url,
+                COALESCE((SELECT json_agg(json_build_object('name', pc.name, 'optional', pc.optional, 'price', pc.price)
+                                          ORDER BY pc.position, pc.id)
+                          FROM product_components pc WHERE pc.product_id = p.id), '[]'::json) AS components
          FROM product_variants v JOIN products p ON p.id = v.product_id
          WHERE v.id = ANY($1::uuid[]) FOR UPDATE OF v`,
         [ids],
-      );
-      const components = await loadComponents(
-        client,
-        [...new Set(rows.map((row) => row.product_id as string))],
       );
       return rows.map((row) => ({
         id: row.id,
@@ -504,11 +516,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         color: row.color,
         unitPrice: row.unit_price,
         imageUrl: row.image_url ?? null,
-        components: (components.get(row.product_id) ?? []).map(({ name, optional, price }) => ({
-          name,
-          optional,
-          price,
-        })),
+        components: (row.components as { name: string; optional: boolean; price: number | null }[]) ?? [],
       }));
     },
 

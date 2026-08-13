@@ -286,13 +286,13 @@ const effectivePrice = (p: AdminProduct) =>
 /** Full-set price (effective base + default-included add-ons), mirroring the SQL price sort. */
 const setPrice = (p: AdminProduct) => effectivePrice(p) + addonsTotal(p);
 
-/** Mirrors the repo's replaceComponents: ids minted, price kept on optional rows only. */
+/** Mirrors the repo's replaceComponents: ids minted, optional rows always priced (blank = 0). */
 const toComponents = (components: ProductComponentInput[] | undefined) =>
   (components ?? []).map((c) => ({
     id: nextId('pc'),
     name: c.name,
     optional: c.optional ?? false,
-    price: c.optional ? (c.price ?? null) : null,
+    price: c.optional ? (c.price ?? 0) : null,
   }));
 
 type FakeProduct = AdminProduct & { deletedAt: string | null };

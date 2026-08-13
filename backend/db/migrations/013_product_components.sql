@@ -11,6 +11,9 @@ CREATE TABLE product_components (
   position int NOT NULL DEFAULT 0
 );
 CREATE INDEX product_components_product_idx ON product_components (product_id, position);
+-- Checkout exclusions are matched by name (case-insensitively) — two same-named
+-- rows on one product would share a PDP checkbox and one untick would drop both.
+CREATE UNIQUE INDEX product_components_name_uniq ON product_components (product_id, lower(name));
 
 INSERT INTO product_components (product_id, name, optional, price, position)
   SELECT id, 'Dupatta', true, dupatta_price, 0 FROM products WHERE dupatta_price IS NOT NULL;

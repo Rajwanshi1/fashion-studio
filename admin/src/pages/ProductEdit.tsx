@@ -377,10 +377,17 @@ export default function ProductEdit() {
     if (saleError) problems.push(saleError);
     const components = form.components.map(({ name, optional, priceRupees }, i) => {
       if (!name.trim()) problems.push(`Component ${i + 1} needs a name`);
-      return { name: name.trim(), optional, price: optional ? addonPaise(priceRupees) : null };
+      // An optional row is always priced — 0 = included free. A blank would
+      // save as an untickable "optional" piece, contradicting the toggle.
+      return { name: name.trim(), optional, price: optional ? (addonPaise(priceRupees) ?? 0) : null };
     });
     if (components.some((c) => c.price === undefined)) {
-      problems.push('Component prices must be 0 or more — leave blank when the piece has no separate price');
+      problems.push('Component prices must be 0 or more — use 0 when the piece is included free');
+    }
+    // Checkout and the boutique's tick state key components by name.
+    const componentNames = components.map((c) => c.name.toLowerCase()).filter(Boolean);
+    if (new Set(componentNames).size !== componentNames.length) {
+      problems.push('Component names must be unique');
     }
     const costPrice = addonPaise(form.costRupees);
     if (costPrice === undefined) {
@@ -720,7 +727,7 @@ export default function ProductEdit() {
         <div className="field">
           <p className="hint">
             Every piece of the set, in display order. Optional pieces the customer can
-            untick; price them in ₹ (blank = no separate price, 0 = included free).
+            untick; price them in ₹ (0 or blank = included free).
           </p>
           <div className="row-list">
             {form.components.map((c, i) => (

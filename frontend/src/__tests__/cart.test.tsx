@@ -182,11 +182,14 @@ describe('cart context', () => {
     const { result } = renderHook(() => useCart(), { wrapper });
     expect(result.current.items).toHaveLength(1);
     const item = result.current.items[0];
-    // Old unitPrice was base-only, so nothing reads as included.
+    // Old unitPrice was base-only, so nothing reads as included; no addon
+    // price means the flags are synthetic, so no exclusions are invented
+    // either (they would only stop this line merging with a fresh add —
+    // checkout's expectedUnitPrice guard owns the pricing).
     expect(item.includedComponents).toEqual([]);
-    expect(item.excludedComponents).toEqual(['dupatta', 'jacket']);
+    expect(item.excludedComponents).toEqual([]);
     expect(item.measurements).toBe('');
-    expect(cartLineKey(item)).toBe('v1:dupatta,jacket:');
+    expect(cartLineKey(item)).toBe('v1:::18400000');
     expect(result.current.subtotal).toBe(2 * 18400000);
   });
 
@@ -201,7 +204,9 @@ describe('cart context', () => {
     const item = result.current.items[0];
     expect(item.includedComponents).toEqual(['dupatta']); // untouched by the older normaliser
     expect(item.measurements).toBe('');
-    expect(cartLineKey(item)).toBe('v1:jacket:');
+    // The kept dupatta price marks a set-includes-era line, so the false
+    // jacket flag reads as a real untick.
+    expect(cartLineKey(item)).toBe('v1:jacket::18400000');
   });
 
   it('migrates set-includes era carts onto the component-name arrays', () => {
@@ -219,6 +224,40 @@ describe('cart context', () => {
     expect(item.excludedComponents).toEqual(['jacket']);
     expect(item.unitPrice).toBe(19600000); // snapshotted price stays valid
     expect(item).not.toHaveProperty('includeDupatta');
-    expect(cartLineKey(item)).toBe('v1:jacket:');
+    expect(cartLineKey(item)).toBe('v1:jacket::19600000');
+  });
+
+  it('a migrated pre-set-includes line merges with a fresh identical add', () => {
+    // The regression the phantom exclusions caused: a legacy base-only line
+    // and a new add of the same selection at the same price must be one line.
+    localStorage.setItem(
+      'ta.cart',
+      JSON.stringify([{ ...legacyLine, dupattaPrice: null, jacketPrice: null, qty: 1 }]),
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    act(() =>
+      result.current.add({
+        variantId: 'v1',
+        productId: 'p1',
+        productSlug: 'sage-sequin-jacket-lehenga',
+        name: 'Sage Sequin Jacket Lehenga',
+        size: 'S',
+        color: 'Sage',
+        unitPrice: 18400000,
+        imageUrl: null,
+        includedComponents: [],
+        excludedComponents: [],
+        measurements: '',
+      }),
+    );
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0].qty).toBe(2);
+  });
+
+  it('the same selection added at a different price stays a separate line', () => {
+    const { result } = renderHook(() => useCart(), { wrapper });
+    act(() => result.current.add(base));
+    act(() => result.current.add({ ...base, unitPrice: base.unitPrice + 100000 }));
+    expect(result.current.items).toHaveLength(2);
   });
 });

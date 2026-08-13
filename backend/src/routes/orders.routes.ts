@@ -26,10 +26,12 @@ const createOrderSchema = z.object({
       quantity: z.number().int().min(1),
       // Optional set pieces the shopper unticked; everything else is included.
       excludedComponents: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+      // Paise the cart displayed per unit; the service 409s on disagreement.
+      expectedUnitPrice: z.number().int().min(0).optional(),
       // Deprecated pre-components booleans, still accepted for one release so a
-      // cached old SPA can't silently overcharge (zod would strip them and the
-      // order would include pieces the shopper unticked). Remove with the
-      // legacy-column drop chore.
+      // cached old SPA is priced by what it actually displayed (zod would strip
+      // them and the order would include pieces the shopper unticked). Remove
+      // with the legacy-column drop chore.
       includeDupatta: z.boolean().optional(),
       includeJacket: z.boolean().optional(),
       // 500 keeps a 10-line order well under the prod WAF's 8KB body cap.
@@ -39,14 +41,21 @@ const createOrderSchema = z.object({
 });
 
 type OrderItemBody = z.infer<typeof createOrderSchema>['items'][number];
+type ServiceItem = Omit<OrderItemBody, 'includeDupatta' | 'includeJacket'> & {
+  legacyIncludes?: { dupatta: boolean; jacket: boolean };
+};
 
-/** Maps the deprecated include booleans onto excludedComponents. */
-function withLegacyExcludes(item: OrderItemBody): OrderItemBody {
-  const excluded = [...(item.excludedComponents ?? [])];
-  if (item.includeDupatta === false) excluded.push('dupatta');
-  if (item.includeJacket === false) excluded.push('jacket');
+/**
+ * Requests carrying the include booleans come from the pre-components
+ * storefront. Marking them (rather than mapping to exclusions) lets the
+ * service restrict pricing to the two pieces that UI ever displayed — any
+ * newly named optional component was invisible to that shopper.
+ */
+function withLegacyIncludes(item: OrderItemBody): ServiceItem {
   const { includeDupatta, includeJacket, ...rest } = item;
-  return excluded.length ? { ...rest, excludedComponents: excluded } : rest;
+  if (includeDupatta === undefined && includeJacket === undefined) return rest;
+  // Missing boolean = included, the old UI's default.
+  return { ...rest, legacyIncludes: { dupatta: includeDupatta !== false, jacket: includeJacket !== false } };
 }
 
 export function orderRoutes(orders: OrdersService, jwtSecret: string) {
@@ -56,7 +65,7 @@ export function orderRoutes(orders: OrdersService, jwtSecret: string) {
     const body = c.req.valid('json');
     const order = await orders.createOrder({
       ...body,
-      items: body.items.map(withLegacyExcludes),
+      items: body.items.map(withLegacyIncludes),
       userId: c.var.user?.id ?? null,
     });
     return c.json(order, 201);
