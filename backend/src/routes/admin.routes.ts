@@ -275,7 +275,7 @@ export function adminRoutes(deps: AdminDeps) {
       .filter((p) => p.active)
       .filter((p) => {
         const sized = p.variants.filter((v) => v.size !== 'Custom');
-        return sized.length > 0 && sized.every((v) => v.stock === 0);
+        return sized.length > 0 && sized.every((v) => v.stock <= 0);
       })
       .map((p) => ({
         productId: p.id,

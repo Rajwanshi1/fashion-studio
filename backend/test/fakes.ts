@@ -396,7 +396,7 @@ export class FakeProductsRepo implements ProductsRepo {
   async decrementStock(_tx: Tx, variantId: string, qty: number): Promise<void> {
     const v = this.variantById(variantId);
     if (!v) throw new Error(`unknown variant ${variantId}`);
-    if (v.stock - qty < 0) throw new Error('stock check constraint violated');
+    // Mirrors migration 013: no stock >= 0 constraint — negative = MTO backlog.
     v.stock -= qty;
   }
 

@@ -353,10 +353,11 @@ describe('API', () => {
       expect(order).toMatchObject({ status: 'pending_payment', subtotal: 36800000, deliveryFee: 0, total: 36800000, userId: null });
     });
 
-    it('409 on insufficient stock', async () => {
+    it('accepts an order past available stock — made to order never refuses a size', async () => {
       const res = await app.request('/api/orders', post({ customer: CUSTOMER, deliveryMethod: 'standard', items: [{ variantId: mossS().id, quantity: 5 }] }));
-      expect(res.status).toBe(409);
-      expect((await res.json()).error).toMatch(/stock/i);
+      expect(res.status).toBe(201);
+      const [moss] = await f.products.getVariantsForUpdate({}, [mossS().id]);
+      expect(moss.stock).toBe(-4); // 1 - 5: negative = cut-to-order backlog
     });
 
     it('400 on empty items and invalid bodies', async () => {

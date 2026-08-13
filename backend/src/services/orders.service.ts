@@ -186,12 +186,8 @@ export function createOrdersService(deps: {
         for (const id of variantIds) {
           if (!byId.has(id)) throw new DomainError('NOT_FOUND', 'One or more items are no longer available');
         }
-        for (const [id, qty] of quantities) {
-          const variant = byId.get(id)!;
-          if (variant.stock < qty) {
-            throw new DomainError('INSUFFICIENT_STOCK', `Insufficient stock for ${variant.productName} (${variant.size})`);
-          }
-        }
+        // Made to order: stock never gates a sale. Decrementing below zero is
+        // deliberate — negative stock is the atelier's cut-to-order backlog.
 
         // Prices always come from the DB, never the client. An opt-in only
         // counts when the product actually has that piece in its set.
@@ -280,15 +276,8 @@ export function createOrdersService(deps: {
               throw new DomainError('NOT_FOUND', 'A linked piece is no longer in the catalogue — unlink it to record the bill anyway');
             }
           }
-          for (const [id, qty] of linkedQuantities) {
-            const v = lockedVariants.get(id)!;
-            if (v.stock < qty) {
-              throw new DomainError(
-                'INSUFFICIENT_STOCK',
-                `Insufficient stock for ${v.productName} (${v.size}) — unlink the piece to record the bill anyway`,
-              );
-            }
-          }
+          // No stock check: a paper bill records a sale that already happened,
+          // and under made-to-order a 0-stock size is a legitimate commission.
         }
 
         let user: User;

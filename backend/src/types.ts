@@ -241,7 +241,6 @@ export class DomainError extends Error {
       | 'SLUG_TAKEN'
       | 'INVALID_CREDENTIALS'
       | 'NOT_FOUND'
-      | 'INSUFFICIENT_STOCK'
       | 'EMPTY_ORDER'
       | 'INVALID_STATUS_TRANSITION'
       | 'OVER_COLLECTION'
