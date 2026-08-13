@@ -448,7 +448,7 @@ describe('ProductEdit', () => {
     ]);
   });
 
-  it('lets the AI-read photo colour be corrected, keeping the swatch hex', async () => {
+  it('correcting the AI-read photo colour also drops its stale hex', async () => {
     seedAdminAuth();
     const calls = renderEdit(
       makeProduct({
@@ -462,9 +462,11 @@ describe('ProductEdit', () => {
     await userEvent.type(colour, 'Moss');
     await userEvent.click(screen.getByRole('button', { name: 'Save Piece' }));
 
+    // The misread hex must not survive the correction — it outranks the
+    // corrected name's keyword fallback on the boutique's swatch fill.
     const body = calls.find((c) => c.method === 'PUT')?.body as PutBody;
     expect(body.images).toEqual([
-      { url: 'https://cdn.example/a.jpg', pose: 'front', color: 'Moss', colorHex: '#9caf88' },
+      { url: 'https://cdn.example/a.jpg', pose: 'front', color: 'Moss', colorHex: '' },
     ]);
   });
 });

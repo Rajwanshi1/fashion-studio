@@ -70,7 +70,11 @@ export default function Product() {
             props: { slug: detail.slug, name: detail.name, price: detail.price },
           });
         }
-        setColor(detail.images.find((img) => img.color !== '')?.color ?? detail.color);
+        // The catalogue colour, NOT the first photo's: the order line snapshots
+        // the product colour server-side, and a detail-shot tag ("Antique
+        // Gold" embroidery close-up) must not become the bag's colour label
+        // without the shopper choosing it.
+        setColor(detail.color);
         setExcluded(new Set());
         const firstInStock = detail.variants.find((v) => v.stock > 0) ?? detail.variants[0];
         setVariantId(firstInStock?.id ?? '');

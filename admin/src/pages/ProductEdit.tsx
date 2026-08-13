@@ -288,7 +288,10 @@ export default function ProductEdit() {
   const setImageColor = (index: number, color: string) =>
     setForm((f) => ({
       ...f,
-      images: f.images.map((im, x) => (x === index ? { ...im, color } : im)),
+      // Correcting the name also drops the AI-read hex: the swatch fill would
+      // otherwise keep showing the misread colour (hex beats the name-keyword
+      // fallback on the PDP), and there is no hex editor to fix it by hand.
+      images: f.images.map((im, x) => (x === index ? { ...im, color, colorHex: '' } : im)),
     }));
 
   const removeImage = (index: number) =>

@@ -346,9 +346,25 @@ describe('PDP', () => {
       expect(swatches.map((s) => s.getAttribute('aria-label'))).toEqual(['Sage', 'Antique Gold']);
       expect(bg(swatches[0])).toMatch(/#9cb6aa|rgb\(156,\s*182,\s*170\)/i);
       expect(bg(swatches[1])).toMatch(/#c9a55a|rgb\(201,\s*165,\s*90\)/i);
-      // The first photo's colour is pre-selected.
+      // The catalogue colour is pre-selected (it happens to match photo 0 here).
       expect(swatches[0].className).toContain('active');
       expect(document.getElementById('colorName')).toHaveTextContent('Sage');
+    });
+
+    it('the label starts on the catalogue colour, never a photo tag the shopper did not pick', async () => {
+      // A detail-shot tag must not become the bag's colour label by default:
+      // the server snapshots the catalogue colour onto the order line, so the
+      // bag and the confirmation must agree without any interaction.
+      mockFetch((url: string) => {
+        if (url.includes('/api/products/fern-zardozi-set-fern')) return { ...DETAIL_SET, color: 'Fern' };
+        return setRoutes(url);
+      });
+      renderApp('/product/fern-zardozi-set-fern');
+      await screen.findByRole('heading', { level: 1, name: 'Fern Zardozi Set' });
+
+      expect(document.getElementById('colorName')).toHaveTextContent('Fern');
+      const swatches = within(document.getElementById('swatches')!).getAllByRole('button');
+      expect(swatches.some((s) => s.className.includes('active'))).toBe(false);
     });
 
     it('clicking a swatch selects the colour, jumps the carousel, and the bag snapshots it', async () => {
