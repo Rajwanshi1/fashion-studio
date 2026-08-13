@@ -12,6 +12,7 @@
 import { Fragment } from 'react';
 import { SECTION_DEFAULTS } from '../lib/siteContent';
 import type {
+  FactsContent,
   FeaturedContent,
   FooterContent,
   HeroContent,
@@ -351,5 +352,29 @@ export function LookbookPreview({
         </section>
       </main>
     </>
+  );
+}
+
+/* ---- Brand facts — not a storefront-markup mirror: the facts render inside
+   existing pages (Contact, PDP, shop), so the canvas shows them as a plain
+   card of label/value rows. ---- */
+
+export function FactsPreview({ facts }: { facts: FactsContent }) {
+  const rows: Array<[string, string]> = [
+    ['Studio', facts.addressLines.join(', ')],
+    ['Phone', facts.phone],
+    ['Email', facts.email],
+    ['Current collection', facts.collectionName],
+    ['Lead time — standard', facts.leadStandard],
+    ['Lead time — made to measure', facts.leadCustom],
+  ];
+  return (
+    <div className="facts-preview" style={{ padding: '1.2rem 1.4rem', background: '#fff' }}>
+      {rows.map(([label, value]) => (
+        <p key={label} style={{ margin: '0 0 0.5rem', fontSize: '0.85rem' }}>
+          <strong style={{ display: 'inline-block', minWidth: '14em' }}>{label}</strong> {value}
+        </p>
+      ))}
+    </div>
   );
 }

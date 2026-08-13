@@ -59,6 +59,17 @@ export interface SiteContent {
   lookbook: { looks: Look[]; quote: string; quoteCite: string };
   ticker: { items: string[] };
   footer: { blurb: string; instagramUrl: string; pinterestUrl: string; whatsappUrl: string };
+  /** Brand facts — the single source of truth for the address, phone and the
+   *  current collection's name. Piece counts are deliberately NOT here: they
+   *  come from the catalogue API, or they drift into fiction. */
+  facts: {
+    addressLines: string[];
+    phone: string;
+    email: string;
+    collectionName: string;
+    leadStandard: string;
+    leadCustom: string;
+  };
 }
 
 /** The storefront's built-in copy — copied verbatim from the hardcoded strings
@@ -153,6 +164,14 @@ export const DEFAULT_CONTENT: SiteContent = {
     instagramUrl: 'https://instagram.com/tanviagnihotrylabel',
     pinterestUrl: '',
     whatsappUrl: 'https://wa.me/918118892523',
+  },
+  facts: {
+    addressLines: ['B-74, Rajendra Marg', 'Bapu Nagar, Jaipur'],
+    phone: '+91 81188 92523',
+    email: 'info@tanviagnihotry.com',
+    collectionName: 'Rang Mehfil',
+    leadStandard: '4–6 weeks',
+    leadCustom: '6–8 weeks',
   },
 };
 
@@ -262,6 +281,7 @@ export function mergeContent(sections: Record<string, unknown>): SiteContent {
   const lookbook = obj(s.lookbook);
   const ticker = obj(s.ticker);
   const footer = obj(s.footer);
+  const facts = obj(s.facts);
 
   return {
     hero: {
@@ -308,6 +328,14 @@ export function mergeContent(sections: Record<string, unknown>): SiteContent {
       instagramUrl: mergeStr(footer.instagramUrl, d.footer.instagramUrl),
       pinterestUrl: mergeStr(footer.pinterestUrl, d.footer.pinterestUrl),
       whatsappUrl: mergeStr(footer.whatsappUrl, d.footer.whatsappUrl),
+    },
+    facts: {
+      addressLines: mergeStrList(facts.addressLines, d.facts.addressLines),
+      phone: mergeStr(facts.phone, d.facts.phone),
+      email: mergeStr(facts.email, d.facts.email),
+      collectionName: mergeStr(facts.collectionName, d.facts.collectionName),
+      leadStandard: mergeStr(facts.leadStandard, d.facts.leadStandard),
+      leadCustom: mergeStr(facts.leadCustom, d.facts.leadCustom),
     },
   };
 }

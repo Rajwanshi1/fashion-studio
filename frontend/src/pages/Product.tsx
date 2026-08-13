@@ -5,6 +5,7 @@ import { displayPrice, displaySalePrice, effectiveBasePrice } from '../lib/forma
 import { COLOR_FAMILY_META } from '../lib/types';
 import type { ProductDetail, ProductImage, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
+import { useSiteContent } from '../lib/content';
 import { useWishlist } from '../lib/wishlist';
 import { track } from '../lib/analytics';
 import { useCartDrawer } from '../components/CartDrawer';
@@ -26,6 +27,7 @@ export default function Product() {
   const { slug = '' } = useParams();
   const navigate = useNavigate();
   const cart = useCart();
+  const { facts, footer } = useSiteContent();
   const wishlist = useWishlist();
   const { openDrawer } = useCartDrawer();
   const { showToast } = useToast();
@@ -359,12 +361,18 @@ export default function Product() {
           <div className="mto">
             <span className="dot"></span>
             <p>
-              <strong>Made to order.</strong> Each piece is crafted on commission and dispatched in
-              4–6 weeks. Questions? Call us before ordering at{' '}
-              <a href="tel:+918118892523">+91 81188 92523</a> or on{' '}
-              <a href="https://wa.me/918118892523" target="_blank" rel="noreferrer">
-                WhatsApp
-              </a>
+              <strong>Made to order.</strong> Each piece is crafted on commission and dispatched in{' '}
+              {facts.leadStandard}. Questions? Call us before ordering at{' '}
+              <a href={`tel:+${facts.phone.replace(/\D/g, '')}`}>{facts.phone}</a>
+              {footer.whatsappUrl && (
+                <>
+                  {' '}
+                  or on{' '}
+                  <a href={footer.whatsappUrl} target="_blank" rel="noreferrer">
+                    WhatsApp
+                  </a>
+                </>
+              )}
               .
             </p>
           </div>
@@ -431,9 +439,9 @@ export default function Product() {
               Made to Order &amp; Fittings <span className="ic">+</span>
             </summary>
             <div className="acc-body">
-              Crafted on commission in our atelier. Standard sizes ship in 4–6 weeks;
-              made-to-measure in 6–8 weeks. Our team will reach out over call and WhatsApp within
-              48 hours of your order to take measurements.
+              Crafted on commission in our atelier. Standard sizes ship in {facts.leadStandard};
+              made-to-measure in {facts.leadCustom}. Our team will reach out over call and
+              WhatsApp within 48 hours of your order to take measurements.
             </div>
           </details>
           <details className="acc">

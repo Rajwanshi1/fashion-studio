@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { track } from '../lib/analytics';
+import { useSiteContent } from '../lib/content';
 import { displayPrice } from '../lib/format';
 import type { Category, ColorFamily, ProductSort, ProductsResponse, ProductSummary } from '../lib/types';
 import { COLOR_FAMILIES, COLOR_FAMILY_META } from '../lib/types';
@@ -30,6 +31,7 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
 
 export default function Collection() {
   usePageTitle('The Collection');
+  const { facts } = useSiteContent();
   const { categorySlug = '' } = useParams();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
@@ -208,17 +210,17 @@ export default function Collection() {
       <div className="crumbs">
         <Link to="/">Home</Link>
         <span className="sep">/</span>
-        <Link to="/collections">Collections</Link>
+        <Link to="/collection">The Collection</Link>
         <span className="sep">/</span>
         <span className="here">{categoryName}</span>
       </div>
 
       <div className="page-hero">
-        <span className="eyebrow">The Verdant Edit</span>
+        <span className="eyebrow">{facts.collectionName}</span>
         <h1>{categoryName}</h1>
         <p>
           {category?.description ??
-            'Hand-embroidered indo-western pieces in moss, sage and pistachio — structured, fluid, and made to order in our atelier.'}
+            'Hand-embroidered pieces, structured and fluid — each made to order in our Jaipur atelier.'}
         </p>
       </div>
 

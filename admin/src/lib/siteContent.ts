@@ -22,7 +22,8 @@ export type SectionKey =
   | 'lookbookCover'
   | 'lookbook'
   | 'ticker'
-  | 'footer';
+  | 'footer'
+  | 'facts';
 
 export type FieldType = 'text' | 'textarea' | 'image' | 'stringList' | 'trustItems' | 'looks';
 
@@ -129,6 +130,19 @@ export const SECTIONS: SectionConfig[] = [
       { name: 'whatsappUrl', label: 'WhatsApp link', type: 'text', hint: 'Full link, e.g. https://wa.me/…' },
     ],
   },
+  {
+    key: 'facts',
+    title: 'Brand Facts',
+    blurb: 'Address, phone & collection name',
+    fields: [
+      { name: 'addressLines', label: 'Studio address', type: 'stringList', hint: 'Up to 4 lines — Contact page.' },
+      { name: 'phone', label: 'Phone', type: 'text', hint: 'Shown on Contact and product pages.' },
+      { name: 'email', label: 'Email', type: 'text' },
+      { name: 'collectionName', label: 'Current collection', type: 'text', hint: 'Named on the shop page. Piece counts always come from the catalogue.' },
+      { name: 'leadStandard', label: 'Lead time — standard sizes', type: 'text' },
+      { name: 'leadCustom', label: 'Lead time — made to measure', type: 'text' },
+    ],
+  },
 ];
 
 /**
@@ -224,6 +238,14 @@ export const SECTION_DEFAULTS = {
     instagramUrl: 'https://instagram.com/tanviagnihotrylabel',
     pinterestUrl: '',
     whatsappUrl: 'https://wa.me/918118892523',
+  },
+  facts: {
+    addressLines: ['B-74, Rajendra Marg', 'Bapu Nagar, Jaipur'],
+    phone: '+91 81188 92523',
+    email: 'info@tanviagnihotry.com',
+    collectionName: 'Rang Mehfil',
+    leadStandard: '4–6 weeks',
+    leadCustom: '6–8 weeks',
   },
 } satisfies { [K in SectionKey]: EffectiveContent[K] };
 
@@ -364,6 +386,15 @@ export interface FooterContent {
   whatsappUrl: string;
 }
 
+export interface FactsContent {
+  addressLines: string[];
+  phone: string;
+  email: string;
+  collectionName: string;
+  leadStandard: string;
+  leadCustom: string;
+}
+
 export interface EffectiveContent {
   hero: HeroContent;
   featured: FeaturedContent;
@@ -373,6 +404,7 @@ export interface EffectiveContent {
   lookbook: LookbookContent;
   ticker: { items: string[] };
   footer: FooterContent;
+  facts: FactsContent;
 }
 
 /** Every section's effective content in one typed bundle, for the canvas. */
@@ -389,5 +421,6 @@ export function effectiveContent(
     lookbook: value('lookbook') as unknown as LookbookContent,
     ticker: value('ticker') as unknown as { items: string[] },
     footer: value('footer') as unknown as FooterContent,
+    facts: value('facts') as unknown as FactsContent,
   };
 }

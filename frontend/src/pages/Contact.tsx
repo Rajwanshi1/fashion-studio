@@ -34,7 +34,7 @@ function BrandIcon({ d }: { d: string }) {
 export default function Contact() {
   usePageTitle('Contact');
   const [sent, setSent] = useState(false);
-  const { footer } = useSiteContent();
+  const { footer, facts } = useSiteContent();
   const socials = [
     { t: 'Instagram', url: footer.instagramUrl, d: INSTAGRAM_PATH },
     { t: 'Pinterest', url: footer.pinterestUrl, d: PINTEREST_PATH },
@@ -65,15 +65,24 @@ export default function Contact() {
           <div className="ct-block">
             <h4>The Studio</h4>
             <p>
-              B-74, Rajendra Marg
-              <br />
-              Bapu Nagar, Jaipur
+              {facts.addressLines.map((line, i) => (
+                <span key={line}>
+                  {i > 0 && <br />}
+                  {line}
+                </span>
+              ))}
             </p>
           </div>
           <div className="ct-block">
             <h4>Contact Us</h4>
             <p>
-              <a href="tel:+918118892523">+91 81188 92523</a>
+              <a href={`tel:+${facts.phone.replace(/\D/g, '')}`}>{facts.phone}</a>
+              {facts.email && (
+                <>
+                  <br />
+                  <a href={`mailto:${facts.email}`}>{facts.email}</a>
+                </>
+              )}
             </p>
           </div>
           <div className="ct-block">

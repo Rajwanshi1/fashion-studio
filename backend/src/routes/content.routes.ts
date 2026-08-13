@@ -54,6 +54,13 @@ export const SECTION_SCHEMAS = {
   lookbook: z.object({ looks: z.array(look).max(7), quote: copy, quoteCite: str }).partial().strict(),
   ticker: z.object({ items: z.array(str.min(1)).max(8) }).strict(),
   footer: z.object({ blurb: copy, instagramUrl: url, pinterestUrl: url, whatsappUrl: url }).partial().strict(),
+  // Brand facts — the one place the address, phone and collection name live.
+  // Pages read these instead of hardcoding; piece counts are never a fact
+  // field (they come from the catalogue, or they drift into fiction).
+  facts: z.object({
+    addressLines: z.array(str).max(4), phone: str, email: str,
+    collectionName: str, leadStandard: str, leadCustom: str,
+  }).partial().strict(),
 } as const;
 
 export type SectionKey = keyof typeof SECTION_SCHEMAS;
