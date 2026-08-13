@@ -234,6 +234,15 @@ const updateProductSchema = productBaseSchema
       .max(200)
       .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Lowercase words separated by single dashes, e.g. bahaar-purple')
       .optional(),
+    // Provenance (audit §06) — optional, honest facts only; blank clears.
+    karigarName: z.string().max(100).optional(),
+    hoursWorked: z.number().int().positive().nullable().optional(),
+    techniques: z.string().max(300).optional(),
+    finishedOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
+      .nullable()
+      .optional(),
   })
   .partial();
 

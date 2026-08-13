@@ -99,6 +99,11 @@ export interface UpdateProductInput {
   salePrice?: number | null;
   costPrice?: number | null;
   colorFamily?: ColorFamily | null;
+  /** Provenance — optional; '' / null clears a field. */
+  karigarName?: string;
+  hoursWorked?: number | null;
+  techniques?: string;
+  finishedOn?: string | null;
   /** Absent leaves the gallery untouched; present replaces it wholesale. */
   images?: ProductImageInput[];
 }
@@ -220,6 +225,19 @@ function mapDetail(row: any, variants: Variant[], images: ProductImage[]): Admin
     categoryId: row.category_id,
     createdAt: row.created_at.toISOString(),
     costPrice: row.cost_price ?? null,
+    karigarName: row.karigar_name ?? '',
+    hoursWorked: row.hours_worked ?? null,
+    techniques: row.techniques ?? '',
+    // date → 'YYYY-MM-DD'. pg hands DATE columns back as a LOCAL-midnight Date,
+    // so toISOString() would shift it a day west of UTC — format locally.
+    finishedOn:
+      row.finished_on instanceof Date
+        ? [
+            row.finished_on.getFullYear(),
+            String(row.finished_on.getMonth() + 1).padStart(2, '0'),
+            String(row.finished_on.getDate()).padStart(2, '0'),
+          ].join('-')
+        : (row.finished_on ?? null),
   };
 }
 
@@ -554,6 +572,10 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         salePrice: 'sale_price',
         costPrice: 'cost_price',
         colorFamily: 'color_family',
+        karigarName: 'karigar_name',
+        hoursWorked: 'hours_worked',
+        techniques: 'techniques',
+        finishedOn: 'finished_on',
       };
       // A gallery in the payload also re-points the denormalized primary photo.
       const patch: UpdateProductInput = input.images

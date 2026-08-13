@@ -98,6 +98,12 @@ export interface AdminProduct {
   images: ProductImage[];
   active: boolean;
   variants: Variant[];
+  /** Provenance — optional, shown on the PDP only when filled: the karigar's
+   *  first name, honestly counted hours, techniques, finish date (YYYY-MM-DD). */
+  karigarName: string;
+  hoursWorked: number | null;
+  techniques: string;
+  finishedOn: string | null;
 }
 
 export type OrderStatus =

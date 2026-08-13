@@ -104,6 +104,12 @@ export interface ProductDetail extends ProductSummary {
   variants: Variant[];
   /** Ordered gallery; images[0].url mirrors imageUrl. */
   images: ProductImage[];
+  /** Provenance — optional, shown only when filled (audit §06): the karigar's
+   *  first name, honestly counted hours, techniques, finish date (YYYY-MM-DD). */
+  karigarName: string;
+  hoursWorked: number | null;
+  techniques: string;
+  finishedOn: string | null;
 }
 
 export type ProductSort = 'featured' | 'new' | 'price_asc' | 'price_desc';

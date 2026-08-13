@@ -459,6 +459,25 @@ export default function Product() {
               sale.
             </div>
           </details>
+
+          {/* Provenance — the four facts nobody can copy (audit §06). Rendered
+              only when the atelier has filled them in; never invented. */}
+          {(product.karigarName || product.hoursWorked != null || product.techniques || product.finishedOn) && (
+            <div className="provenance">
+              <span className="eyebrow">Provenance</span>
+              <p>
+                {[
+                  product.karigarName && `Made by ${product.karigarName} in Bapu Nagar, Jaipur`,
+                  product.hoursWorked != null && `${product.hoursWorked} hours of hand-work`,
+                  product.techniques,
+                  product.finishedOn &&
+                    `finished ${new Date(product.finishedOn).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            </div>
+          )}
         </div>
       </main>
 

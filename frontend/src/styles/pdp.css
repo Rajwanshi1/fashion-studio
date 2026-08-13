@@ -58,6 +58,9 @@
 .page-pdp .set-includes .check { display: flex; gap: 0.6rem; align-items: center; font-size: var(--t-sm); color: var(--ink-soft); cursor: pointer; }
 .page-pdp .set-includes .check input { accent-color: var(--forest-700); width: 15px; height: 15px; flex: none; }
 
+.page-pdp .provenance { border-top: 1px solid var(--hairline); padding-top: 1.1rem; margin-top: 1.1rem; }
+.page-pdp .provenance p { font-size: var(--t-sm); color: var(--ink-soft); margin: 0.5rem 0 0; }
+
 .page-pdp .mtm-panel { background: var(--celadon-50); border: 1px solid var(--hairline); padding: 1rem 1.2rem; margin-bottom: 1.6rem; }
 .page-pdp .mtm-panel p { margin: 0 0 0.8rem; font-size: var(--t-sm); color: var(--ink-soft); }
 .page-pdp .mtm-panel p strong { color: var(--ink); font-weight: 500; }

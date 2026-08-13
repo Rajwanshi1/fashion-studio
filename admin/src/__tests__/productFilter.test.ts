@@ -35,6 +35,10 @@ function product(over: Partial<AdminProduct> = {}): AdminProduct {
     images: [],
     active: true,
     variants: [],
+    karigarName: '',
+    hoursWorked: null,
+    techniques: '',
+    finishedOn: null,
     ...over,
   };
 }

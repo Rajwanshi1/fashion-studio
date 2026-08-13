@@ -450,6 +450,10 @@ export class FakeProductsRepo implements ProductsRepo {
       colorFamily: input.colorFamily ?? null,
       salePrice: input.salePrice ?? null,
       costPrice: input.costPrice ?? null,
+      karigarName: '',
+      hoursWorked: null,
+      techniques: '',
+      finishedOn: null,
       images: (input.images ?? []).map((im) => ({ url: im.url, pose: im.pose ?? '' })),
       // Mirrors the real repo: new pieces start hidden unless explicitly published.
       active: input.active ?? false,
@@ -487,6 +491,7 @@ export class FakeProductsRepo implements ProductsRepo {
       'name', 'description', 'details', 'price', 'color', 'flag', 'imageUrl', 'active',
       'collection', 'craft', 'fabric', 'occasion', 'dupattaPrice', 'jacketPrice',
       'salePrice', 'costPrice', 'colorFamily',
+      'karigarName', 'hoursWorked', 'techniques', 'finishedOn',
     ] as const;
     for (const key of keys) {
       if (input[key] !== undefined) (p as any)[key] = input[key];
