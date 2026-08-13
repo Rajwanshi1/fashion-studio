@@ -83,8 +83,7 @@ export function buildInvoiceModel(order: Order): InvoiceModel {
     let description = item.productName;
     const variant = [item.size, item.color].filter(Boolean).join(' · ');
     if (variant) description += ` (${variant})`;
-    const addOns = [item.dupattaPrice != null ? 'dupatta' : null, item.jacketPrice != null ? 'jacket' : null]
-      .filter(Boolean);
+    const addOns = item.components.map((c) => c.name);
     if (addOns.length) description += ` — with ${addOns.join(' & ')}`;
     return {
       sno: i + 1,

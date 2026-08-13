@@ -58,6 +58,20 @@ export type ColorFamily = (typeof COLOR_FAMILIES)[number];
 export interface ProductImage {
   url: string;
   pose: string;
+  /** Display name of the garment's colour in THIS photo ("Maroon"); '' when unknown. */
+  color: string;
+  /** CSS '#rrggbb' fill for the colour swatch; '' when unknown. */
+  colorHex: string;
+}
+
+/** One piece of the set ("This order contains"), in display order. */
+export interface ProductComponent {
+  id: string;
+  name: string;
+  /** Optional pieces are tickable on the PDP; required pieces always ship. */
+  optional: boolean;
+  /** Paise; only meaningful when optional. null = no separate price, 0 = included free. */
+  price: number | null;
 }
 
 export interface Variant {
@@ -71,7 +85,7 @@ export interface AdminProduct {
   id: string;
   slug: string;
   name: string;
-  /** Base garment price; dupatta/jacket prices are separate add-ons. */
+  /** Base garment price; add addonsTotal for the full-set price. */
   price: number;
   color: string;
   flag: ProductFlag;
@@ -84,9 +98,9 @@ export interface AdminProduct {
   craft: string;
   fabric: string;
   occasion: string;
-  /** Paise; null = no such piece in the set, 0 = included at no extra cost. */
-  dupattaPrice: number | null;
-  jacketPrice: number | null;
+  /** Paise; SUM of optional priced component prices — the default-included
+   *  add-ons. 0 when none. */
+  addonsTotal: number;
   /** Canonical colour bucket for the shop filter; null when never resolved. */
   colorFamily: ColorFamily | null;
   /** Paise; discounted BASE price, meaningful only when flag === 'sale'.
@@ -98,6 +112,8 @@ export interface AdminProduct {
   images: ProductImage[];
   active: boolean;
   variants: Variant[];
+  /** "This order contains" — every piece of the set, in display order. */
+  components: ProductComponent[];
   /** Provenance — optional, shown on the PDP only when filled: the karigar's
    *  first name, honestly counted hours, techniques, finish date (YYYY-MM-DD). */
   karigarName: string;
@@ -133,9 +149,8 @@ export interface OrderItem {
   unitPrice: number;
   quantity: number;
   imageUrl: string | null;
-  /** Chosen add-on price snapshot; null = excluded or not part of the set. */
-  dupattaPrice: number | null;
-  jacketPrice: number | null;
+  /** Kept optional add-ons snapshotted at order time; price paise, 0 = included free. */
+  components: { name: string; price: number }[];
   /** Free-text made-to-measure note; '' when none. */
   measurements: string;
 }

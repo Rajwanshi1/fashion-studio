@@ -1,9 +1,9 @@
 # backend — Hono 4 API (Node 22, pg, zod) · dev port 3001
 
 ## Layout
-- src/routes/      HTTP layer, zod-validated (admin.routes.ts ~490 lines is the biggest)
+- src/routes/      HTTP layer, zod-validated (admin.routes.ts ~640 lines is the biggest)
 - src/services/    business logic; services/ai/ = Anthropic bill/catalog parsing
-- src/data/        SQL-only repositories (products.repo.ts ~600 lines)
+- src/data/        SQL-only repositories (products.repo.ts ~780 lines)
 - src/lib/         deliveries, phone, vcard helpers
 - src/middleware/  auth, rate-limit
 - db/migrations/   numbered SQL, append-only — NEVER edit an applied migration

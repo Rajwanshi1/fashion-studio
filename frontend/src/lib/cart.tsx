@@ -23,13 +23,11 @@ export interface CartItem {
   unitPrice: number;
   qty: number;
   imageUrl: string | null;
-  /** Set pieces kept in this line — the same variant with a different
-   *  selection is a separate cart line (see cartLineKey). */
-  includeDupatta: boolean;
-  includeJacket: boolean;
-  /** Price of the kept add-on; null = excluded or not part of the set. */
-  dupattaPrice: number | null;
-  jacketPrice: number | null;
+  /** Names of the kept optional add-ons, for line summaries ("With Dupatta"). */
+  includedComponents: string[];
+  /** Names of the optional components the shopper unticked — sent to the API
+   *  and part of line identity (see cartLineKey). */
+  excludedComponents: string[];
   /** Free-text note for made-to-measure lines; '' otherwise. Part of line
    *  identity — the same variant with a different note is a separate line. */
   measurements: string;
@@ -41,11 +39,14 @@ export interface CartItem {
  *  prices/products mislead more than they help. */
 const CART_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** Line identity: variant + set-includes selection + measurements note. */
+/** Line identity: variant + set selection + measurements + the price the line
+ *  was added at — two adds of the same selection only merge when they showed
+ *  the same price (checkout guarantees each line is charged exactly its own
+ *  snapshotted unitPrice). */
 export function cartLineKey(
-  i: Pick<CartItem, 'variantId' | 'includeDupatta' | 'includeJacket' | 'measurements'>,
+  i: Pick<CartItem, 'variantId' | 'excludedComponents' | 'measurements' | 'unitPrice'>,
 ): string {
-  return `${i.variantId}:${i.includeDupatta ? 1 : 0}${i.includeJacket ? 1 : 0}:${i.measurements}`;
+  return `${i.variantId}:${[...i.excludedComponents].sort().join(',')}:${i.measurements}:${i.unitPrice}`;
 }
 
 interface CartContextValue {
@@ -60,11 +61,20 @@ interface CartContextValue {
 
 const CartContext = createContext<CartContextValue | null>(null);
 
+/** A persisted line, possibly from an older release — see load()'s normalisers. */
+type StoredCartItem = Omit<CartItem, 'includedComponents' | 'excludedComponents'> &
+  Partial<Pick<CartItem, 'includedComponents' | 'excludedComponents'>> & {
+    includeDupatta?: boolean;
+    includeJacket?: boolean;
+    dupattaPrice?: number | null;
+    jacketPrice?: number | null;
+  };
+
 function load(): CartItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as CartItem[];
+    const parsed = JSON.parse(raw) as StoredCartItem[];
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter((i) => i && i.variantId && i.qty > 0)
@@ -79,7 +89,35 @@ function load(): CartItem[] {
       .map((i) => (typeof i.measurements === 'string' ? i : { ...i, measurements: '' }))
       // Carts saved before expiry lack the stamp; treat them as fresh today.
       .map((i) => (typeof i.addedAt === 'number' ? i : { ...i, addedAt: Date.now() }))
-      .filter((i) => Date.now() - i.addedAt < CART_TTL_MS);
+      .filter((i) => Date.now() - i.addedAt < CART_TTL_MS)
+      // Carts saved before per-product components carry include flags + addon
+      // prices; fold them into the component-name arrays. Their snapshotted
+      // unitPrice already priced that selection, so it stays as saved.
+      .map((i): CartItem => {
+        const { includeDupatta, includeJacket, dupattaPrice, jacketPrice, ...rest } = i;
+        if (Array.isArray(rest.includedComponents) && Array.isArray(rest.excludedComponents)) {
+          return rest as CartItem;
+        }
+        // An addon price proves the line came from the set-includes UI, where a
+        // false flag was a real untick. Without one the flags are synthetic
+        // (older cart, or a product with no set pieces) — recording exclusions
+        // there would only stop the line merging with a fresh identical add;
+        // checkout's expectedUnitPrice guard covers the pricing either way.
+        const setEra = dupattaPrice != null || jacketPrice != null;
+        return {
+          ...rest,
+          includedComponents: [
+            ...(includeDupatta && dupattaPrice != null ? ['dupatta'] : []),
+            ...(includeJacket && jacketPrice != null ? ['jacket'] : []),
+          ],
+          excludedComponents: setEra
+            ? [
+                ...(includeDupatta === false ? ['dupatta'] : []),
+                ...(includeJacket === false ? ['jacket'] : []),
+              ]
+            : [],
+        };
+      });
   } catch {
     return [];
   }

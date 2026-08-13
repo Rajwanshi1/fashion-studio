@@ -76,8 +76,7 @@ export const P1: ProductSummary = {
   categoryName: 'Lehenga',
   collection: 'The Verdant Edit',
   occasion: 'Wedding',
-  dupattaPrice: null,
-  jacketPrice: null,
+  addonsTotal: 0,
   colorFamily: 'green',
   salePrice: null,
 };
@@ -95,8 +94,7 @@ export const P2: ProductSummary = {
   categoryName: 'Lehenga',
   collection: 'Festive Edit',
   occasion: 'Festive',
-  dupattaPrice: null,
-  jacketPrice: null,
+  addonsTotal: 0,
   colorFamily: 'green',
   salePrice: 12900000,
 };
@@ -119,25 +117,39 @@ export const DETAIL1: ProductDetail = {
     { id: 'v4', productId: 'p1', size: 'Custom', stock: 50 },
   ],
   // Real gallery: imageUrl mirrors images[0].url. The third row has no pose,
-  // so the PDP falls back to its positional 'View 3' label.
+  // so the PDP falls back to its positional 'View 3' label. No photo carries a
+  // colour → the swatch row falls back to the single catalogue colour.
   imageUrl: '/img/sage-front.jpg',
   images: [
-    { url: '/img/sage-front.jpg', pose: 'front' },
-    { url: '/img/sage-back.jpg', pose: 'back' },
-    { url: '/img/sage-detail.jpg', pose: '' },
+    { url: '/img/sage-front.jpg', pose: 'front', color: '', colorHex: '' },
+    { url: '/img/sage-back.jpg', pose: 'back', color: '', colorHex: '' },
+    { url: '/img/sage-detail.jpg', pose: '', color: '', colorHex: '' },
   ],
+  components: [],
   related: [P2],
 };
 
-/** DETAIL1 with a priced dupatta + jacket, for set-includes tests. */
+/** DETAIL1 with a required piece + priced optional add-ons, for "This order contains" tests. */
 export const DETAIL_SET: ProductDetail = {
   ...DETAIL1,
   id: 'p9',
   slug: 'fern-zardozi-set-fern',
   name: 'Fern Zardozi Set',
   price: 15000000,
-  dupattaPrice: 1200000,
-  jacketPrice: 2400000,
+  addonsTotal: 1200000 + 2400000,
+  // Two-colour gallery: photos 0-1 Sage, photo 2 Antique Gold, photo 3 colourless.
+  imageUrl: '/img/fern-front.jpg',
+  images: [
+    { url: '/img/fern-front.jpg', pose: 'front', color: 'Sage', colorHex: '#9cb6aa' },
+    { url: '/img/fern-back.jpg', pose: 'back', color: 'Sage', colorHex: '#9cb6aa' },
+    { url: '/img/fern-gold.jpg', pose: 'drape', color: 'Antique Gold', colorHex: '#c9a55a' },
+    { url: '/img/fern-detail.jpg', pose: '', color: '', colorHex: '' },
+  ],
+  components: [
+    { id: 'c1', name: 'Lehenga', optional: false, price: null },
+    { id: 'c2', name: 'Dupatta', optional: true, price: 1200000 },
+    { id: 'c3', name: 'Jacket', optional: true, price: 2400000 },
+  ],
   variants: [{ id: 'v9', productId: 'p9', size: 'M', stock: 5 }],
   related: [],
 };
@@ -207,8 +219,7 @@ export const ORDER: Order = {
       unitPrice: 18400000,
       quantity: 1,
       imageUrl: null,
-      dupattaPrice: null,
-      jacketPrice: null,
+      components: [],
       measurements: '',
     },
   ],
@@ -228,10 +239,8 @@ export function seedCart() {
         unitPrice: 18400000,
         qty: 1,
         imageUrl: null,
-        includeDupatta: false,
-        includeJacket: false,
-        dupattaPrice: null,
-        jacketPrice: null,
+        includedComponents: [],
+        excludedComponents: [],
         measurements: '',
       },
     ]),

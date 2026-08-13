@@ -149,6 +149,43 @@ test('products: price and visibility edits persist (TA-001 regression)', async (
   expect(res.ok(), 'restore should succeed').toBeTruthy();
 });
 
+test('products: a "This order contains" row round-trips through the editor', async ({
+  page,
+  request,
+}) => {
+  const token = await adminToken(request);
+  const piece = (await adminProducts(request, token)).find(
+    (p) => p.name !== FERN_GOWN && p.slug !== ORDER_SLUG && p.flag === null && p.active,
+  );
+  if (!piece) throw new Error('no eligible piece for the components round-trip');
+  const n = piece.components.length + 1;
+
+  await adminLogin(page);
+  await page.goto(`${ADMIN_URL}/products/${piece.id}`);
+  await expect(page.getByRole('heading', { name: 'Edit Piece' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Add component' }).click();
+  await page.getByLabel(`Component ${n} name`).fill('Cape');
+  await page.locator('.component-row').nth(n - 1).getByRole('checkbox').check();
+  await page.getByLabel(`Component ${n} price (₹)`).fill('15000');
+  await page.getByRole('button', { name: 'Save Piece' }).click();
+  await expect(page.getByRole('heading', { name: 'Products' })).toBeVisible({ timeout: 30_000 });
+
+  // Reload the edit page — the row must have persisted.
+  await page.goto(`${ADMIN_URL}/products/${piece.id}`);
+  await expect(page.getByLabel(`Component ${n} name`)).toHaveValue('Cape');
+  await expect(page.getByLabel(`Component ${n} price (₹)`)).toHaveValue('15000');
+
+  // Restore via the API so later specs find the piece exactly as it was.
+  const res = await request.put(`${API}/api/admin/products/${piece.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      components: piece.components.map(({ name, optional, price }) => ({ name, optional, price })),
+    },
+  });
+  expect(res.ok(), 'components restore should succeed').toBeTruthy();
+});
+
 test('products: leaving an edited piece asks before discarding changes (TA-013)', async ({
   page,
 }) => {

@@ -58,10 +58,8 @@ function DrawerUI({ open, onClose }: { open: boolean; onClose: () => void }) {
                 <div className="nm">{i.name}</div>
                 <div className="at">
                   {i.color} · Size {i.size} · Qty {i.qty}
-                  {(i.includeDupatta || i.includeJacket) &&
-                    ` · With ${[i.includeDupatta && 'dupatta', i.includeJacket && 'jacket']
-                      .filter(Boolean)
-                      .join(' & ')}`}
+                  {i.includedComponents.length > 0 &&
+                    ` · With ${i.includedComponents.join(' & ')}`}
                 </div>
                 {i.measurements && <div className="line-note">{i.measurements}</div>}
                 <button className="rm" onClick={() => remove(cartLineKey(i))}>

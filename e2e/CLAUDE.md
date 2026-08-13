@@ -5,8 +5,10 @@
   the `verify` skill (.claude/skills/verify — isolated ports 5544/3101/4174).
 
 ## Known baseline (no CI — check this before debugging a branch)
-admin-offline-orders.spec.ts and deliveries.spec.ts FAIL on main too. Always
-compare a branch's failures against main's; don't chase these as regressions.
+admin-offline-orders.spec.ts and deliveries.spec.ts FAIL on main too, and the
+guest-journey spec fails on the MOBILE project (the "Women" link goes to
+/collection since #25; the spec expects /collection/lehenga). Always compare a
+branch's failures against main's; don't chase these as regressions.
 
 ## Gotchas
 - SPAs preview on 4173/4174 (strictPort); parallel Claude sessions may already

@@ -35,9 +35,21 @@ export interface CreateOrderInput {
   items: {
     variantId: string;
     quantity: number;
-    /** Set pieces are included unless explicitly opted out. */
-    includeDupatta?: boolean;
-    includeJacket?: boolean;
+    /** Names of the optional set pieces the shopper UNTICKED — everything else
+     *  is included. Matched trim/case-insensitively against the product's
+     *  optional components; unknown names are ignored (any resulting price
+     *  disagreement is caught by expectedUnitPrice below). */
+    excludedComponents?: string[];
+    /** Paise; the per-unit price the shopper's cart displayed for this line.
+     *  When present, the server refuses the order (PRICE_CHANGED) if its own
+     *  pricing disagrees — a stale cart (renamed component, edited price,
+     *  ended sale) can never be charged an amount it did not show. */
+    expectedUnitPrice?: number;
+    /** Set by the route for requests from the pre-components storefront, which
+     *  only ever displayed dupatta/jacket add-ons — pricing is restricted to
+     *  those two names so an invisible component is never charged. Removed
+     *  with the legacy-column drop chore. */
+    legacyIncludes?: { dupatta: boolean; jacket: boolean };
     /** Free-text made-to-measure note; part of line identity. */
     measurements?: string;
   }[];
@@ -154,21 +166,38 @@ export function createOrdersService(deps: {
 }): OrdersService {
   const service: OrdersService = {
     async createOrder(input) {
-      // Merge duplicate lines per variant + set-includes + measurements combo:
+      // Merge duplicate lines per variant + set-selection + measurements combo:
       // the same variant with and without a dupatta — or with a different
       // made-to-measure note — is two distinct order lines.
       const combos = new Map<
         string,
-        { variantId: string; dupatta: boolean; jacket: boolean; measurements: string; qty: number }
+        {
+          variantId: string;
+          excluded: Set<string>;
+          expected: number | null;
+          legacy: { dupatta: boolean; jacket: boolean } | null;
+          measurements: string;
+          qty: number;
+        }
       >();
       for (const item of input.items ?? []) {
-        const dupatta = item.includeDupatta !== false; // default: included
-        const jacket = item.includeJacket !== false;
+        // Everything is included unless explicitly unticked.
+        const excluded = new Set(
+          (item.excludedComponents ?? []).map((name) => name.trim().toLowerCase()).filter(Boolean),
+        );
+        const expected = item.expectedUnitPrice ?? null;
+        const legacy = item.legacyIncludes ?? null;
         const measurements = (item.measurements ?? '').trim();
-        const key = `${item.variantId}|${dupatta ? 1 : 0}${jacket ? 1 : 0}|${measurements}`;
+        const key = [
+          item.variantId,
+          [...excluded].sort().join(','),
+          expected ?? '',
+          legacy ? `L${legacy.dupatta ? 1 : 0}${legacy.jacket ? 1 : 0}` : '',
+          measurements,
+        ].join('|');
         const existing = combos.get(key);
         if (existing) existing.qty += item.quantity;
-        else combos.set(key, { variantId: item.variantId, dupatta, jacket, measurements, qty: item.quantity });
+        else combos.set(key, { variantId: item.variantId, excluded, expected, legacy, measurements, qty: item.quantity });
       }
       if (combos.size === 0) {
         throw new DomainError('EMPTY_ORDER', 'Order must contain at least one item');
@@ -189,27 +218,58 @@ export function createOrdersService(deps: {
         // Made to order: stock never gates a sale. Decrementing below zero is
         // deliberate — negative stock is the atelier's cut-to-order backlog.
 
-        // Prices always come from the DB, never the client. An opt-in only
-        // counts when the product actually has that piece in its set.
-        const items = [...combos.values()].map((combo) => {
+        // Prices always come from the DB, never the client. An exclusion only
+        // counts against optional priced pieces the product actually has.
+        const priced = [...combos.values()].map((combo) => {
           const v = byId.get(combo.variantId)!;
-          const dupattaPrice = combo.dupatta && v.dupattaPrice != null ? v.dupattaPrice : null;
-          const jacketPrice = combo.jacket && v.jacketPrice != null ? v.jacketPrice : null;
+          const optionalPriced = v.components.filter((c) => c.optional && c.price != null);
+          const kept = (
+            combo.legacy
+              ? // The pre-components storefront only ever displayed (and priced)
+                // dupatta and jacket — any other optional piece was invisible to
+                // this shopper and must not be charged.
+                optionalPriced.filter((c) => {
+                  const name = c.name.trim().toLowerCase();
+                  if (name === 'dupatta') return combo.legacy!.dupatta;
+                  if (name === 'jacket') return combo.legacy!.jacket;
+                  return false;
+                })
+              : optionalPriced.filter((c) => !combo.excluded.has(c.name.trim().toLowerCase()))
+          ).map((c) => ({ name: c.name, price: c.price! }));
+          const unitPrice = v.unitPrice + kept.reduce((sum, c) => sum + c.price, 0);
+          // The one guard against a stale cart: the shopper is only ever
+          // charged a per-unit price their cart actually displayed.
+          if (combo.expected != null && combo.expected !== unitPrice) {
+            throw new DomainError(
+              'PRICE_CHANGED',
+              `The price of ${v.productName} changed while you were shopping — please review your bag and try again`,
+            );
+          }
           return {
             productId: v.productId,
             variantId: v.id,
             productName: v.productName,
             size: v.size,
             color: v.color,
-            unitPrice: v.unitPrice + (dupattaPrice ?? 0) + (jacketPrice ?? 0),
+            unitPrice,
             quantity: combo.qty,
             imageUrl: v.imageUrl,
-            dupattaPrice,
-            jacketPrice,
+            components: kept,
             // Display-only free text — prices still come exclusively from the DB rows.
             measurements: combo.measurements,
           };
         });
+        // Combos that priced out identically collapse into one order line —
+        // e.g. a migrated cart line whose exclusions name pieces the product
+        // never had alongside a fresh line for the same selection.
+        const merged = new Map<string, (typeof priced)[number]>();
+        for (const item of priced) {
+          const key = [item.variantId, item.unitPrice, item.components.map((c) => c.name).join(','), item.measurements].join('|');
+          const existing = merged.get(key);
+          if (existing) existing.quantity += item.quantity;
+          else merged.set(key, item);
+        }
+        const items = [...merged.values()];
         const subtotal = items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
         const deliveryFee = input.deliveryMethod === 'priority' ? PRIORITY_DELIVERY_FEE : 0;
         const orderNumber = await deps.orders.nextOrderNumber(tx);

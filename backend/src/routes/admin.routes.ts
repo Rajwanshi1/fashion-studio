@@ -147,6 +147,16 @@ const productImagePresignSchema = z
 
 const flagSchema = z.enum(['bestseller', 'new', 'sale']).nullable();
 
+/**
+ * A field the components migration removed. A cached pre-components admin
+ * bundle still sends it on every save — the zod default would strip it
+ * silently and discard the operator's price edit with a 200, so its presence
+ * is an explicit "refresh your tab" failure instead.
+ */
+const legacyRemovedField = z.custom<undefined>((value) => value === undefined, {
+  message: 'Your admin app is out of date — refresh the browser tab and try again',
+});
+
 const productBaseSchema = z.object({
   // The category can be referenced by id or by slug (the admin UI knows slugs).
   categoryId: z.string().min(1).optional(),
@@ -179,13 +189,41 @@ const productBaseSchema = z.object({
   craft: z.string().optional(),
   fabric: z.string().optional(),
   occasion: z.string().optional(),
-  // null = no such piece in the set; 0 = included at no extra cost.
-  dupattaPrice: z.number().int().min(0).nullable().optional(),
-  jacketPrice: z.number().int().min(0).nullable().optional(),
   // Discounted BASE price — add-ons are never discounted.
   salePrice: z.number().int().positive().nullable().optional(),
   costPrice: z.number().int().min(0).nullable().optional(),
-  images: z.array(z.object({ url: z.string().min(1), pose: z.string().optional() })).max(12).optional(),
+  // "This order contains" rows. Tight caps keep product writes inside the WAF
+  // body budget. Optional rows are always priced (blank = 0 = included free);
+  // required rows carry no price — the repo normalizes both.
+  components: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(40),
+        optional: z.boolean().optional(),
+        price: z.number().int().min(0).nullable().optional(),
+      }),
+    )
+    .max(10)
+    // Checkout exclusions and the PDP tick state are keyed by name, so two
+    // same-named rows would share one checkbox and untick together.
+    .refine(
+      (rows) => new Set(rows.map((row) => row.name.trim().toLowerCase())).size === rows.length,
+      { message: 'Component names must be unique' },
+    )
+    .optional(),
+  dupattaPrice: legacyRemovedField,
+  jacketPrice: legacyRemovedField,
+  images: z
+    .array(
+      z.object({
+        url: z.string().min(1),
+        pose: z.string().optional(),
+        color: z.string().max(40).optional(),
+        colorHex: z.string().regex(/^#[0-9a-f]{6}$/i).or(z.literal('')).optional(),
+      }),
+    )
+    .max(12)
+    .optional(),
   variants: z.array(z.object({ size: z.string().min(1), stock: z.number().int().min(0) })).optional(),
 });
 
@@ -407,10 +445,15 @@ export function adminRoutes(deps: AdminDeps) {
     const { contentType, productName, imageBase64 } = c.req.valid('json');
     let key: string | null = null;
     let pose: string | null = null;
+    let color: string | null = null;
+    let colorHex: string | null = null;
     if (productName && imageBase64 && deps.catalogAi) {
       try {
         const bytes = Buffer.from(imageBase64, 'base64');
         const named = await deps.catalogAi.nameProductImage({ bytes, mediaType: contentType }, productName);
+        // The colour read is useful even when the slug sanitizes away.
+        color = named?.colorName ?? null;
+        colorHex = named?.colorHex ?? null;
         const fileSlug = named ? sanitizeFileSlug(named.fileSlug) : '';
         if (fileSlug) {
           key = namedStorageKey('products', fileSlug);
@@ -422,7 +465,10 @@ export function adminRoutes(deps: AdminDeps) {
     }
     if (!key) key = newStorageKey('products');
     const { url, headers } = await deps.objectStore.presignPut(key, contentType);
-    return c.json({ key, uploadUrl: url, headers, publicUrl: deps.objectStore.publicUrl(key), pose }, 201);
+    return c.json(
+      { key, uploadUrl: url, headers, publicUrl: deps.objectStore.publicUrl(key), pose, color, colorHex },
+      201,
+    );
   });
 
   r.post('/products/bulk-delete', zValidator('json', bulkDeleteSchema, zodHook), async (c) => {

@@ -29,6 +29,9 @@ const FABRICS = ['Silk', 'Cotton'];
 /** Matches the server's images cap (productBaseSchema .max(12)). */
 const MAX_IMAGES = 12;
 
+/** Matches the server's components cap (productBaseSchema .max(10)). */
+const MAX_COMPONENTS = 10;
+
 interface FormState {
   name: string;
   /** Edit mode only — the piece's URL name. Renames keep old links working
@@ -51,9 +54,8 @@ interface FormState {
   craft: string;
   fabric: string;
   occasion: string;
-  /** Rupees as typed; empty = the set has no dupatta/jacket, '0' = included free. */
-  dupattaRupees: string;
-  jacketRupees: string;
+  /** "This order contains" rows; priceRupees as typed, meaningful only when optional. */
+  components: { id: string; name: string; optional: boolean; priceRupees: string }[];
   /** Provenance (edit mode only) — honest facts, blank when unknown. */
   karigarName: string;
   hoursText: string;
@@ -88,8 +90,7 @@ const EMPTY_FORM: FormState = {
   craft: '',
   fabric: '',
   occasion: '',
-  dupattaRupees: '',
-  jacketRupees: '',
+  components: [],
   karigarName: '',
   hoursText: '',
   techniques: '',
@@ -122,11 +123,26 @@ function rupees(paise: number | null): string {
 }
 
 /** Gallery row with a client-side id for stable list keys — the id never
- *  leaves the form (the save payload strips back to {url, pose}). */
-const galleryImage = (url: string, pose: string): GalleryImage => ({
+ *  leaves the form (the save payload strips back to {url, pose, color, colorHex}). */
+const galleryImage = (url: string, pose: string, color = '', colorHex = ''): GalleryImage => ({
   id: crypto.randomUUID(),
   url,
   pose,
+  color,
+  colorHex,
+});
+
+/** Component row with a client-side id for stable list keys — the id never
+ *  leaves the form (the save payload strips back to {name, optional, price}). */
+const componentRow = (
+  name: string,
+  optional: boolean,
+  priceRupees: string,
+): FormState['components'][number] => ({
+  id: crypto.randomUUID(),
+  name,
+  optional,
+  priceRupees,
 });
 
 export default function ProductEdit() {
@@ -197,7 +213,9 @@ export default function ProductEdit() {
         // as the first (only) gallery photo so they stay editable.
         const gallery: GalleryImage[] =
           product.images && product.images.length > 0
-            ? product.images.map((img) => galleryImage(img.url, img.pose ?? ''))
+            ? product.images.map((img) =>
+                galleryImage(img.url, img.pose ?? '', img.color ?? '', img.colorHex ?? ''),
+              )
             : product.imageUrl
               ? [galleryImage(product.imageUrl, '')]
               : [];
@@ -221,8 +239,7 @@ export default function ProductEdit() {
           craft: product.craft,
           fabric: product.fabric,
           occasion: product.occasion,
-          dupattaRupees: rupees(product.dupattaPrice),
-          jacketRupees: rupees(product.jacketPrice),
+          components: product.components.map((c) => componentRow(c.name, c.optional, rupees(c.price))),
           karigarName: product.karigarName ?? '',
           hoursText: product.hoursWorked != null ? String(product.hoursWorked) : '',
           techniques: product.techniques ?? '',
@@ -286,6 +303,15 @@ export default function ProductEdit() {
       images: f.images.map((im, x) => (x === index ? { ...im, pose } : im)),
     }));
 
+  const setImageColor = (index: number, color: string) =>
+    setForm((f) => ({
+      ...f,
+      // Correcting the name also drops the AI-read hex: the swatch fill would
+      // otherwise keep showing the misread colour (hex beats the name-keyword
+      // fallback on the PDP), and there is no hex editor to fix it by hand.
+      images: f.images.map((im, x) => (x === index ? { ...im, color, colorHex: '' } : im)),
+    }));
+
   const removeImage = (index: number) =>
     setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== index) }));
 
@@ -302,6 +328,21 @@ export default function ProductEdit() {
     const paise = Math.round(Number(rupeesText) * 100);
     return Number.isFinite(paise) && paise >= 0 ? paise : undefined;
   };
+
+  const setComponent = (index: number, patch: Partial<FormState['components'][number]>) =>
+    setForm((f) => ({
+      ...f,
+      components: f.components.map((c, x) => (x === index ? { ...c, ...patch } : c)),
+    }));
+
+  const moveComponent = (from: number, to: number) =>
+    setForm((f) => ({ ...f, components: moveItem(f.components, from, to) }));
+
+  const removeComponent = (index: number) =>
+    setForm((f) => ({ ...f, components: f.components.filter((_, i) => i !== index) }));
+
+  const addComponent = () =>
+    setForm((f) => ({ ...f, components: [...f.components, componentRow('', false, '')] }));
 
   /** Uploads run one at a time — the vision naming call is per photo. */
   const onPhotosPicked = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -321,8 +362,11 @@ export default function ProductEdit() {
     let added = 0;
     for (const file of files) {
       try {
-        const { publicUrl, pose } = await uploadProductImage(file, form.name);
-        setForm((f) => ({ ...f, images: [...f.images, galleryImage(publicUrl, pose ?? '')] }));
+        const { publicUrl, pose, color, colorHex } = await uploadProductImage(file, form.name);
+        setForm((f) => ({
+          ...f,
+          images: [...f.images, galleryImage(publicUrl, pose ?? '', color ?? '', colorHex ?? '')],
+        }));
         added += 1;
       } catch (err) {
         toast(err instanceof Error ? err.message : 'Photo upload failed', { tone: 'error' });
@@ -360,10 +404,19 @@ export default function ProductEdit() {
       problems.push('Enter a valid price in rupees');
     }
     if (saleError) problems.push(saleError);
-    const dupattaPrice = addonPaise(form.dupattaRupees);
-    const jacketPrice = addonPaise(form.jacketRupees);
-    if (dupattaPrice === undefined || jacketPrice === undefined) {
-      problems.push('Set-includes prices must be 0 or more — leave blank when the set has no such piece');
+    const components = form.components.map(({ name, optional, priceRupees }, i) => {
+      if (!name.trim()) problems.push(`Component ${i + 1} needs a name`);
+      // An optional row is always priced — 0 = included free. A blank would
+      // save as an untickable "optional" piece, contradicting the toggle.
+      return { name: name.trim(), optional, price: optional ? (addonPaise(priceRupees) ?? 0) : null };
+    });
+    if (components.some((c) => c.price === undefined)) {
+      problems.push('Component prices must be 0 or more — use 0 when the piece is included free');
+    }
+    // Checkout and the boutique's tick state key components by name.
+    const componentNames = components.map((c) => c.name.toLowerCase()).filter(Boolean);
+    if (new Set(componentNames).size !== componentNames.length) {
+      problems.push('Component names must be unique');
     }
     const costPrice = addonPaise(form.costRupees);
     if (costPrice === undefined) {
@@ -384,14 +437,13 @@ export default function ProductEdit() {
       flag: form.flag === '' ? null : form.flag,
       salePrice: form.flag === 'sale' ? salePaise : null,
       costPrice,
-      images: form.images.map(({ url, pose }) => ({ url, pose })),
+      images: form.images.map(({ url, pose, color, colorHex }) => ({ url, pose, color, colorHex })),
       active: form.active,
       collection: form.collection.trim(),
       craft: form.craft.trim(),
       fabric: form.fabric.trim(),
       occasion: form.occasion.trim(),
-      dupattaPrice,
-      jacketPrice,
+      components,
     };
 
     setBusy(true);
@@ -721,42 +773,87 @@ export default function ProductEdit() {
                 {saleError}
               </div>
             )}
-            <p className="hint">Dupatta and jacket add-ons are never discounted.</p>
+            <p className="hint">Component add-ons are never discounted.</p>
           </>
         )}
 
-        <p className="section-label">Set includes</p>
-        <div className="grid2">
-          <div className="field">
-            <label className="lab" htmlFor="p-dupatta">
-              Dupatta price (₹ — blank if no dupatta, 0 if included free)
-            </label>
-            <input
-              id="p-dupatta"
-              className="inp"
-              type="number"
-              min="0"
-              step="1"
-              inputMode="numeric"
-              value={form.dupattaRupees}
-              onChange={(e) => set('dupattaRupees', e.target.value)}
-            />
+        <p className="section-label">This order contains</p>
+        <div className="field">
+          <p className="hint">
+            Every piece of the set, in display order. Optional pieces the customer can
+            untick; price them in ₹ (0 or blank = included free).
+          </p>
+          <div className="row-list">
+            {form.components.map((c, i) => (
+              <div className="row-item component-row" key={c.id}>
+                <input
+                  className="inp"
+                  aria-label={`Component ${i + 1} name`}
+                  maxLength={40}
+                  value={c.name}
+                  onChange={(e) => setComponent(i, { name: e.target.value })}
+                />
+                <label className="check" title="Customer can remove it">
+                  <input
+                    type="checkbox"
+                    checked={c.optional}
+                    onChange={(e) => setComponent(i, { optional: e.target.checked })}
+                  />
+                  Optional
+                </label>
+                {c.optional && (
+                  <input
+                    className="inp price"
+                    type="number"
+                    min="0"
+                    step="1"
+                    inputMode="numeric"
+                    // "(₹)" not "(₹ rupees)": the base-price field's accessible
+                    // name is "Price (₹ rupees)" and label lookups match by
+                    // substring, so the row labels must not contain it.
+                    aria-label={`Component ${i + 1} price (₹)`}
+                    placeholder="0 = included free"
+                    value={c.priceRupees}
+                    onChange={(e) => setComponent(i, { priceRupees: e.target.value })}
+                  />
+                )}
+                <button
+                  type="button"
+                  className="row-btn"
+                  aria-label={`Move component ${i + 1} up`}
+                  disabled={i === 0}
+                  onClick={() => moveComponent(i, i - 1)}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className="row-btn"
+                  aria-label={`Move component ${i + 1} down`}
+                  disabled={i === form.components.length - 1}
+                  onClick={() => moveComponent(i, i + 1)}
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  className="row-btn"
+                  aria-label={`Remove component ${i + 1}`}
+                  onClick={() => removeComponent(i)}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
           </div>
-          <div className="field">
-            <label className="lab" htmlFor="p-jacket">
-              Jacket price (₹ — blank if no jacket, 0 if included free)
-            </label>
-            <input
-              id="p-jacket"
-              className="inp"
-              type="number"
-              min="0"
-              step="1"
-              inputMode="numeric"
-              value={form.jacketRupees}
-              onChange={(e) => set('jacketRupees', e.target.value)}
-            />
-          </div>
+          <button
+            type="button"
+            className="btn-outline fit row-add"
+            disabled={form.components.length >= MAX_COMPONENTS}
+            onClick={addComponent}
+          >
+            Add component
+          </button>
         </div>
 
         <p className="section-label">Internal</p>
@@ -804,6 +901,7 @@ export default function ProductEdit() {
             onReorder={reorderImage}
             onRemove={removeImage}
             onPoseChange={setImagePose}
+            onColorChange={setImageColor}
           />
         </div>
         <div className="field">

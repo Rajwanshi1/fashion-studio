@@ -9,6 +9,8 @@ vi.mock('../lib/uploads', () => ({
   uploadProductImage: vi.fn(async () => ({
     publicUrl: 'https://fashion-uploads.s3.ap-south-1.amazonaws.com/products/2026/07/abc.jpg',
     pose: 'front',
+    color: 'Emerald',
+    colorHex: '#0f6b4f',
   })),
 }));
 
@@ -38,8 +40,8 @@ function makeProduct(overrides: ProductFixture = {}): ProductFixture {
     craft: 'Zardozi',
     fabric: 'Silk',
     occasion: 'Wedding',
-    dupattaPrice: 1200000,
-    jacketPrice: null,
+    addonsTotal: 1200000,
+    components: [{ id: 'pc1', name: 'Dupatta', optional: true, price: 1200000 }],
     colorFamily: 'green',
     salePrice: null,
     costPrice: null,
@@ -72,7 +74,7 @@ function renderEdit(product: ProductFixture) {
 }
 
 interface PutBody {
-  images: { url: string; pose: string }[];
+  images: { url: string; pose: string; color: string; colorHex: string }[];
   fabric: string;
   costPrice: number | null;
   salePrice: number | null;
@@ -104,10 +106,11 @@ describe('ProductEdit', () => {
     await userEvent.type(screen.getByLabelText('Craft / Work'), 'Zardozi');
     await userEvent.click(screen.getByRole('button', { name: 'Silk' }));
     await userEvent.type(screen.getByLabelText('Occasion'), 'Wedding');
-    await userEvent.type(
-      screen.getByLabelText('Dupatta price (₹ — blank if no dupatta, 0 if included free)'),
-      '12000',
-    );
+    // one "This order contains" row: optional priced dupatta
+    await userEvent.click(screen.getByRole('button', { name: 'Add component' }));
+    await userEvent.type(screen.getByLabelText('Component 1 name'), 'Dupatta');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Optional' }));
+    await userEvent.type(screen.getByLabelText('Component 1 price (₹)'), '12000');
     await userEvent.type(
       screen.getByLabelText('Cost price (₹ — admin only, never shown in the boutique)'),
       '5000',
@@ -133,14 +136,13 @@ describe('ProductEdit', () => {
       flag: string | null;
       salePrice: number | null;
       costPrice: number | null;
-      images: { url: string; pose: string }[];
+      images: { url: string; pose: string; color: string; colorHex: string }[];
       active: boolean;
       collection: string;
       craft: string;
       fabric: string;
       occasion: string;
-      dupattaPrice: number | null;
-      jacketPrice: number | null;
+      components: { name: string; optional: boolean; price: number | null }[];
       variants: { size: string; stock: number }[];
     };
     // the slug is derived server-side now — the form must not send one
@@ -154,15 +156,17 @@ describe('ProductEdit', () => {
     expect(body.flag).toBeNull();
     expect(body.salePrice).toBeNull();
     expect(body.costPrice).toBe(500000);
-    expect(body.images).toEqual([{ url: 'https://cdn.example/pasted.jpg', pose: '' }]);
+    expect(body.images).toEqual([
+      { url: 'https://cdn.example/pasted.jpg', pose: '', color: '', colorHex: '' },
+    ]);
     // New pieces start hidden (TA-004) — publishing is an explicit choice.
     expect(body.active).toBe(false);
     expect(body.collection).toBe('The Verdant Edit');
     expect(body.craft).toBe('Zardozi');
     expect(body.fabric).toBe('Silk');
     expect(body.occasion).toBe('Wedding');
-    expect(body.dupattaPrice).toBe(1200000); // rupees → paise
-    expect(body.jacketPrice).toBeNull(); // blank = no jacket in the set
+    // client-side row ids are stripped; rupees → paise
+    expect(body.components).toEqual([{ name: 'Dupatta', optional: true, price: 1200000 }]);
     expect(body.variants).toHaveLength(6);
     expect(body.variants.map((v) => v.size)).toEqual(['XS', 'S', 'M', 'L', 'XL', 'Custom']);
     expect(body.variants.find((v) => v.size === 'M')?.stock).toBe(4);
@@ -197,6 +201,55 @@ describe('ProductEdit', () => {
     expect(patches[0].body).toEqual({ stock: 9 });
 
     expect(await screen.findByRole('heading', { name: 'Products' })).toBeInTheDocument();
+  });
+
+  it('loads saved components and PUTs an added optional row in paise', async () => {
+    seedAdminAuth();
+    const calls = renderEdit(makeProduct());
+
+    // the saved row loads into the editor, price shown in rupees
+    expect(await screen.findByLabelText('Component 1 name')).toHaveValue('Dupatta');
+    expect(screen.getByLabelText('Component 1 price (₹)')).toHaveValue(12000);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add component' }));
+    await userEvent.type(screen.getByLabelText('Component 2 name'), 'Cape');
+    await userEvent.click(screen.getAllByRole('checkbox', { name: 'Optional' })[1]);
+    await userEvent.type(screen.getByLabelText('Component 2 price (₹)'), '15000');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Piece' }));
+
+    const body = calls.find((c) => c.method === 'PUT')?.body as {
+      components: { name: string; optional: boolean; price: number | null }[];
+    };
+    // client-side row ids are stripped; rupees → paise
+    expect(body.components).toEqual([
+      { name: 'Dupatta', optional: true, price: 1200000 },
+      { name: 'Cape', optional: true, price: 1500000 },
+    ]);
+
+    expect(await screen.findByRole('heading', { name: 'Products' })).toBeInTheDocument();
+  });
+
+  it('blocks the save when two components share a name', async () => {
+    seedAdminAuth();
+    const { calls } = mockFetch((url) => {
+      if (url.endsWith('/api/categories')) return { json: CATEGORIES };
+      if (url.endsWith('/api/admin/products')) return { json: [] };
+      return undefined;
+    });
+
+    renderApp('/products/new');
+    await screen.findByRole('button', { name: /Gowns/ });
+    await userEvent.type(screen.getByLabelText('Name'), 'Twin Gown');
+    await userEvent.click(screen.getByRole('button', { name: /Gowns/ }));
+    await userEvent.type(screen.getByLabelText('Price (₹ rupees)'), '10000');
+    await userEvent.click(screen.getByRole('button', { name: 'Add component' }));
+    await userEvent.type(screen.getByLabelText('Component 1 name'), 'Dupatta');
+    await userEvent.click(screen.getByRole('button', { name: 'Add component' }));
+    // Trim/case-insensitive: checkout keys tick state by name.
+    await userEvent.type(screen.getByLabelText('Component 2 name'), ' dupatta');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Piece' }));
+    expect(await screen.findByText(/Component names must be unique/)).toBeInTheDocument();
+    expect(calls.find((c) => c.method === 'POST')).toBeUndefined();
   });
 
   it('links the discount percentage and the sale price in both directions', async () => {
@@ -320,9 +373,9 @@ describe('ProductEdit', () => {
       makeProduct({
         imageUrl: 'https://cdn.example/a.jpg',
         images: [
-          { url: 'https://cdn.example/a.jpg', pose: 'front' },
-          { url: 'https://cdn.example/b.jpg', pose: 'back' },
-          { url: 'https://cdn.example/c.jpg', pose: '' },
+          { url: 'https://cdn.example/a.jpg', pose: 'front', color: 'Emerald', colorHex: '#0f6b4f' },
+          { url: 'https://cdn.example/b.jpg', pose: 'back', color: 'Emerald', colorHex: '#0f6b4f' },
+          { url: 'https://cdn.example/c.jpg', pose: '', color: '', colorHex: '' },
         ],
       }),
     );
@@ -347,8 +400,8 @@ describe('ProductEdit', () => {
 
     const body = calls.find((c) => c.method === 'PUT')?.body as PutBody;
     expect(body.images).toEqual([
-      { url: 'https://cdn.example/b.jpg', pose: 'back' },
-      { url: 'https://cdn.example/a.jpg', pose: 'front' },
+      { url: 'https://cdn.example/b.jpg', pose: 'back', color: 'Emerald', colorHex: '#0f6b4f' },
+      { url: 'https://cdn.example/a.jpg', pose: 'front', color: 'Emerald', colorHex: '#0f6b4f' },
     ]);
   });
 
@@ -360,7 +413,9 @@ describe('ProductEdit', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save Piece' }));
 
     const body = calls.find((c) => c.method === 'PUT')?.body as PutBody;
-    expect(body.images).toEqual([{ url: 'https://cdn.example/legacy.jpg', pose: '' }]);
+    expect(body.images).toEqual([
+      { url: 'https://cdn.example/legacy.jpg', pose: '', color: '', colorHex: '' },
+    ]);
   });
 
   it('uploads picked photos one at a time and appends them to the gallery', async () => {
@@ -392,9 +447,32 @@ describe('ProductEdit', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Add Piece' }));
     const body = calls.find((c) => c.method === 'POST')?.body as PutBody;
+    // the AI-read colour rides along from the upload into the saved gallery
     expect(body.images).toEqual([
-      { url: UPLOADED_URL, pose: 'front' },
-      { url: UPLOADED_URL, pose: 'front' },
+      { url: UPLOADED_URL, pose: 'front', color: 'Emerald', colorHex: '#0f6b4f' },
+      { url: UPLOADED_URL, pose: 'front', color: 'Emerald', colorHex: '#0f6b4f' },
+    ]);
+  });
+
+  it('correcting the AI-read photo colour also drops its stale hex', async () => {
+    seedAdminAuth();
+    const calls = renderEdit(
+      makeProduct({
+        images: [{ url: 'https://cdn.example/a.jpg', pose: 'front', color: 'Sage', colorHex: '#9caf88' }],
+      }),
+    );
+
+    const colour = await screen.findByLabelText('Colour of photo 1');
+    expect(colour).toHaveValue('Sage');
+    await userEvent.clear(colour);
+    await userEvent.type(colour, 'Moss');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Piece' }));
+
+    // The misread hex must not survive the correction — it outranks the
+    // corrected name's keyword fallback on the boutique's swatch fill.
+    const body = calls.find((c) => c.method === 'PUT')?.body as PutBody;
+    expect(body.images).toEqual([
+      { url: 'https://cdn.example/a.jpg', pose: 'front', color: 'Moss', colorHex: '' },
     ]);
   });
 });

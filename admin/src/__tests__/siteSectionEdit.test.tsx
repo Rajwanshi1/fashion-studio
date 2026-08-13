@@ -9,10 +9,13 @@ vi.mock('../lib/uploads', () => ({
   uploadProductImage: vi.fn(async () => ({
     publicUrl: 'https://fashion-uploads.s3.ap-south-1.amazonaws.com/products/2026/08/hero.jpg',
     pose: null,
+    color: null,
+    colorHex: null,
   })),
 }));
 
 const UPLOADED = 'https://fashion-uploads.s3.ap-south-1.amazonaws.com/products/2026/08/hero.jpg';
+type UploadResult = Awaited<ReturnType<typeof uploadProductImage>>;
 
 const SECTION_KEYS = [
   'hero',
@@ -200,7 +203,7 @@ describe('site section editor', () => {
   it('holds Save until an in-flight upload lands', async () => {
     seedAdminAuth();
     const { calls } = stubContent({ hero: { imageUrl: 'https://cdn.example/old.jpg' } });
-    let land: (result: { publicUrl: string; pose: string | null }) => void = () => {};
+    let land: (result: UploadResult) => void = () => {};
     vi.mocked(uploadProductImage).mockImplementationOnce(
       () => new Promise((resolve) => (land = resolve)),
     );
@@ -219,7 +222,7 @@ describe('site section editor', () => {
     expect(calls.some((c) => c.method === 'PUT')).toBe(false);
 
     await act(async () => {
-      land({ publicUrl: UPLOADED, pose: null });
+      land({ publicUrl: UPLOADED, pose: null, color: null, colorHex: null });
     });
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -340,7 +343,7 @@ describe('site section editor', () => {
   it('keeps edits made while a look photo was still uploading', async () => {
     seedAdminAuth();
     const { calls } = stubContent({});
-    let land: (result: { publicUrl: string; pose: string | null }) => void = () => {};
+    let land: (result: UploadResult) => void = () => {};
     vi.mocked(uploadProductImage).mockImplementationOnce(
       () => new Promise((resolve) => (land = resolve)),
     );
@@ -355,7 +358,7 @@ describe('site section editor', () => {
     await userEvent.type(screen.getByLabelText('Look 2 caption'), 'Ivory hour, after the rain.');
 
     await act(async () => {
-      land({ publicUrl: UPLOADED, pose: null });
+      land({ publicUrl: UPLOADED, pose: null, color: null, colorHex: null });
     });
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));

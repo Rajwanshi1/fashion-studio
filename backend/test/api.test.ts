@@ -335,14 +335,17 @@ describe('API', () => {
       expect((await app.request('/api/products?color=zalgo')).status).toBe(400);
     });
 
-    it('exposes set-includes pricing fields on summaries and detail', async () => {
+    it('exposes the add-ons total on summaries and the components on detail', async () => {
       const set = await seedSetProduct(f.products, seeded.lehengas.id);
       const list = await (await app.request('/api/products?search=zardozi')).json();
       const summary = list.items.find((p: any) => p.id === set.id);
-      expect(summary).toMatchObject({ dupattaPrice: 1200000, jacketPrice: 2400000, collection: 'The Verdant Edit' });
+      expect(summary).toMatchObject({ addonsTotal: 3600000, collection: 'The Verdant Edit' });
 
       const detail = await (await app.request('/api/products/fern-zardozi-set-fern')).json();
       expect(detail).toMatchObject({ craft: 'Zardozi', fabric: 'Tissue', occasion: 'Wedding' });
+      expect(detail.components.map((c: any) => c.name)).toEqual(['Lehenga', 'Dupatta', 'Jacket']);
+      expect(detail.components[0]).toMatchObject({ optional: false, price: null });
+      expect(detail.components[1]).toMatchObject({ optional: true, price: 1200000 });
     });
   });
 
@@ -365,6 +368,22 @@ describe('API', () => {
       expect(empty.status).toBe(400);
       const invalid = await app.request('/api/orders', post({ customer: { ...CUSTOMER, email: 'nope' }, deliveryMethod: 'standard', items: [{ variantId: sageM().id, quantity: 1 }] }));
       expect(invalid.status).toBe(400);
+    });
+
+    it('still honours the deprecated includeDupatta/includeJacket booleans (old-SPA shim)', async () => {
+      const set = await seedSetProduct(f.products, seeded.lehengas.id);
+      const res = await app.request(
+        '/api/orders',
+        post({
+          customer: CUSTOMER,
+          deliveryMethod: 'standard',
+          items: [{ variantId: set.variants[0].id, quantity: 1, includeJacket: false }],
+        }),
+      );
+      expect(res.status).toBe(201);
+      const order = await res.json();
+      expect(order.items[0].unitPrice).toBe(15000000 + 1200000);
+      expect(order.items[0].components).toEqual([{ name: 'Dupatta', price: 1200000 }]);
     });
 
     it('charges priority delivery', async () => {
@@ -831,7 +850,7 @@ describe('API', () => {
           active: true,
           imageUrl: 'https://cdn.test/legacy.jpg', // a gallery always wins
           images: [
-            { url: 'https://cdn.test/a.jpg', pose: 'front' },
+            { url: 'https://cdn.test/a.jpg', pose: 'front', color: 'Sage', colorHex: '#9cb6aa' },
             { url: 'https://cdn.test/b.jpg' },
             { url: 'https://cdn.test/c.jpg', pose: 'detail' },
           ],
@@ -840,9 +859,9 @@ describe('API', () => {
       expect(created.status).toBe(201);
       const product = await created.json();
       expect(product.images).toEqual([
-        { url: 'https://cdn.test/a.jpg', pose: 'front' },
-        { url: 'https://cdn.test/b.jpg', pose: '' },
-        { url: 'https://cdn.test/c.jpg', pose: 'detail' },
+        { url: 'https://cdn.test/a.jpg', pose: 'front', color: 'Sage', colorHex: '#9cb6aa' },
+        { url: 'https://cdn.test/b.jpg', pose: '', color: '', colorHex: '' },
+        { url: 'https://cdn.test/c.jpg', pose: 'detail', color: '', colorHex: '' },
       ]);
       expect(product.imageUrl).toBe('https://cdn.test/a.jpg');
 
@@ -868,6 +887,103 @@ describe('API', () => {
       expect(publicDetail.images.map((i: any) => i.pose)).toEqual(['detail', 'front']);
     });
 
+    it('round-trips the components list and replaces it wholesale on update', async () => {
+      const created = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categorySlug: 'gowns',
+          name: 'Component Gown',
+          price: 9900000,
+          color: 'Sage',
+          active: true,
+          components: [
+            { name: 'Gown' },
+            // Price on a required row is dropped — its cost is the base price.
+            { name: 'Belt', price: 100000 },
+            { name: 'Cape', optional: true, price: 1500000 },
+            // An unpriced optional row is normalized to 0 (included free) so
+            // the PDP can always render its checkbox.
+            { name: 'Potli bag', optional: true },
+          ],
+        }, adminToken),
+      );
+      expect(created.status).toBe(201);
+      const product = await created.json();
+      expect(product.components.map((c: any) => ({ ...c, id: undefined }))).toEqual([
+        { name: 'Gown', optional: false, price: null, id: undefined },
+        { name: 'Belt', optional: false, price: null, id: undefined },
+        { name: 'Cape', optional: true, price: 1500000, id: undefined },
+        { name: 'Potli bag', optional: true, price: 0, id: undefined },
+      ]);
+
+      // Summaries carry the default-included add-on total (Cape + free Potli bag).
+      const summary = (await (await app.request('/api/products?search=Component')).json()).items[0];
+      expect(summary.addonsTotal).toBe(1500000);
+
+      // A PUT without components leaves the list untouched…
+      const priceOnly = await app.request(
+        `/api/admin/products/${product.id}`,
+        withMethod('PUT', { price: 9800000 }, adminToken),
+      );
+      expect((await priceOnly.json()).components).toHaveLength(4);
+
+      // …and a PUT with components replaces it wholesale, in order.
+      const replaced = await app.request(
+        `/api/admin/products/${product.id}`,
+        withMethod('PUT', { components: [{ name: 'Cape', optional: true, price: 900000 }] }, adminToken),
+      );
+      expect(replaced.status).toBe(200);
+      expect((await replaced.json()).components.map((c: any) => c.name)).toEqual(['Cape']);
+
+      const publicDetail = await (await app.request(`/api/products/${product.slug}`)).json();
+      expect(publicDetail.components.map((c: any) => c.price)).toEqual([900000]);
+    });
+
+    it('rejects duplicate component names — exclusions and tick state are keyed by name', async () => {
+      const res = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categorySlug: 'gowns',
+          name: 'Twin Dupatta Gown',
+          price: 9900000,
+          components: [
+            { name: 'Dupatta', optional: true, price: 100000 },
+            { name: ' dupatta ', optional: true, price: 200000 }, // trim/case-insensitive dup
+          ],
+        }, adminToken),
+      );
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/unique/i);
+    });
+
+    it('400s a save from a pre-components admin bundle instead of silently dropping its price edit', async () => {
+      const set = await seedSetProduct(f.products, seeded.lehengas.id);
+      const res = await app.request(
+        `/api/admin/products/${set.id}`,
+        withMethod('PUT', { price: 14000000, dupattaPrice: 1500000 }, adminToken),
+      );
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/out of date/i);
+      // Nothing was half-applied.
+      const detail = await (await app.request('/api/products/fern-zardozi-set-fern')).json();
+      expect(detail.price).toBe(15000000);
+      expect(detail.components.find((c: any) => c.name === 'Dupatta').price).toBe(1200000);
+    });
+
+    it('409s when the cart-displayed price no longer matches the server price', async () => {
+      const set = await seedSetProduct(f.products, seeded.lehengas.id);
+      const res = await app.request(
+        '/api/orders',
+        post({
+          customer: CUSTOMER,
+          deliveryMethod: 'standard',
+          items: [{ variantId: set.variants[0].id, quantity: 1, expectedUnitPrice: 15000000 }],
+        }),
+      );
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toMatch(/price.*changed/i);
+    });
+
     it('names the uploaded photo through the catalog AI, falling back to a uuid key', async () => {
       const withAi = (catalogAi: any) =>
         createApp({
@@ -889,13 +1005,20 @@ describe('API', () => {
 
       const naming = withAi({
         colorFamily: async () => null,
-        nameProductImage: async () => ({ fileSlug: 'Sage Sequin  Lehenga — Front!', pose: 'front' }),
+        nameProductImage: async () => ({
+          fileSlug: 'Sage Sequin  Lehenga — Front!',
+          pose: 'front',
+          colorName: 'Sage',
+          colorHex: '#9cb6aa',
+        }),
       });
       const res = await presign(naming, named);
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.key).toMatch(/^products\/\d{4}\/\d{2}\/sage-sequin-lehenga-front-[0-9a-f]{6}\.jpg$/);
       expect(body.pose).toBe('front');
+      expect(body.color).toBe('Sage');
+      expect(body.colorHex).toBe('#9cb6aa');
       expect(body.publicUrl).toContain(encodeURIComponent(body.key));
 
       // Unusable name, thrown error, and no AI at all: the uuid key, pose null.

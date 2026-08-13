@@ -52,5 +52,7 @@
 .page-plp .promo-tile .eyebrow { color: var(--gold-soft); display: block; margin-bottom: 1rem; }
 .page-plp .promo-tile h3 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: clamp(1.6rem,3vw,2.3rem); line-height: 1.15; margin: 0 0 1.4rem; }
 
-/* Swatch colours come from COLOR_FAMILY_META (inline style) — one source of
-   truth for the whole catalogue, no per-name CSS classes. */
+/* colour swatch fallback fill — real fills are inline (photo hex / family
+   swatch). Neutral, NOT a colour: the old mint default painted a purple piece
+   green (the audit's P0-2); an unmatched name must read "unknown", not lie. */
+.page-plp .sw.c-default, .page-pdp .swatch.c-default { background: #C9C5BC; }

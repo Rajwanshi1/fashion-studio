@@ -18,6 +18,7 @@ interface ThumbStripProps {
   onReorder: (from: number, to: number) => void;
   onRemove: (index: number) => void;
   onPoseChange: (index: number, pose: string) => void;
+  onColorChange: (index: number, color: string) => void;
 }
 
 /** Everything the render needs while a pointer drag is live. */
@@ -53,7 +54,7 @@ const DRAG_THRESHOLD_PX = 4;
  * arrow keys on a focused handle move the photo one slot.
  * No autoscroll: at MAX_IMAGES=12 the strip fits the viewport.
  */
-export function ThumbStrip({ images, onReorder, onRemove, onPoseChange }: ThumbStripProps) {
+export function ThumbStrip({ images, onReorder, onRemove, onPoseChange, onColorChange }: ThumbStripProps) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [announce, setAnnounce] = useState('');
   const gestureRef = useRef<Gesture | null>(null);
@@ -195,6 +196,24 @@ export function ThumbStrip({ images, onReorder, onRemove, onPoseChange }: ThumbS
               <option value={img.pose}>{img.pose}</option>
             )}
           </select>
+          {/* Same for the colour it read off this photo — dot previews colorHex. */}
+          <div className="thumb-color-row">
+            {img.colorHex && (
+              <span
+                className="thumb-swatch"
+                style={{ background: img.colorHex }}
+                aria-hidden="true"
+              />
+            )}
+            <input
+              className="inp thumb-color"
+              type="text"
+              maxLength={40}
+              aria-label={`Colour of photo ${i + 1}`}
+              value={img.color}
+              onChange={(e) => onColorChange(i, e.target.value)}
+            />
+          </div>
           <div className="thumb-actions">
             <button
               type="button"

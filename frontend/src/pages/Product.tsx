@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { displayPrice, displaySalePrice, effectiveBasePrice } from '../lib/format';
-import { COLOR_FAMILY_META } from '../lib/types';
+import { swatchFill } from '../lib/colors';
 import type { ProductDetail, ProductImage, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useSiteContent } from '../lib/content';
@@ -39,11 +39,12 @@ export default function Product() {
   const [error, setError] = useState<string | null>(null);
 
   const [thumb, setThumb] = useState(0);
+  const [color, setColor] = useState('');
   const [variantId, setVariantId] = useState('');
   const [qty, setQty] = useState(1);
-  // Set pieces are included by default; unticking removes them from the price.
-  const [incDupatta, setIncDupatta] = useState(false);
-  const [incJacket, setIncJacket] = useState(false);
+  // Optional pieces are included by default; unticking removes them from the
+  // price. The set holds the names of the components the shopper unticked.
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
   // Made-to-measure note draft; survives variant flips, addToBag gates on the flag.
   const [measurements, setMeasurements] = useState('');
 
@@ -78,8 +79,12 @@ export default function Product() {
             props: { slug: detail.slug, name: detail.name, price: detail.price },
           });
         }
-        setIncDupatta(detail.dupattaPrice != null);
-        setIncJacket(detail.jacketPrice != null);
+        // The catalogue colour, NOT the first photo's: the order line snapshots
+        // the product colour server-side, and a detail-shot tag ("Antique
+        // Gold" embroidery close-up) must not become the bag's colour label
+        // without the shopper choosing it.
+        setColor(detail.color);
+        setExcluded(new Set());
         // Made to order: every size is orderable, so the first chip (XS) is
         // simply the first choice — stock plays no part in selection.
         setVariantId(detail.variants[0]?.id ?? '');
@@ -120,7 +125,7 @@ export default function Product() {
   const gallery = useMemo<ProductImage[]>(() => {
     if (!product) return [];
     if (product.images.length) return product.images;
-    return product.imageUrl ? [{ url: product.imageUrl, pose: '' }] : [];
+    return product.imageUrl ? [{ url: product.imageUrl, pose: '', color: '', colorHex: '' }] : [];
   }, [product]);
 
   // A shorter gallery (product switch, edited piece) must not strand `thumb`
@@ -145,6 +150,26 @@ export default function Product() {
     setThumb(i);
   };
 
+  // One swatch per distinct photo colour (first occurrence wins, gallery
+  // order); `firstIndex` is where the carousel jumps on click. A piece with no
+  // coloured photos falls back to a single swatch for its catalogue colour.
+  const swatches = useMemo(() => {
+    if (!product) return [];
+    const seen = new Set<string>();
+    const out: { name: string; fill: string | null; firstIndex: number | null }[] = [];
+    product.images.forEach((img, i) => {
+      if (img.color === '') return;
+      const key = img.color.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ name: img.color, fill: swatchFill(img.color, img.colorHex), firstIndex: i });
+    });
+    if (out.length === 0) {
+      out.push({ name: product.color, fill: swatchFill(product.color, ''), firstIndex: null });
+    }
+    return out;
+  }, [product]);
+
   const selectedVariant = product?.variants.find((v) => v.id === variantId);
   const isMadeToMeasure = selectedVariant?.size === 'Custom';
   const detailLines = useMemo(
@@ -156,9 +181,14 @@ export default function Product() {
     [product],
   );
 
-  const chosenDupatta = product && incDupatta && product.dupattaPrice != null ? product.dupattaPrice : null;
-  const chosenJacket = product && incJacket && product.jacketPrice != null ? product.jacketPrice : null;
-  const chosenAddons = (chosenDupatta ?? 0) + (chosenJacket ?? 0);
+  // Only optional PRICED components are tickable add-ons; required or unpriced
+  // pieces always ship and never move the price.
+  const optionalPriced = useMemo(
+    () => (product?.components ?? []).filter((c) => c.optional && c.price != null),
+    [product],
+  );
+  const keptAddons = optionalPriced.filter((c) => !excluded.has(c.name));
+  const chosenAddons = keptAddons.reduce((sum, c) => sum + (c.price ?? 0), 0);
   // A sale discounts the base only; add-ons are always charged in full. This is
   // the number checkout independently recomputes from getVariantsForUpdate.
   const liveTotal = product ? effectiveBasePrice(product) + chosenAddons : 0;
@@ -174,13 +204,11 @@ export default function Product() {
         productSlug: product.slug,
         name: product.name,
         size: selectedVariant.size,
-        color: product.color,
+        color,
         unitPrice: liveTotal,
         imageUrl: product.imageUrl,
-        includeDupatta: chosenDupatta != null,
-        includeJacket: chosenJacket != null,
-        dupattaPrice: chosenDupatta,
-        jacketPrice: chosenJacket,
+        includedComponents: keptAddons.map((c) => c.name),
+        excludedComponents: [...excluded].filter((n) => optionalPriced.some((c) => c.name === n)),
         measurements: isMadeToMeasure ? measurements.trim() : '',
       },
       qty,
@@ -269,21 +297,30 @@ export default function Product() {
 
           <div className="opt-label">
             <span>
-              Colour — <strong id="colorName">{product.color}</strong>
+              Colour — <strong id="colorName">{color}</strong>
             </span>
           </div>
-          {product.colorFamily && (
-            <div className="swatches" id="swatches">
-              {/* One truthful dot: this piece's colour family. Other colourways
-                  are separate pieces, not options on this page. */}
-              <span
-                className="swatch active"
-                title={product.color}
-                aria-hidden="true"
-                style={{ background: COLOR_FAMILY_META[product.colorFamily].swatch }}
+          <div className="swatches" id="swatches">
+            {swatches.map((s) => (
+              <button
+                key={s.name}
+                className={`swatch${s.fill == null ? ' c-default' : ''}${s.name === color ? ' active' : ''}`}
+                style={s.fill != null ? { background: s.fill } : undefined}
+                aria-label={s.name}
+                title={s.name}
+                onClick={() => {
+                  setColor(s.name);
+                  track('color_select', {
+                    productId: product.id,
+                    props: { color: s.name, source: 'photo' },
+                  });
+                  if (s.firstIndex != null && s.firstIndex !== thumb) {
+                    onGalleryChange(s.firstIndex, 'swatch');
+                  }
+                }}
               />
-            </div>
-          )}
+            ))}
+          </div>
 
           <div className="opt-label">
             <span>Size</span>
@@ -311,33 +348,37 @@ export default function Product() {
             })}
           </div>
 
-          {(product.dupattaPrice != null || product.jacketPrice != null) && (
+          {product.components.length > 0 && (
             <>
               <div className="opt-label">
-                <span>This piece includes</span>
+                <span>This order contains</span>
               </div>
               <div className="set-includes">
-                {product.dupattaPrice != null && (
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={incDupatta}
-                      onChange={(e) => setIncDupatta(e.target.checked)}
-                    />
-                    Dupatta —{' '}
-                    {product.dupattaPrice === 0 ? 'Included' : <Price paise={product.dupattaPrice} />}
-                  </label>
-                )}
-                {product.jacketPrice != null && (
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={incJacket}
-                      onChange={(e) => setIncJacket(e.target.checked)}
-                    />
-                    Jacket —{' '}
-                    {product.jacketPrice === 0 ? 'Included' : <Price paise={product.jacketPrice} />}
-                  </label>
+                {product.components.map((c, idx) =>
+                  c.optional && c.price != null ? (
+                    <label className="check" key={c.id}>
+                      <span className="num">{idx + 1}.</span>
+                      <input
+                        type="checkbox"
+                        checked={!excluded.has(c.name)}
+                        onChange={(e) =>
+                          setExcluded((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.delete(c.name);
+                            else next.add(c.name);
+                            return next;
+                          })
+                        }
+                      />
+                      {c.name} —{' '}
+                      {c.price === 0 ? 'Included' : <Price paise={c.price} />}
+                    </label>
+                  ) : (
+                    <div className="piece" key={c.id}>
+                      <span className="num">{idx + 1}.</span>
+                      {c.name}
+                    </div>
+                  ),
                 )}
               </div>
             </>

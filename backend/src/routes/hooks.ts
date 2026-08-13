@@ -20,8 +20,6 @@ const FIELD_LABELS: Record<string, string> = {
   price: 'Price',
   salePrice: 'Sale price',
   costPrice: 'Cost price',
-  dupattaPrice: 'Dupatta price',
-  jacketPrice: 'Jacket price',
   receivedAt: 'Payment date',
   amount: 'Amount',
 };

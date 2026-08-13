@@ -141,8 +141,9 @@ describe('OrdersService', () => {
     });
   });
 
-  describe('set includes (dupatta/jacket add-ons)', () => {
-    // Fern Zardozi Set: base 15000000, dupatta 1200000, jacket 2400000, M stock 10.
+  describe('set components (optional add-on pieces)', () => {
+    // Fern Zardozi Set: base 15000000; Lehenga (required), Dupatta 1200000 and
+    // Jacket 2400000 (both optional); M stock 10.
     let setVariantId: string;
 
     beforeEach(async () => {
@@ -150,46 +151,55 @@ describe('OrdersService', () => {
       setVariantId = set.variants[0].id;
     });
 
-    it('includes both pieces by default and snapshots the chosen prices', async () => {
+    it('includes every optional piece by default and snapshots the kept prices', async () => {
       const order = await service.createOrder(input({ items: [{ variantId: setVariantId, quantity: 1 }] }));
       expect(order.items[0].unitPrice).toBe(15000000 + 1200000 + 2400000);
-      expect(order.items[0].dupattaPrice).toBe(1200000);
-      expect(order.items[0].jacketPrice).toBe(2400000);
+      // Required pieces (Lehenga) never appear — their cost is the base price.
+      expect(order.items[0].components).toEqual([
+        { name: 'Dupatta', price: 1200000 },
+        { name: 'Jacket', price: 2400000 },
+      ]);
       expect(order.subtotal).toBe(18600000);
     });
 
-    it('reprices when a piece is opted out and snapshots null for it', async () => {
+    it('reprices when a piece is excluded and drops it from the snapshot', async () => {
       const order = await service.createOrder(
-        input({ items: [{ variantId: setVariantId, quantity: 2, includeJacket: false }] }),
+        input({ items: [{ variantId: setVariantId, quantity: 2, excludedComponents: ['Jacket'] }] }),
       );
       expect(order.items[0].unitPrice).toBe(15000000 + 1200000);
-      expect(order.items[0].dupattaPrice).toBe(1200000);
-      expect(order.items[0].jacketPrice).toBeNull();
+      expect(order.items[0].components).toEqual([{ name: 'Dupatta', price: 1200000 }]);
       expect(order.subtotal).toBe(2 * 16200000);
     });
 
-    it('ignores includes on products without those set pieces', async () => {
+    it('matches exclusions trim- and case-insensitively', async () => {
       const order = await service.createOrder(
-        input({ items: [{ variantId: sageM().id, quantity: 1, includeDupatta: true, includeJacket: true }] }),
+        input({ items: [{ variantId: setVariantId, quantity: 1, excludedComponents: ['  jAcKeT '] }] }),
       );
-      expect(order.items[0].unitPrice).toBe(18400000);
-      expect(order.items[0].dupattaPrice).toBeNull();
-      expect(order.items[0].jacketPrice).toBeNull();
+      expect(order.items[0].unitPrice).toBe(15000000 + 1200000);
+      expect(order.items[0].components).toEqual([{ name: 'Dupatta', price: 1200000 }]);
     });
 
-    it('keeps the same variant with different includes as separate lines but aggregates stock', async () => {
+    it('ignores exclusions the product does not have', async () => {
+      const order = await service.createOrder(
+        input({ items: [{ variantId: sageM().id, quantity: 1, excludedComponents: ['Dupatta', 'Cape'] }] }),
+      );
+      expect(order.items[0].unitPrice).toBe(18400000);
+      expect(order.items[0].components).toEqual([]);
+    });
+
+    it('keeps the same variant with different exclusions as separate lines but aggregates stock', async () => {
       const order = await service.createOrder(
         input({
           items: [
             { variantId: setVariantId, quantity: 1 },
-            { variantId: setVariantId, quantity: 1, includeDupatta: false, includeJacket: false },
+            { variantId: setVariantId, quantity: 1, excludedComponents: ['Dupatta', 'Jacket'] },
             { variantId: setVariantId, quantity: 1 }, // merges with the first line
           ],
         }),
       );
       expect(order.items).toHaveLength(2);
-      const full = order.items.find((i) => i.dupattaPrice !== null)!;
-      const bare = order.items.find((i) => i.dupattaPrice === null)!;
+      const full = order.items.find((i) => i.components.length > 0)!;
+      const bare = order.items.find((i) => i.components.length === 0)!;
       expect(full.quantity).toBe(2);
       expect(full.unitPrice).toBe(18600000);
       expect(bare.quantity).toBe(1);
@@ -204,12 +214,71 @@ describe('OrdersService', () => {
         input({
           items: [
             { variantId: setVariantId, quantity: 6 },
-            { variantId: setVariantId, quantity: 5, includeJacket: false },
+            { variantId: setVariantId, quantity: 5, excludedComponents: ['Jacket'] },
           ],
         }),
       );
       const [v] = await products.getVariantsForUpdate({}, [setVariantId]);
       expect(v.stock).toBe(-1); // 10 - 11
+    });
+
+    it('honours a matching expectedUnitPrice and 409s a stale one', async () => {
+      const ok = await service.createOrder(
+        input({ items: [{ variantId: setVariantId, quantity: 1, expectedUnitPrice: 18600000 }] }),
+      );
+      expect(ok.items[0].unitPrice).toBe(18600000);
+
+      // A cart that displayed a price the server no longer computes — e.g. an
+      // exclusion invalidated by a component rename — must never be charged.
+      await expect(
+        service.createOrder(
+          input({
+            items: [
+              { variantId: setVariantId, quantity: 1, excludedComponents: ['Longline Jacket'], expectedUnitPrice: 16200000 },
+            ],
+          }),
+        ),
+      ).rejects.toMatchObject({ code: 'PRICE_CHANGED' });
+    });
+
+    it('legacy (pre-components) items are priced only on dupatta/jacket — never an invisible piece', async () => {
+      const caped = await products.createProduct({
+        categoryId: seeded.lehengas.id,
+        slug: 'caped-set',
+        name: 'Caped Set',
+        description: 'Set with a cape the old storefront never displayed.',
+        details: 'Dry clean only',
+        price: 10000000,
+        color: 'Sage',
+        active: true,
+        components: [
+          { name: 'Dupatta', optional: true, price: 500000 },
+          { name: 'Cape', optional: true, price: 2000000 },
+        ],
+        variants: [{ size: 'M', stock: 5 }],
+      });
+      const order = await service.createOrder(
+        input({
+          items: [{ variantId: caped.variants[0].id, quantity: 1, legacyIncludes: { dupatta: true, jacket: true } }],
+        }),
+      );
+      // Dupatta honoured, Cape (invisible to the old UI) not charged.
+      expect(order.items[0].unitPrice).toBe(10000000 + 500000);
+      expect(order.items[0].components).toEqual([{ name: 'Dupatta', price: 500000 }]);
+    });
+
+    it('merges combos that price out identically — phantom exclusions from migrated carts', async () => {
+      const order = await service.createOrder(
+        input({
+          items: [
+            { variantId: setVariantId, quantity: 1, excludedComponents: ['Odhani'] }, // unknown name, ignored
+            { variantId: setVariantId, quantity: 1 },
+          ],
+        }),
+      );
+      expect(order.items).toHaveLength(1);
+      expect(order.items[0].quantity).toBe(2);
+      expect(order.items[0].unitPrice).toBe(18600000);
     });
   });
 
@@ -275,15 +344,17 @@ describe('OrdersService', () => {
         salePrice: 15000000,
         flag: 'sale',
         color: 'Sage',
-        dupattaPrice: 1200000,
-        jacketPrice: 2400000,
+        components: [
+          { name: 'Dupatta', optional: true, price: 1200000 },
+          { name: 'Jacket', optional: true, price: 2400000 },
+        ],
         variants: [{ size: 'M', stock: 5 }],
       });
       const order = await service.createOrder(
         input({ items: [{ variantId: sale.variants[0].id, quantity: 2 }] }),
       );
       expect(order.items[0].unitPrice).toBe(15000000 + 1200000 + 2400000);
-      expect(order.items[0].dupattaPrice).toBe(1200000);
+      expect(order.items[0].components[0]).toEqual({ name: 'Dupatta', price: 1200000 });
       expect(order.subtotal).toBe(2 * 18600000);
     });
 

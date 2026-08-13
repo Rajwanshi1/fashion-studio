@@ -7,6 +7,9 @@ Deep dive: `gh pr view NN` / `gh pr diff NN` (repo Rajwanshi1/fashion-studio).
 Cap: past ~150 lines, compress the oldest entries into an era-summary paragraph
 at the bottom — don't delete history.
 
+- #43 2026-08-13 Audit remediation A-C: MTO stock model, copy/consistency sweep, brand-facts+archive CMS, slug aliases, provenance (#41/#42 closed into this) — backend, frontend, admin, docs, TODO
+- #40 2026-08-13 Honest PDP colour swatches from per-photo AI-read colours — backend, frontend, admin, docs
+- #39 2026-08-13 "This order contains" components replace the dupatta/jacket add-ons — backend, frontend, admin, e2e, docs
 - #38 2026-08-11 Preview-first Site CMS: canvas hub, live editors, focal-point picker — admin, frontend (CSS breadcrumbs), docs
 - #37 2026-08-11 Focal point for CMS images: focusX/focusY through the three mirrors — backend, frontend, admin
 - #36 2026-08-11 PDP swipe gallery, admin drag-and-drop photo reorder, mobile nav fix — frontend, admin, backend
