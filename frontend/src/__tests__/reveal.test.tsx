@@ -1,79 +1,49 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { StrictMode } from 'react';
-import { render, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render } from '@testing-library/react';
 import Reveal from '../components/Reveal';
 
-/** In-viewport rect: jsdom returns all-zero rects, which would push every
- *  element down Reveal's IntersectionObserver path. The bug lived in the
- *  immediate-reveal (in-viewport) path, so pin geometry above the fold. */
-const IN_VIEW_RECT = {
-  top: 120,
-  bottom: 480,
-  left: 0,
-  right: 600,
-  width: 600,
-  height: 360,
-  x: 0,
-  y: 120,
-  toJSON: () => ({}),
-} as DOMRect;
-
-function mountPdpDom() {
-  const host = document.createElement('div');
-  host.innerHTML = `
-    <main class="pdp">
-      <div class="gallery"></div>
-      <div class="info"><button id="addBtn">Add to Bag</button></div>
-    </main>`;
-  document.body.appendChild(host);
-  return host;
-}
-
-async function expectFullyRevealed(host: HTMLElement) {
-  await waitFor(
-    () => {
-      // Reveal must have armed the .pdp children…
-      expect(host.querySelectorAll('.rv').length).toBe(2);
-      // …and none may stay hidden (.rv without .rv-in = opacity 0 forever).
-      expect(host.querySelectorAll('.rv:not(.rv-in)').length).toBe(0);
-    },
-    { timeout: 2500 },
-  );
-}
-
-describe('Reveal', () => {
-  let host: HTMLElement | null = null;
-
+/** The audit's blank-until-scroll bug: in-viewport elements wait on a double
+ *  requestAnimationFrame that a throttled/backgrounded tab or a crawler never
+ *  fires, and the old safety net only swept the below-the-fold `pending` set —
+ *  so above-the-fold content stayed at opacity 0 forever. */
+describe('Reveal safety net', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    // rAF that never calls back — the throttled-tab / crawler environment.
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    // jsdom rects are all zeros; report "in the viewport" instead.
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: 10,
+      bottom: 100,
+      left: 0,
+      right: 100,
+      width: 100,
+      height: 90,
+      x: 0,
+      y: 10,
+      toJSON: () => ({}),
+    } as DOMRect);
+  });
   afterEach(() => {
-    host?.remove();
-    host = null;
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    document.body.innerHTML = '';
   });
 
-  it('never leaves in-viewport content hidden under StrictMode double-effects', async () => {
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(IN_VIEW_RECT);
-    host = mountPdpDom();
+  it('force-reveals in-viewport content when rAF never fires', () => {
+    const host = document.createElement('div');
+    host.innerHTML = '<div class="sec-head">above the fold</div>';
+    document.body.appendChild(host);
 
-    // StrictMode runs effect → cleanup → effect synchronously (dev behavior).
-    // The cleanup must not strand elements tagged .rv without a path to .rv-in.
-    render(
-      <StrictMode>
-        <Reveal watch="p1:1" />
-      </StrictMode>,
-    );
+    render(<Reveal />);
 
-    await expectFullyRevealed(host);
-  });
+    const el = host.querySelector('.sec-head')!;
+    expect(el.classList.contains('rv')).toBe(true);
+    expect(el.classList.contains('rv-in')).toBe(false);
 
-  it('re-arms reveal when `watch` changes before the first reveal lands (async data)', async () => {
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(IN_VIEW_RECT);
-    host = mountPdpDom();
-
-    const { rerender } = render(<Reveal watch="p1:0" />);
-    // Async data (e.g. related products) arrives before the next frame —
-    // the effect re-runs and must not cancel the pending reveal for good.
-    rerender(<Reveal watch="p1:4" />);
-
-    await expectFullyRevealed(host);
+    vi.advanceTimersByTime(2500);
+    expect(el.classList.contains('rv-in')).toBe(true);
   });
 });

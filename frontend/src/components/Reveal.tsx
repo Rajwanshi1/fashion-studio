@@ -18,7 +18,7 @@ let orphanTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Scroll-reveal system (React port of reveal.js): tags key elements
  *  with .rv, raises them with a 90ms stagger on intersection, respects
- *  prefers-reduced-motion and includes a 4s safety reveal. Re-runs when
+ *  prefers-reduced-motion and includes a 2.5s safety reveal. Re-runs when
  *  `watch` changes (e.g. after data loads). Renders nothing.
  *
  *  Every run re-arms ALL matched elements that are not yet revealed —
@@ -100,11 +100,17 @@ export default function Reveal({ watch }: { watch?: unknown }) {
     window.addEventListener('resize', onScroll, { passive: true });
 
     const t1 = setTimeout(sweep, 1200);
-    // Safety net: content can never stay hidden.
+    // Safety net: content can never stay hidden. Sweep EVERY tagged element,
+    // not just `pending` — in-viewport elements wait on a double rAF that a
+    // throttled/backgrounded tab or a crawler may never fire, and they were
+    // never added to `pending`, so a pending-only net stranded them at
+    // opacity 0 (the audit's blank-until-scroll product page).
     const t2 = setTimeout(() => {
-      pending.forEach((el) => el.classList.add('rv-in'));
+      document
+        .querySelectorAll<HTMLElement>('.rv:not(.rv-in)')
+        .forEach((el) => el.classList.add('rv-in'));
       pending.clear();
-    }, 4000);
+    }, 2500);
 
     return () => {
       window.removeEventListener('scroll', onScroll);
