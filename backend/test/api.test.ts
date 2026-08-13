@@ -647,6 +647,44 @@ describe('API', () => {
       expect((await app.request('/api/admin/products', withMethod('POST', { categoryId: 'ghost', slug: 'x', name: 'X', price: 1 }, adminToken))).status).toBe(404);
     });
 
+    it('renames a slug; the old slug keeps resolving and canonicalises', async () => {
+      const created = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categoryId: seeded.gowns.id,
+          slug: 'kalidar-kurta-set-purple-2',
+          name: 'Kalidar Kurta Set',
+          price: 1550000,
+          color: 'Purple',
+          active: true,
+          variants: [{ size: 'M', stock: 1 }],
+        }, adminToken),
+      );
+      const product = await created.json();
+
+      const renamed = await app.request(
+        `/api/admin/products/${product.id}`,
+        withMethod('PUT', { name: 'Bahaar Kalidaar Kurta Set', slug: 'bahaar-purple' }, adminToken),
+      );
+      expect(renamed.status).toBe(200);
+      expect(await renamed.json()).toMatchObject({ slug: 'bahaar-purple' });
+
+      // The new slug serves the piece; the -2-era slug still resolves and the
+      // payload carries the canonical slug for the SPA to redirect with.
+      const byNew = await (await app.request('/api/products/bahaar-purple')).json();
+      expect(byNew).toMatchObject({ slug: 'bahaar-purple', name: 'Bahaar Kalidaar Kurta Set' });
+      const byOld = await (await app.request('/api/products/kalidar-kurta-set-purple-2')).json();
+      expect(byOld).toMatchObject({ slug: 'bahaar-purple' });
+
+      // Malformed slugs are rejected, and a live slug cannot be taken.
+      expect(
+        (await app.request(`/api/admin/products/${product.id}`, withMethod('PUT', { slug: 'Bad Slug!' }, adminToken))).status,
+      ).toBe(400);
+      expect(
+        (await app.request(`/api/admin/products/${product.id}`, withMethod('PUT', { slug: seeded.sage.slug }, adminToken))).status,
+      ).toBe(409);
+    });
+
     it('409s on a duplicate slug the admin asked for by hand', async () => {
       const dupCreate = await app.request(
         '/api/admin/products',
@@ -682,10 +720,10 @@ describe('API', () => {
       expect((await third.json()).slug).toBe('fern-pleated-gown-fern-3');
     });
 
-    it('never changes a slug on PUT, even when one is sent', async () => {
+    it('leaves the slug untouched on a PUT that does not send one', async () => {
       const res = await app.request(
         `/api/admin/products/${seeded.moss.id}`,
-        withMethod('PUT', { slug: 'sage-sequin-jacket-lehenga', name: 'Moss Tissue Draped Gown II' }, adminToken),
+        withMethod('PUT', { name: 'Moss Tissue Draped Gown II' }, adminToken),
       );
       expect(res.status).toBe(200);
       const product = await res.json();

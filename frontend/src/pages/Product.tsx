@@ -66,6 +66,11 @@ export default function Product() {
           ('related' in raw ? raw.related : undefined) ?? detail.related ?? [];
         if (cancelled) return;
         setProduct(detail);
+        // An old (aliased) slug still resolves — canonicalise the address bar
+        // so what gets copied and shared is the piece's current URL.
+        if (detail.slug && detail.slug !== slug) {
+          navigate(`/product/${detail.slug}`, { replace: true });
+        }
         if (lastTrackedSlugRef.current !== detail.slug) {
           lastTrackedSlugRef.current = detail.slug;
           track('product_view', {

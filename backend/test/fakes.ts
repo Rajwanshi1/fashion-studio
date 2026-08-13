@@ -289,6 +289,8 @@ export class FakeProductsRepo implements ProductsRepo {
   products: FakeProduct[] = [];
   /** Product ids referenced by an order — mirrors the order_items FK guard. */
   orderedProductIds = new Set<string>();
+  /** old slug → product id; mirrors the product_slug_aliases table. */
+  slugAliases = new Map<string, string>();
   private clock = 0;
 
   addCategory(input: Partial<CreateCategoryInput> & { slug: string; name: string }): Category {
@@ -349,7 +351,10 @@ export class FakeProductsRepo implements ProductsRepo {
   }
 
   async getBySlug(slug: string): Promise<AdminProduct | null> {
-    const p = this.products.find((x) => x.slug === slug && !x.deletedAt);
+    const p =
+      this.products.find((x) => x.slug === slug && !x.deletedAt) ??
+      // Mirrors the repo's alias fallback: renamed pieces answer to old slugs.
+      this.products.find((x) => x.id === this.slugAliases.get(slug) && !x.deletedAt);
     return p ? structuredClone(p) : null;
   }
 
@@ -466,6 +471,17 @@ export class FakeProductsRepo implements ProductsRepo {
       p.categoryId = category.id;
       p.categorySlug = category.slug;
       p.categoryName = category.name;
+    }
+    // Mirrors the repo's rename transaction: outgoing slug → alias (pointing
+    // at the product id), a reclaimed slug's alias row is dropped, and a
+    // collision with a live slug is the same SLUG_TAKEN 409.
+    if (input.slug !== undefined && input.slug !== p.slug) {
+      if (this.products.some((x) => x.id !== id && x.slug === input.slug && !x.deletedAt)) {
+        throw new DomainError('SLUG_TAKEN', 'A piece with this slug already exists — choose a different slug');
+      }
+      this.slugAliases.set(p.slug, id);
+      this.slugAliases.delete(input.slug);
+      p.slug = input.slug;
     }
     const keys = [
       'name', 'description', 'details', 'price', 'color', 'flag', 'imageUrl', 'active',

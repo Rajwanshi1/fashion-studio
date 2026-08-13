@@ -31,6 +31,9 @@ const MAX_IMAGES = 12;
 
 interface FormState {
   name: string;
+  /** Edit mode only — the piece's URL name. Renames keep old links working
+   *  via server-side aliases. Created pieces get a server-generated slug. */
+  slug: string;
   categorySlug: string;
   description: string;
   details: string;
@@ -62,6 +65,7 @@ const FLAG_OPTIONS: [FormState['flag'], string, string][] = [
 
 const EMPTY_FORM: FormState = {
   name: '',
+  slug: '',
   categorySlug: '',
   description: '',
   details: '',
@@ -192,6 +196,7 @@ export default function ProductEdit() {
         const saleRupees = rupees(product.salePrice);
         const nextForm: FormState = {
           name: product.name,
+          slug: product.slug,
           categorySlug: product.categorySlug,
           description: product.description,
           details: product.details,
@@ -329,6 +334,9 @@ export default function ProductEdit() {
     // scroll-and-resubmit round trip per field (TA-022).
     const problems: string[] = [];
     if (!form.name.trim()) problems.push('Name is required');
+    if (!isNew && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(form.slug.trim())) {
+      problems.push('Slug must be lowercase words separated by single dashes, e.g. bahaar-purple');
+    }
     if (!form.categorySlug) problems.push('Choose a category');
     if (!Number.isFinite(pricePaise) || pricePaise < 0 || form.priceRupees.trim() === '') {
       problems.push('Enter a valid price in rupees');
@@ -382,7 +390,7 @@ export default function ProductEdit() {
           },
         });
       } else {
-        await api(`/api/admin/products/${id}`, { method: 'PUT', body });
+        await api(`/api/admin/products/${id}`, { method: 'PUT', body: { ...body, slug: form.slug.trim() } });
         const changed = variants.filter(
           (v) => Math.round(Number(stocks[v.id]) || 0) !== v.stock,
         );
@@ -454,6 +462,21 @@ export default function ProductEdit() {
               required
             />
           </div>
+          {!isNew && (
+            <div className="field">
+              <label className="lab" htmlFor="p-slug">
+                Slug (web address)
+              </label>
+              <input
+                id="p-slug"
+                className="inp"
+                value={form.slug}
+                onChange={(e) => set('slug', e.target.value)}
+                spellCheck={false}
+              />
+              <p className="x">/product/{form.slug || '…'} — old links keep redirecting after a rename.</p>
+            </div>
+          )}
           <div className="field">
             <label className="lab" htmlFor="p-price">
               Price (₹ rupees)
