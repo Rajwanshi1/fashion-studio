@@ -237,10 +237,18 @@ describe('AnthropicCatalogAi.colorFamily', () => {
 
 describe('AnthropicCatalogAi.nameProductImage', () => {
   it('sends the image block first, then the prompt naming the product', async () => {
-    const { client, calls } = fakeClient(jsonResponse({ file_slug: 'cherry-pink-anarkali-front', pose: 'front' }));
+    const { client, calls } = fakeClient(
+      jsonResponse({ file_slug: 'cherry-pink-anarkali-front', pose: 'front', color_name: 'Cherry Pink', color_hex: '#E8A2B8' }),
+    );
 
     const result = await new AnthropicCatalogAi(client).nameProductImage(image, 'Cherry Pink Anarkali');
-    expect(result).toEqual({ fileSlug: 'cherry-pink-anarkali-front', pose: 'front' });
+    // The hex is normalized to lowercase; the display name passes through.
+    expect(result).toEqual({
+      fileSlug: 'cherry-pink-anarkali-front',
+      pose: 'front',
+      colorName: 'Cherry Pink',
+      colorHex: '#e8a2b8',
+    });
 
     const params = calls[0];
     expect(params.model).toBe('claude-sonnet-5');
@@ -263,7 +271,26 @@ describe('AnthropicCatalogAi.nameProductImage', () => {
     await expect(new AnthropicCatalogAi(client).nameProductImage(image, 'Anarkali')).resolves.toEqual({
       fileSlug: 'Cherry Pink / Anarkali',
       pose: null,
+      colorName: null,
+      colorHex: null,
     });
+  });
+
+  it('nulls off-shape colour fields instead of failing the naming', async () => {
+    const cases: [Record<string, unknown>, { colorName: string | null; colorHex: string | null }][] = [
+      [{ color_name: 'Maroon', color_hex: 'maroon' }, { colorName: 'Maroon', colorHex: null }],
+      [{ color_name: 'Maroon', color_hex: '#8b2' }, { colorName: 'Maroon', colorHex: null }],
+      [{ color_name: 'x'.repeat(41), color_hex: '#8b2635' }, { colorName: null, colorHex: '#8b2635' }],
+      [{ color_name: '   ', color_hex: null }, { colorName: null, colorHex: null }],
+    ];
+    for (const [fields, expected] of cases) {
+      const { client } = fakeClient(jsonResponse({ file_slug: 'a-b', pose: 'front', ...fields }));
+      await expect(new AnthropicCatalogAi(client).nameProductImage(image, 'A')).resolves.toEqual({
+        fileSlug: 'a-b',
+        pose: 'front',
+        ...expected,
+      });
+    }
   });
 
   it('returns null when the slug is empty or whitespace', async () => {
@@ -279,12 +306,16 @@ describe('AnthropicCatalogAi.nameProductImage', () => {
       await expect(new AnthropicCatalogAi(client).nameProductImage(image, 'A')).resolves.toEqual({
         fileSlug: 'a-b',
         pose,
+        colorName: null,
+        colorHex: null,
       });
     }
     const { client } = fakeClient(jsonResponse({ file_slug: 'a-b', pose: 'mid-twirl' }));
     await expect(new AnthropicCatalogAi(client).nameProductImage(image, 'A')).resolves.toEqual({
       fileSlug: 'a-b',
       pose: null,
+      colorName: null,
+      colorHex: null,
     });
   });
 
@@ -346,9 +377,11 @@ describe('catalog prompt specs', () => {
   it('image name schema requires both fields and enumerates the poses', () => {
     const schema = IMAGE_NAME_SPEC.schema as any;
     expect(schema.additionalProperties).toBe(false);
-    expect(schema.required).toEqual(['file_slug', 'pose']);
+    expect(schema.required).toEqual(['file_slug', 'pose', 'color_name', 'color_hex']);
     expect(schema.properties.file_slug.type).toBe('string');
     expect(schema.properties.pose.enum).toEqual(['front', 'back', 'side', 'detail', 'drape', 'flat', null]);
+    expect(schema.properties.color_name.type).toEqual(['string', 'null']);
+    expect(schema.properties.color_hex.type).toEqual(['string', 'null']);
   });
 
   it('prompts carry their input and explain the tricky cases', () => {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { displayPrice, displaySalePrice, effectiveBasePrice } from '../lib/format';
+import { swatchFill } from '../lib/colors';
 import type { ProductDetail, ProductImage, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useWishlist } from '../lib/wishlist';
@@ -16,18 +17,6 @@ import Price from '../components/Price';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/pdp.css';
-
-const COLOR_CLASS: Record<string, string> = {
-  Sage: 'c-sage',
-  Moss: 'c-moss',
-  Pistachio: 'c-pistachio',
-  'Antique Gold': 'c-antique-gold',
-  'Deep Forest': 'c-deep-forest',
-  Eucalyptus: 'c-eucalyptus',
-  Celadon: 'c-celadon',
-  Mint: 'c-mint',
-};
-const SWATCH_PALETTE = ['Sage', 'Moss', 'Antique Gold', 'Deep Forest'];
 
 /** Positional fallback when a gallery row carries no pose. */
 const poseLabel = (img: ProductImage, i: number) => img.pose || `View ${i + 1}`;
@@ -81,6 +70,10 @@ export default function Product() {
             props: { slug: detail.slug, name: detail.name, price: detail.price },
           });
         }
+        // The catalogue colour, NOT the first photo's: the order line snapshots
+        // the product colour server-side, and a detail-shot tag ("Antique
+        // Gold" embroidery close-up) must not become the bag's colour label
+        // without the shopper choosing it.
         setColor(detail.color);
         setExcluded(new Set());
         const firstInStock = detail.variants.find((v) => v.stock > 0) ?? detail.variants[0];
@@ -122,7 +115,7 @@ export default function Product() {
   const gallery = useMemo<ProductImage[]>(() => {
     if (!product) return [];
     if (product.images.length) return product.images;
-    return product.imageUrl ? [{ url: product.imageUrl, pose: '' }] : [];
+    return product.imageUrl ? [{ url: product.imageUrl, pose: '', color: '', colorHex: '' }] : [];
   }, [product]);
 
   // A shorter gallery (product switch, edited piece) must not strand `thumb`
@@ -147,11 +140,24 @@ export default function Product() {
     setThumb(i);
   };
 
+  // One swatch per distinct photo colour (first occurrence wins, gallery
+  // order); `firstIndex` is where the carousel jumps on click. A piece with no
+  // coloured photos falls back to a single swatch for its catalogue colour.
   const swatches = useMemo(() => {
-    if (!product) return SWATCH_PALETTE;
-    return SWATCH_PALETTE.includes(product.color)
-      ? SWATCH_PALETTE
-      : [product.color, ...SWATCH_PALETTE.slice(0, 3)];
+    if (!product) return [];
+    const seen = new Set<string>();
+    const out: { name: string; fill: string | null; firstIndex: number | null }[] = [];
+    product.images.forEach((img, i) => {
+      if (img.color === '') return;
+      const key = img.color.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ name: img.color, fill: swatchFill(img.color, img.colorHex), firstIndex: i });
+    });
+    if (out.length === 0) {
+      out.push({ name: product.color, fill: swatchFill(product.color, ''), firstIndex: null });
+    }
+    return out;
   }, [product]);
 
   const selectedVariant = product?.variants.find((v) => v.id === variantId);
@@ -285,15 +291,22 @@ export default function Product() {
             </span>
           </div>
           <div className="swatches" id="swatches">
-            {swatches.map((c) => (
+            {swatches.map((s) => (
               <button
-                key={c}
-                className={`swatch ${COLOR_CLASS[c] ?? 'c-default'}${c === color ? ' active' : ''}`}
-                aria-label={c}
-                title={c}
+                key={s.name}
+                className={`swatch${s.fill == null ? ' c-default' : ''}${s.name === color ? ' active' : ''}`}
+                style={s.fill != null ? { background: s.fill } : undefined}
+                aria-label={s.name}
+                title={s.name}
                 onClick={() => {
-                  setColor(c);
-                  track('color_select', { productId: product.id, props: { color: c } });
+                  setColor(s.name);
+                  track('color_select', {
+                    productId: product.id,
+                    props: { color: s.name, source: 'photo' },
+                  });
+                  if (s.firstIndex != null && s.firstIndex !== thumb) {
+                    onGalleryChange(s.firstIndex, 'swatch');
+                  }
                 }}
               />
             ))}

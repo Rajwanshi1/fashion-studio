@@ -62,6 +62,10 @@ export type ColorFamily = (typeof COLOR_FAMILIES)[number];
 export interface ProductImage {
   url: string;
   pose: string;
+  /** Display name of the garment's colour in THIS photo ("Maroon"); '' when unknown. */
+  color: string;
+  /** CSS '#rrggbb' fill for the colour swatch; '' when unknown. */
+  colorHex: string;
 }
 
 /** One piece of the set ("This order contains"), in display order. */

@@ -76,6 +76,8 @@ const PRODUCT_PRESIGN = {
   headers: { 'Content-Type': 'image/jpeg' },
   publicUrl: 'https://cdn.example/products/2026/08/emerald-gown-front-a1b2c3.jpg',
   pose: 'front',
+  color: 'Emerald',
+  colorHex: '#0f6b4f',
 };
 
 interface PresignBody {
@@ -115,16 +117,25 @@ describe('uploadProductImage', () => {
     expect(bodies[0].contentType).toBe('image/jpeg');
     expect(bodies[0].productName).toBe('Emerald Court Gown'); // trimmed
     expect(atob(String(bodies[0].imageBase64))).toBe('jpeg'); // the prepared blob
-    expect(result).toEqual({ publicUrl: PRODUCT_PRESIGN.publicUrl, pose: 'front' });
+    expect(result).toEqual({
+      publicUrl: PRODUCT_PRESIGN.publicUrl,
+      pose: 'front',
+      color: 'Emerald',
+      colorHex: '#0f6b4f',
+    });
   });
 
-  it('omits the naming fields without a product name, and reports a null pose', async () => {
-    const bodies = stubPresign(() => ({ json: { ...PRODUCT_PRESIGN, pose: undefined } }));
+  it('omits the naming fields without a product name, and reports a null pose and colour', async () => {
+    const bodies = stubPresign(() => ({
+      json: { ...PRODUCT_PRESIGN, pose: undefined, color: undefined, colorHex: undefined },
+    }));
 
     const result = await uploadProductImage(new File(['x'], 'shot.jpg', { type: 'image/jpeg' }));
 
     expect(bodies).toEqual([{ contentType: 'image/jpeg' }]);
     expect(result.pose).toBeNull();
+    expect(result.color).toBeNull();
+    expect(result.colorHex).toBeNull();
   });
 
   it('retries the presign without the naming fields when the first attempt fails', async () => {

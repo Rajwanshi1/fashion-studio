@@ -110,11 +110,13 @@ function rupees(paise: number | null): string {
 }
 
 /** Gallery row with a client-side id for stable list keys — the id never
- *  leaves the form (the save payload strips back to {url, pose}). */
-const galleryImage = (url: string, pose: string): GalleryImage => ({
+ *  leaves the form (the save payload strips back to {url, pose, color, colorHex}). */
+const galleryImage = (url: string, pose: string, color = '', colorHex = ''): GalleryImage => ({
   id: crypto.randomUUID(),
   url,
   pose,
+  color,
+  colorHex,
 });
 
 /** Component row with a client-side id for stable list keys — the id never
@@ -198,7 +200,9 @@ export default function ProductEdit() {
         // as the first (only) gallery photo so they stay editable.
         const gallery: GalleryImage[] =
           product.images && product.images.length > 0
-            ? product.images.map((img) => galleryImage(img.url, img.pose ?? ''))
+            ? product.images.map((img) =>
+                galleryImage(img.url, img.pose ?? '', img.color ?? '', img.colorHex ?? ''),
+              )
             : product.imageUrl
               ? [galleryImage(product.imageUrl, '')]
               : [];
@@ -281,6 +285,15 @@ export default function ProductEdit() {
       images: f.images.map((im, x) => (x === index ? { ...im, pose } : im)),
     }));
 
+  const setImageColor = (index: number, color: string) =>
+    setForm((f) => ({
+      ...f,
+      // Correcting the name also drops the AI-read hex: the swatch fill would
+      // otherwise keep showing the misread colour (hex beats the name-keyword
+      // fallback on the PDP), and there is no hex editor to fix it by hand.
+      images: f.images.map((im, x) => (x === index ? { ...im, color, colorHex: '' } : im)),
+    }));
+
   const removeImage = (index: number) =>
     setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== index) }));
 
@@ -331,8 +344,11 @@ export default function ProductEdit() {
     let added = 0;
     for (const file of files) {
       try {
-        const { publicUrl, pose } = await uploadProductImage(file, form.name);
-        setForm((f) => ({ ...f, images: [...f.images, galleryImage(publicUrl, pose ?? '')] }));
+        const { publicUrl, pose, color, colorHex } = await uploadProductImage(file, form.name);
+        setForm((f) => ({
+          ...f,
+          images: [...f.images, galleryImage(publicUrl, pose ?? '', color ?? '', colorHex ?? '')],
+        }));
         added += 1;
       } catch (err) {
         toast(err instanceof Error ? err.message : 'Photo upload failed', { tone: 'error' });
@@ -395,7 +411,7 @@ export default function ProductEdit() {
       flag: form.flag === '' ? null : form.flag,
       salePrice: form.flag === 'sale' ? salePaise : null,
       costPrice,
-      images: form.images.map(({ url, pose }) => ({ url, pose })),
+      images: form.images.map(({ url, pose, color, colorHex }) => ({ url, pose, color, colorHex })),
       active: form.active,
       collection: form.collection.trim(),
       craft: form.craft.trim(),
@@ -834,6 +850,7 @@ export default function ProductEdit() {
             onReorder={reorderImage}
             onRemove={removeImage}
             onPoseChange={setImagePose}
+            onColorChange={setImageColor}
           />
         </div>
         <div className="field">

@@ -44,10 +44,12 @@ export interface CreateCategoryInput {
   position: number;
 }
 
-/** One gallery photo on the way in; `pose` defaults to '' when the AI is unsure. */
+/** One gallery photo on the way in; the tag fields default to '' when the AI is unsure. */
 export interface ProductImageInput {
   url: string;
   pose?: string;
+  color?: string;
+  colorHex?: string;
 }
 
 /** One set piece on the way in; `price` is only kept on optional rows. */
@@ -214,7 +216,7 @@ function mapVariant(row: any): Variant {
 }
 
 function mapImage(row: any): ProductImage {
-  return { url: row.url, pose: row.pose ?? '' };
+  return { url: row.url, pose: row.pose ?? '', color: row.color ?? '', colorHex: row.color_hex ?? '' };
 }
 
 function mapComponent(row: any): ProductComponent {
@@ -319,7 +321,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
     const byProduct = new Map<string, ProductImage[]>();
     if (productIds.length === 0) return byProduct;
     const { rows } = await client.query(
-      `SELECT product_id, url, pose FROM product_images
+      `SELECT product_id, url, pose, color, color_hex FROM product_images
        WHERE product_id = ANY($1::uuid[]) ORDER BY position, id`,
       [productIds],
     );
@@ -335,12 +337,10 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
   async function replaceImages(client: PoolClient, productId: string, images: ProductImageInput[]): Promise<void> {
     await client.query('DELETE FROM product_images WHERE product_id = $1', [productId]);
     for (const [position, image] of images.entries()) {
-      await client.query('INSERT INTO product_images (product_id, url, position, pose) VALUES ($1, $2, $3, $4)', [
-        productId,
-        image.url,
-        position,
-        image.pose ?? '',
-      ]);
+      await client.query(
+        'INSERT INTO product_images (product_id, url, position, pose, color, color_hex) VALUES ($1, $2, $3, $4, $5, $6)',
+        [productId, image.url, position, image.pose ?? '', image.color ?? '', image.colorHex ?? ''],
+      );
     }
   }
 

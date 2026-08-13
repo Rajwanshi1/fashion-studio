@@ -4,7 +4,7 @@ import type { ProductImage } from '../lib/types';
 import { prefersReducedMotion } from '../lib/motion';
 import ImageSlot from './ImageSlot';
 
-export type GalleryTrigger = 'swipe' | 'drag' | 'dot' | 'thumb';
+export type GalleryTrigger = 'swipe' | 'drag' | 'dot' | 'thumb' | 'swatch';
 
 interface StageCarouselProps {
   /** Gallery from Product.tsx — already fallback-resolved. */

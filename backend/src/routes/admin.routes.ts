@@ -213,7 +213,17 @@ const productBaseSchema = z.object({
     .optional(),
   dupattaPrice: legacyRemovedField,
   jacketPrice: legacyRemovedField,
-  images: z.array(z.object({ url: z.string().min(1), pose: z.string().optional() })).max(12).optional(),
+  images: z
+    .array(
+      z.object({
+        url: z.string().min(1),
+        pose: z.string().optional(),
+        color: z.string().max(40).optional(),
+        colorHex: z.string().regex(/^#[0-9a-f]{6}$/i).or(z.literal('')).optional(),
+      }),
+    )
+    .max(12)
+    .optional(),
   variants: z.array(z.object({ size: z.string().min(1), stock: z.number().int().min(0) })).optional(),
 });
 
@@ -415,10 +425,15 @@ export function adminRoutes(deps: AdminDeps) {
     const { contentType, productName, imageBase64 } = c.req.valid('json');
     let key: string | null = null;
     let pose: string | null = null;
+    let color: string | null = null;
+    let colorHex: string | null = null;
     if (productName && imageBase64 && deps.catalogAi) {
       try {
         const bytes = Buffer.from(imageBase64, 'base64');
         const named = await deps.catalogAi.nameProductImage({ bytes, mediaType: contentType }, productName);
+        // The colour read is useful even when the slug sanitizes away.
+        color = named?.colorName ?? null;
+        colorHex = named?.colorHex ?? null;
         const fileSlug = named ? sanitizeFileSlug(named.fileSlug) : '';
         if (fileSlug) {
           key = namedStorageKey('products', fileSlug);
@@ -430,7 +445,10 @@ export function adminRoutes(deps: AdminDeps) {
     }
     if (!key) key = newStorageKey('products');
     const { url, headers } = await deps.objectStore.presignPut(key, contentType);
-    return c.json({ key, uploadUrl: url, headers, publicUrl: deps.objectStore.publicUrl(key), pose }, 201);
+    return c.json(
+      { key, uploadUrl: url, headers, publicUrl: deps.objectStore.publicUrl(key), pose, color, colorHex },
+      201,
+    );
   });
 
   r.post('/products/bulk-delete', zValidator('json', bulkDeleteSchema, zodHook), async (c) => {
