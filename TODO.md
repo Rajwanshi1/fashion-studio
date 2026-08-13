@@ -12,6 +12,8 @@ Keep this file under ~60 lines.
 - #11 draft Infra go-live follow-ups (resolver-proof delegation gate)
 
 ## Chores / known issues
+- Audit remediation (PRs #41→#42→#43, stacked): after each merge+deploy run
+  docs/audit-remediation-runbook.md — CMS review, the 12 renames, provenance.
 - Site CMS follow-up (from /code-review on #38): consider replacing the
   hand-mirrored admin/src/preview/storefront.css with cross-package ?raw
   imports — trades drift risk for package coupling; discussion on #38.
