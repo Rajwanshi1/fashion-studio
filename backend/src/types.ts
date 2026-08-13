@@ -252,6 +252,7 @@ export class DomainError extends Error {
       | 'INVALID_CREDENTIALS'
       | 'NOT_FOUND'
       | 'INSUFFICIENT_STOCK'
+      | 'PRICE_CHANGED'
       | 'EMPTY_ORDER'
       | 'INVALID_STATUS_TRANSITION'
       | 'OVER_COLLECTION'

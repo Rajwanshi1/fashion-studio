@@ -862,7 +862,9 @@ describe('API', () => {
             // Price on a required row is dropped — its cost is the base price.
             { name: 'Belt', price: 100000 },
             { name: 'Cape', optional: true, price: 1500000 },
-            { name: 'Potli bag', optional: true, price: 0 },
+            // An unpriced optional row is normalized to 0 (included free) so
+            // the PDP can always render its checkbox.
+            { name: 'Potli bag', optional: true },
           ],
         }, adminToken),
       );
@@ -896,6 +898,51 @@ describe('API', () => {
 
       const publicDetail = await (await app.request(`/api/products/${product.slug}`)).json();
       expect(publicDetail.components.map((c: any) => c.price)).toEqual([900000]);
+    });
+
+    it('rejects duplicate component names — exclusions and tick state are keyed by name', async () => {
+      const res = await app.request(
+        '/api/admin/products',
+        withMethod('POST', {
+          categorySlug: 'gowns',
+          name: 'Twin Dupatta Gown',
+          price: 9900000,
+          components: [
+            { name: 'Dupatta', optional: true, price: 100000 },
+            { name: ' dupatta ', optional: true, price: 200000 }, // trim/case-insensitive dup
+          ],
+        }, adminToken),
+      );
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/unique/i);
+    });
+
+    it('400s a save from a pre-components admin bundle instead of silently dropping its price edit', async () => {
+      const set = await seedSetProduct(f.products, seeded.lehengas.id);
+      const res = await app.request(
+        `/api/admin/products/${set.id}`,
+        withMethod('PUT', { price: 14000000, dupattaPrice: 1500000 }, adminToken),
+      );
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/out of date/i);
+      // Nothing was half-applied.
+      const detail = await (await app.request('/api/products/fern-zardozi-set-fern')).json();
+      expect(detail.price).toBe(15000000);
+      expect(detail.components.find((c: any) => c.name === 'Dupatta').price).toBe(1200000);
+    });
+
+    it('409s when the cart-displayed price no longer matches the server price', async () => {
+      const set = await seedSetProduct(f.products, seeded.lehengas.id);
+      const res = await app.request(
+        '/api/orders',
+        post({
+          customer: CUSTOMER,
+          deliveryMethod: 'standard',
+          items: [{ variantId: set.variants[0].id, quantity: 1, expectedUnitPrice: 15000000 }],
+        }),
+      );
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toMatch(/price.*changed/i);
     });
 
     it('names the uploaded photo through the catalog AI, falling back to a uuid key', async () => {

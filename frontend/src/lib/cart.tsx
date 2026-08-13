@@ -32,11 +32,14 @@ export interface CartItem {
   measurements: string;
 }
 
-/** Line identity: variant + set-includes selection + measurements note. */
+/** Line identity: variant + set selection + measurements + the price the line
+ *  was added at — two adds of the same selection only merge when they showed
+ *  the same price (checkout guarantees each line is charged exactly its own
+ *  snapshotted unitPrice). */
 export function cartLineKey(
-  i: Pick<CartItem, 'variantId' | 'excludedComponents' | 'measurements'>,
+  i: Pick<CartItem, 'variantId' | 'excludedComponents' | 'measurements' | 'unitPrice'>,
 ): string {
-  return `${i.variantId}:${[...i.excludedComponents].sort().join(',')}:${i.measurements}`;
+  return `${i.variantId}:${[...i.excludedComponents].sort().join(',')}:${i.measurements}:${i.unitPrice}`;
 }
 
 interface CartContextValue {
@@ -85,16 +88,24 @@ function load(): CartItem[] {
         if (Array.isArray(rest.includedComponents) && Array.isArray(rest.excludedComponents)) {
           return rest as CartItem;
         }
+        // An addon price proves the line came from the set-includes UI, where a
+        // false flag was a real untick. Without one the flags are synthetic
+        // (older cart, or a product with no set pieces) — recording exclusions
+        // there would only stop the line merging with a fresh identical add;
+        // checkout's expectedUnitPrice guard covers the pricing either way.
+        const setEra = dupattaPrice != null || jacketPrice != null;
         return {
           ...rest,
           includedComponents: [
             ...(includeDupatta && dupattaPrice != null ? ['dupatta'] : []),
             ...(includeJacket && jacketPrice != null ? ['jacket'] : []),
           ],
-          excludedComponents: [
-            ...(includeDupatta === false ? ['dupatta'] : []),
-            ...(includeJacket === false ? ['jacket'] : []),
-          ],
+          excludedComponents: setEra
+            ? [
+                ...(includeDupatta === false ? ['dupatta'] : []),
+                ...(includeJacket === false ? ['jacket'] : []),
+              ]
+            : [],
         };
       });
   } catch {

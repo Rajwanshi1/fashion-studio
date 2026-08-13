@@ -95,6 +95,9 @@ describe('checkout', () => {
     expect(body.items[0]).not.toHaveProperty('excludedComponents'); // nothing unticked omitted
     expect(body.items[1].measurements).toBe('bust 36in, waist 30in');
     expect(body.items[1].excludedComponents).toEqual(['Jacket']);
+    // Every line ships the price it displayed — the server 409s on drift.
+    expect(body.items[0].expectedUnitPrice).toBeGreaterThan(0);
+    expect(body.items[1].expectedUnitPrice).toBe(body.items[0].expectedUnitPrice);
   });
 
   it('payments disabled: 503 from checkout shows the coming-soon notice, order saved', async () => {

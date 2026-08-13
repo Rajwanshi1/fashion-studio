@@ -218,6 +218,65 @@ describe('OrdersService', () => {
         ),
       ).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK' });
     });
+
+    it('honours a matching expectedUnitPrice and 409s a stale one', async () => {
+      const ok = await service.createOrder(
+        input({ items: [{ variantId: setVariantId, quantity: 1, expectedUnitPrice: 18600000 }] }),
+      );
+      expect(ok.items[0].unitPrice).toBe(18600000);
+
+      // A cart that displayed a price the server no longer computes — e.g. an
+      // exclusion invalidated by a component rename — must never be charged.
+      await expect(
+        service.createOrder(
+          input({
+            items: [
+              { variantId: setVariantId, quantity: 1, excludedComponents: ['Longline Jacket'], expectedUnitPrice: 16200000 },
+            ],
+          }),
+        ),
+      ).rejects.toMatchObject({ code: 'PRICE_CHANGED' });
+    });
+
+    it('legacy (pre-components) items are priced only on dupatta/jacket — never an invisible piece', async () => {
+      const caped = await products.createProduct({
+        categoryId: seeded.lehengas.id,
+        slug: 'caped-set',
+        name: 'Caped Set',
+        description: 'Set with a cape the old storefront never displayed.',
+        details: 'Dry clean only',
+        price: 10000000,
+        color: 'Sage',
+        active: true,
+        components: [
+          { name: 'Dupatta', optional: true, price: 500000 },
+          { name: 'Cape', optional: true, price: 2000000 },
+        ],
+        variants: [{ size: 'M', stock: 5 }],
+      });
+      const order = await service.createOrder(
+        input({
+          items: [{ variantId: caped.variants[0].id, quantity: 1, legacyIncludes: { dupatta: true, jacket: true } }],
+        }),
+      );
+      // Dupatta honoured, Cape (invisible to the old UI) not charged.
+      expect(order.items[0].unitPrice).toBe(10000000 + 500000);
+      expect(order.items[0].components).toEqual([{ name: 'Dupatta', price: 500000 }]);
+    });
+
+    it('merges combos that price out identically — phantom exclusions from migrated carts', async () => {
+      const order = await service.createOrder(
+        input({
+          items: [
+            { variantId: setVariantId, quantity: 1, excludedComponents: ['Odhani'] }, // unknown name, ignored
+            { variantId: setVariantId, quantity: 1 },
+          ],
+        }),
+      );
+      expect(order.items).toHaveLength(1);
+      expect(order.items[0].quantity).toBe(2);
+      expect(order.items[0].unitPrice).toBe(18600000);
+    });
   });
 
   describe('made-to-measure measurements', () => {
