@@ -3,7 +3,7 @@
 ## Layout
 - src/pages/       dashboard, products, orders, offline intake (Scan Bill), deliveries,
                    payments, users, analytics, socials QR, site canvas + editors.
-                   Giants: SiteSectionEdit.tsx ~1000 lines, ProductEdit.tsx ~790.
+                   Giants: SiteSectionEdit.tsx ~1000 lines, ProductEdit.tsx ~965.
 - src/components/  shared admin chrome
 - src/preview/     storefront preview: markup + CSS mirrors rendered in src-less
                    iframes (PreviewFrame) — /site canvas and editor live previews
