@@ -64,11 +64,21 @@ export interface ProductImage {
   pose: string;
 }
 
+/** One piece of the set ("This order contains"), in display order. */
+export interface ProductComponent {
+  id: string;
+  name: string;
+  /** Optional pieces are tickable on the PDP; required pieces always ship. */
+  optional: boolean;
+  /** Paise; only meaningful when optional. null = no separate price, 0 = included free. */
+  price: number | null;
+}
+
 export interface ProductSummary {
   id: string;
   slug: string;
   name: string;
-  /** Base garment price; add dupattaPrice/jacketPrice for the full-set price. */
+  /** Base garment price; add addonsTotal for the full-set price. */
   price: number;
   color: string;
   flag: ProductFlag;
@@ -77,10 +87,9 @@ export interface ProductSummary {
   categoryName: string;
   collection: string;
   occasion: string;
-  /** Paise; null = no dupatta in the set, 0 = included at no extra cost. */
-  dupattaPrice: number | null;
-  /** Paise; null = no jacket in the set, 0 = included at no extra cost. */
-  jacketPrice: number | null;
+  /** Paise; SUM of optional priced component prices — the default-included
+   *  add-ons. 0 when none. */
+  addonsTotal: number;
   /** Canonical colour bucket for the shop filter; null when never resolved. */
   colorFamily: ColorFamily | null;
   /** Paise; discounted BASE price, meaningful only when flag === 'sale'.
@@ -104,6 +113,8 @@ export interface ProductDetail extends ProductSummary {
   variants: Variant[];
   /** Ordered gallery; images[0].url mirrors imageUrl. */
   images: ProductImage[];
+  /** "This order contains" — every piece of the set, in display order. */
+  components: ProductComponent[];
 }
 
 export type ProductSort = 'featured' | 'new' | 'price_asc' | 'price_desc';
@@ -147,9 +158,8 @@ export interface OrderItem {
   unitPrice: number;
   quantity: number;
   imageUrl: string | null;
-  /** Chosen add-on price snapshot; null = excluded or not part of the set. */
-  dupattaPrice: number | null;
-  jacketPrice: number | null;
+  /** Kept optional add-ons snapshotted at order time; price paise, 0 = included free. */
+  components: { name: string; price: number }[];
   /** Free-text made-to-measure note; '' when none. */
   measurements: string;
 }
@@ -242,6 +252,7 @@ export class DomainError extends Error {
       | 'INVALID_CREDENTIALS'
       | 'NOT_FOUND'
       | 'INSUFFICIENT_STOCK'
+      | 'PRICE_CHANGED'
       | 'EMPTY_ORDER'
       | 'INVALID_STATUS_TRANSITION'
       | 'OVER_COLLECTION'

@@ -32,6 +32,7 @@ export interface AdminProductRow {
   salePrice: number | null;
   active: boolean;
   variants: AdminVariant[];
+  components: { id: string; name: string; optional: boolean; price: number | null }[];
 }
 
 export async function adminToken(request: APIRequestContext): Promise<string> {

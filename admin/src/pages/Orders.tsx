@@ -212,10 +212,8 @@ function ExpandedOrder({ order, onUpdated: onUpdatedProp }: ExpandedProps) {
               <div className="nm">{it.productName}</div>
               <div className="x">
                 {[it.size, it.color].filter(Boolean).join(' · ') || 'Freeform'} · ×{it.quantity}
-                {(it.dupattaPrice != null || it.jacketPrice != null) &&
-                  ` · with ${[it.dupattaPrice != null && 'dupatta', it.jacketPrice != null && 'jacket']
-                    .filter(Boolean)
-                    .join(' & ')}`}
+                {it.components.length > 0 &&
+                  ` · with ${it.components.map((c) => c.name).join(' & ')}`}
               </div>
               {/* Client-supplied free text — always plain text, never HTML. */}
               {it.measurements && <div className="item-note">{it.measurements}</div>}

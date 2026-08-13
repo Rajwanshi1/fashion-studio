@@ -37,6 +37,9 @@ filtered to the API origin. Admin JWT for protected routes:
 
 Gotchas:
 - CORS_ORIGINS must exactly match the preview origin or beacons fail silently.
+- otp-login.spec.ts needs the API booted with `OTP_DEV_CODE=123456` (random
+  codes otherwise → "Code incorrect"), and OTP routes are rate-limited
+  10/min/IP — repeated runs against one API instance trip 429s.
 - vite preview increments the port if taken — read its stdout, don't assume.
 - Clicking `mailto:`/`tel:` links keeps the page alive in headless Chromium;
   use those to observe click beacons without navigating away.

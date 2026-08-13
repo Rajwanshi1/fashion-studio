@@ -38,11 +38,9 @@ export default function CartPage() {
                 <div className="attrs">
                   <span>Colour — {i.color}</span>
                   <span>Size — {i.size}</span>
-                  {(i.includeDupatta || i.includeJacket) && (
+                  {i.includedComponents.length > 0 && (
                     <span>
-                      Includes {[i.includeDupatta && 'dupatta', i.includeJacket && 'jacket']
-                        .filter(Boolean)
-                        .join(' · ')}
+                      Includes {i.includedComponents.join(' · ')}
                     </span>
                   )}
                   <span className="tag">Made to Order · 4–6 weeks</span>

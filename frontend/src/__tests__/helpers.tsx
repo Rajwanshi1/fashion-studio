@@ -76,8 +76,7 @@ export const P1: ProductSummary = {
   categoryName: 'Lehenga',
   collection: 'The Verdant Edit',
   occasion: 'Wedding',
-  dupattaPrice: null,
-  jacketPrice: null,
+  addonsTotal: 0,
   colorFamily: 'green',
   salePrice: null,
 };
@@ -95,8 +94,7 @@ export const P2: ProductSummary = {
   categoryName: 'Lehenga',
   collection: 'Festive Edit',
   occasion: 'Festive',
-  dupattaPrice: null,
-  jacketPrice: null,
+  addonsTotal: 0,
   colorFamily: 'green',
   salePrice: 12900000,
 };
@@ -122,18 +120,23 @@ export const DETAIL1: ProductDetail = {
     { url: '/img/sage-back.jpg', pose: 'back' },
     { url: '/img/sage-detail.jpg', pose: '' },
   ],
+  components: [],
   related: [P2],
 };
 
-/** DETAIL1 with a priced dupatta + jacket, for set-includes tests. */
+/** DETAIL1 with a required piece + priced optional add-ons, for "This order contains" tests. */
 export const DETAIL_SET: ProductDetail = {
   ...DETAIL1,
   id: 'p9',
   slug: 'fern-zardozi-set-fern',
   name: 'Fern Zardozi Set',
   price: 15000000,
-  dupattaPrice: 1200000,
-  jacketPrice: 2400000,
+  addonsTotal: 1200000 + 2400000,
+  components: [
+    { id: 'c1', name: 'Lehenga', optional: false, price: null },
+    { id: 'c2', name: 'Dupatta', optional: true, price: 1200000 },
+    { id: 'c3', name: 'Jacket', optional: true, price: 2400000 },
+  ],
   variants: [{ id: 'v9', productId: 'p9', size: 'M', stock: 5 }],
   related: [],
 };
@@ -203,8 +206,7 @@ export const ORDER: Order = {
       unitPrice: 18400000,
       quantity: 1,
       imageUrl: null,
-      dupattaPrice: null,
-      jacketPrice: null,
+      components: [],
       measurements: '',
     },
   ],
@@ -224,10 +226,8 @@ export function seedCart() {
         unitPrice: 18400000,
         qty: 1,
         imageUrl: null,
-        includeDupatta: false,
-        includeJacket: false,
-        dupattaPrice: null,
-        jacketPrice: null,
+        includedComponents: [],
+        excludedComponents: [],
         measurements: '',
       },
     ]),

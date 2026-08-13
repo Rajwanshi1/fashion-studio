@@ -49,9 +49,9 @@ export default function Product() {
   const [color, setColor] = useState('');
   const [variantId, setVariantId] = useState('');
   const [qty, setQty] = useState(1);
-  // Set pieces are included by default; unticking removes them from the price.
-  const [incDupatta, setIncDupatta] = useState(false);
-  const [incJacket, setIncJacket] = useState(false);
+  // Optional pieces are included by default; unticking removes them from the
+  // price. The set holds the names of the components the shopper unticked.
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
   // Made-to-measure note draft; survives variant flips, addToBag gates on the flag.
   const [measurements, setMeasurements] = useState('');
 
@@ -82,8 +82,7 @@ export default function Product() {
           });
         }
         setColor(detail.color);
-        setIncDupatta(detail.dupattaPrice != null);
-        setIncJacket(detail.jacketPrice != null);
+        setExcluded(new Set());
         const firstInStock = detail.variants.find((v) => v.stock > 0) ?? detail.variants[0];
         setVariantId(firstInStock?.id ?? '');
         if (rel.length) {
@@ -166,9 +165,14 @@ export default function Product() {
     [product],
   );
 
-  const chosenDupatta = product && incDupatta && product.dupattaPrice != null ? product.dupattaPrice : null;
-  const chosenJacket = product && incJacket && product.jacketPrice != null ? product.jacketPrice : null;
-  const chosenAddons = (chosenDupatta ?? 0) + (chosenJacket ?? 0);
+  // Only optional PRICED components are tickable add-ons; required or unpriced
+  // pieces always ship and never move the price.
+  const optionalPriced = useMemo(
+    () => (product?.components ?? []).filter((c) => c.optional && c.price != null),
+    [product],
+  );
+  const keptAddons = optionalPriced.filter((c) => !excluded.has(c.name));
+  const chosenAddons = keptAddons.reduce((sum, c) => sum + (c.price ?? 0), 0);
   // A sale discounts the base only; add-ons are always charged in full. This is
   // the number checkout independently recomputes from getVariantsForUpdate.
   const liveTotal = product ? effectiveBasePrice(product) + chosenAddons : 0;
@@ -187,10 +191,8 @@ export default function Product() {
         color,
         unitPrice: liveTotal,
         imageUrl: product.imageUrl,
-        includeDupatta: chosenDupatta != null,
-        includeJacket: chosenJacket != null,
-        dupattaPrice: chosenDupatta,
-        jacketPrice: chosenJacket,
+        includedComponents: keptAddons.map((c) => c.name),
+        excludedComponents: [...excluded].filter((n) => optionalPriced.some((c) => c.name === n)),
         measurements: isMadeToMeasure ? measurements.trim() : '',
       },
       qty,
@@ -324,33 +326,37 @@ export default function Product() {
             })}
           </div>
 
-          {(product.dupattaPrice != null || product.jacketPrice != null) && (
+          {product.components.length > 0 && (
             <>
               <div className="opt-label">
-                <span>This piece includes</span>
+                <span>This order contains</span>
               </div>
               <div className="set-includes">
-                {product.dupattaPrice != null && (
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={incDupatta}
-                      onChange={(e) => setIncDupatta(e.target.checked)}
-                    />
-                    Dupatta —{' '}
-                    {product.dupattaPrice === 0 ? 'Included' : <Price paise={product.dupattaPrice} />}
-                  </label>
-                )}
-                {product.jacketPrice != null && (
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={incJacket}
-                      onChange={(e) => setIncJacket(e.target.checked)}
-                    />
-                    Jacket —{' '}
-                    {product.jacketPrice === 0 ? 'Included' : <Price paise={product.jacketPrice} />}
-                  </label>
+                {product.components.map((c, idx) =>
+                  c.optional && c.price != null ? (
+                    <label className="check" key={c.id}>
+                      <span className="num">{idx + 1}.</span>
+                      <input
+                        type="checkbox"
+                        checked={!excluded.has(c.name)}
+                        onChange={(e) =>
+                          setExcluded((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.delete(c.name);
+                            else next.add(c.name);
+                            return next;
+                          })
+                        }
+                      />
+                      {c.name} —{' '}
+                      {c.price === 0 ? 'Included' : <Price paise={c.price} />}
+                    </label>
+                  ) : (
+                    <div className="piece" key={c.id}>
+                      <span className="num">{idx + 1}.</span>
+                      {c.name}
+                    </div>
+                  ),
                 )}
               </div>
             </>

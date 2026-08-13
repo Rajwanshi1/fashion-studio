@@ -47,15 +47,15 @@ interface SeedProduct {
   category: string;
   slug: string;
   name: string;
-  price: number; // paise — base garment; add-ons priced separately below
+  price: number; // paise — base garment; optional add-on pieces priced per component
   color: string;
   flag: ProductFlag;
   collection: string;
   craft: string;
   fabric: string;
   occasion: string;
-  dupattaPrice: number | null;
-  jacketPrice: number | null;
+  /** "This order contains" rows; optional pieces carry their add-on price. */
+  components: { name: string; optional?: boolean; price?: number | null }[];
   description: string;
   details: string;
 }
@@ -77,8 +77,11 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Zardozi',
     fabric: 'Tissue',
     occasion: 'Wedding',
-    dupattaPrice: 1200000,
-    jacketPrice: null,
+    components: [
+      { name: 'Lehenga' },
+      { name: 'Blouse' },
+      { name: 'Dupatta', optional: true, price: 1200000 },
+    ],
     description:
       'A hand-embroidered lehenga in moss-sage tissue, scattered with matte sequins and fine zardozi along the hem. Structured shoulder, fluid drape — heritage craft cut for the way you actually move.',
     details: `Moss-sage tissue with matte hand-sequin & zardozi embroidery\nA-line lehenga with matching draped dupatta\n${MTO_DETAILS}`,
@@ -94,8 +97,7 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Hand-rolled edges',
     fabric: 'Organza',
     occasion: 'Cocktail',
-    dupattaPrice: null,
-    jacketPrice: null,
+    components: [{ name: 'Kaftan' }],
     description:
       'A translucent celadon kaftan with a floor-sweeping trail — softly sculpted at the shoulder, released into an easy bias fall. Quiet luxury for the evening that runs long.',
     details: `Celadon organza with hand-rolled edges\nTrailing kaftan, concealed side slits\n${MTO_DETAILS}`,
@@ -111,8 +113,11 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Resham threadwork',
     fabric: 'Silk',
     occasion: 'Reception',
-    dupattaPrice: 800000,
-    jacketPrice: null,
+    components: [
+      { name: 'Anarkali' },
+      { name: 'Churidar' },
+      { name: 'Dupatta', optional: true, price: 800000 },
+    ],
     description:
       'Our karigars map fields of tonal threadwork across pistachio silk — an anarkali that moves like a whisper and photographs like a garden.',
     details: `Pistachio silk with tonal resham threadwork\nFull-flare anarkali with churidar and tissue dupatta\n${MTO_DETAILS}`,
@@ -128,8 +133,12 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Zardozi',
     fabric: 'Raw silk',
     occasion: 'Wedding',
-    dupattaPrice: 1000000,
-    jacketPrice: 2000000,
+    components: [
+      { name: 'Kurta' },
+      { name: 'Trousers' },
+      { name: 'Dupatta', optional: true, price: 1000000 },
+      { name: 'Jacket', optional: true, price: 2000000 },
+    ],
     description:
       'A longline ivy suit traced with zardozi vines over slim trousers — ceremony tailoring, Indo-Western at its core.',
     details: `Ivy raw silk with gold zardozi vinework\nTailored kurta, slim trousers, optional longline jacket\n${MTO_DETAILS}`,
@@ -145,8 +154,12 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Mirror work',
     fabric: 'Tissue',
     occasion: 'Festive',
-    dupattaPrice: 900000,
-    jacketPrice: 2400000,
+    components: [
+      { name: 'Lehenga' },
+      { name: 'Blouse' },
+      { name: 'Dupatta', optional: true, price: 900000 },
+      { name: 'Jacket', optional: true, price: 2400000 },
+    ],
     description:
       'Hand-set mirrors catch the light across moss tissue — a festive lehenga that trades shine for shimmer.',
     details: `Moss tissue with hand-set mirror work\nA-line lehenga, fitted blouse, draped dupatta, optional jacket\n${MTO_DETAILS}`,
@@ -162,8 +175,11 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Zardozi & dabka',
     fabric: 'Silk',
     occasion: 'Wedding',
-    dupattaPrice: 1500000,
-    jacketPrice: null,
+    components: [
+      { name: 'Lehenga' },
+      { name: 'Blouse' },
+      { name: 'Dupatta', optional: true, price: 1500000 },
+    ],
     description:
       'The atelier’s most intricate commission — 300 hours of zardozi over pistachio silk, a bridal lehenga in the Verdant Edit’s quietest register.',
     details: `Pistachio silk with dense gold zardozi and dabka\nBridal lehenga, corseted blouse, double dupatta\n${MTO_DETAILS}`,
@@ -179,8 +195,8 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Hand-pleating',
     fabric: 'Georgette',
     occasion: 'Cocktail',
-    dupattaPrice: null,
-    jacketPrice: null,
+    // No components: exercises the PDP hiding the section entirely.
+    components: [],
     description:
       'Knife pleats of eucalyptus georgette open and close as you move — an architectural anti-fit silhouette with a soft heart.',
     details: `Eucalyptus georgette, hand-pressed knife pleats\nAnti-fit drape with sculpted shoulder\n${MTO_DETAILS}`,
@@ -196,8 +212,7 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Mukaish',
     fabric: 'Silk',
     occasion: 'Festive',
-    dupattaPrice: null,
-    jacketPrice: null,
+    components: [{ name: 'Kaftan' }],
     description:
       'Thousands of mukaish points hand-beaten into mint silk — a kaftan that glimmers like first light.',
     details: `Mint silk with silver mukaish work\nFluid kaftan with tie-back detail\n${MTO_DETAILS}`,
@@ -213,8 +228,11 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Chikankari',
     fabric: 'Mul cotton',
     occasion: 'Festive',
-    dupattaPrice: 0,
-    jacketPrice: null,
+    components: [
+      { name: 'Kurta' },
+      { name: 'Trousers' },
+      { name: 'Dupatta', optional: true, price: 0 },
+    ],
     description:
       'Featherweight Lucknowi chikankari on sage mul — the suit for daytime mehendis and long golden hours. Organza dupatta included with our compliments.',
     details: `Sage mul-cotton with Lucknowi chikankari\nStraight kurta, tapered trousers, organza dupatta\n${MTO_DETAILS}`,
@@ -230,8 +248,10 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Hand-finished seams',
     fabric: 'Tissue',
     occasion: 'Cocktail',
-    dupattaPrice: null,
-    jacketPrice: 0,
+    components: [
+      { name: 'Anti-fit column' },
+      { name: 'Jacket', optional: true, price: 0 },
+    ],
     description:
       'A boxy jacket floats over an anti-fit fern column — sharp couture corners softened by air. The jacket comes included; wear it or hand it to the evening.',
     details: `Fern tissue with hand-finished seams\nAnti-fit column with boxy jacket\n${MTO_DETAILS}`,
@@ -247,8 +267,11 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Hand-finished seams',
     fabric: 'Silk',
     occasion: 'Reception',
-    dupattaPrice: 700000,
-    jacketPrice: null,
+    components: [
+      { name: 'Anarkali' },
+      { name: 'Churidar' },
+      { name: 'Dupatta', optional: true, price: 700000 },
+    ],
     description:
       'An unadorned verdigris silk anarkali cut on a heritage block — proof that restraint is the rarest craft.',
     details: `Verdigris silk, hand-finished seams\nClassic anarkali, churidar, plain dupatta\n${MTO_DETAILS}`,
@@ -264,8 +287,11 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Gota patti',
     fabric: 'Silk',
     occasion: 'Festive',
-    dupattaPrice: 800000,
-    jacketPrice: null,
+    components: [
+      { name: 'Lehenga' },
+      { name: 'Kurti blouse' },
+      { name: 'Dupatta', optional: true, price: 800000 },
+    ],
     description:
       'Jade silk edged in gota patti — festive craft from the old cities, tuned to the Verdant palette.',
     details: `Jade silk with gota patti borders\nFlared lehenga, kurti blouse, net dupatta\n${MTO_DETAILS}`,
@@ -281,8 +307,7 @@ const PRODUCTS: SeedProduct[] = [
     craft: 'Hand-rolled edges',
     fabric: 'Tissue',
     occasion: 'Reception',
-    dupattaPrice: null,
-    jacketPrice: null,
+    components: [{ name: 'Kaftan' }],
     description:
       'A fern tissue column cut with kaftan ease — the piece you reach for when the invitation says elegant but the weather says otherwise.',
     details: `Fern tissue with hand-rolled edges\nColumn kaftan with concealed side zip\n${MTO_DETAILS}`,
@@ -362,8 +387,7 @@ export async function seed(pool: Pool, overrides: SeedOverrides = {}): Promise<b
       craft: p.craft,
       fabric: p.fabric,
       occasion: p.occasion,
-      dupattaPrice: p.dupattaPrice,
-      jacketPrice: p.jacketPrice,
+      components: p.components,
       variants,
     });
   }
