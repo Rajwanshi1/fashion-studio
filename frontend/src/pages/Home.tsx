@@ -1,12 +1,8 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { MARQUEE_MIN_CHARS, fillTrack, useSiteContent } from '../lib/content';
-import { displayPrice } from '../lib/format';
-import type { Category, ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
-import { useCart } from '../lib/cart';
-import { useCartDrawer } from '../components/CartDrawer';
-import { useToast } from '../components/Toast';
+import type { Category, ProductSummary, ProductsResponse } from '../lib/types';
 import { track } from '../lib/analytics';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
@@ -15,6 +11,7 @@ import Price from '../components/Price';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/home.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 const FALLBACK_CATS: Array<Pick<Category, 'slug' | 'name'>> = [
   { slug: 'lehenga', name: 'Lehenga' },
@@ -24,6 +21,7 @@ const FALLBACK_CATS: Array<Pick<Category, 'slug' | 'name'>> = [
 ];
 
 export default function Home() {
+  usePageTitle('');
   const [cats, setCats] = useState<Array<Pick<Category, 'slug' | 'name'>>>(FALLBACK_CATS);
   const [best, setBest] = useState<ProductSummary[]>([]);
   const site = useSiteContent();
@@ -31,11 +29,6 @@ export default function Home() {
   // a seamless loop — a one- or two-line marquee is repeated up to the length
   // the band was drawn for.
   const marquee = fillTrack(site.marquee.items, MARQUEE_MIN_CHARS);
-  const cart = useCart();
-  const { openDrawer } = useCartDrawer();
-  const { showToast } = useToast();
-  const navigate = useNavigate();
-
   useEffect(() => {
     let cancelled = false;
     api
@@ -57,40 +50,6 @@ export default function Home() {
       cancelled = true;
     };
   }, []);
-
-  const quickAdd = async (p: ProductSummary) => {
-    try {
-      const raw = await api.get<ProductDetail | { product: ProductDetail }>(
-        `/api/products/${p.slug}`,
-      );
-      const detail = 'product' in raw && raw.product ? raw.product : (raw as ProductDetail);
-      const variant = detail.variants.find((v) => v.stock > 0) ?? detail.variants[0];
-      if (!variant) {
-        navigate(`/product/${p.slug}`);
-        return;
-      }
-      // Quick adds default to the full set — every piece included.
-      cart.add({
-        variantId: variant.id,
-        productId: detail.id,
-        productSlug: detail.slug,
-        name: detail.name,
-        size: variant.size,
-        color: detail.color,
-        unitPrice: displayPrice(detail),
-        imageUrl: detail.imageUrl,
-        includeDupatta: detail.dupattaPrice != null,
-        includeJacket: detail.jacketPrice != null,
-        dupattaPrice: detail.dupattaPrice,
-        jacketPrice: detail.jacketPrice,
-        measurements: '',
-      });
-      showToast('Added to your bag');
-      openDrawer();
-    } catch {
-      navigate(`/product/${p.slug}`);
-    }
-  };
 
   return (
     <div className="page-home">
@@ -207,9 +166,11 @@ export default function Home() {
                     <Price paise={p.price} />
                   </div>
                   <div className="add">
-                    <span className="quick" onClick={() => void quickAdd(p)}>
-                      Add to Bag
-                    </span>
+                    {/* No quick-add: a couture piece deserves its page (size,
+                        colour, MTM) — and a bare span invited accidental taps. */}
+                    <Link className="quick" to={`/product/${p.slug}`}>
+                      View the Piece
+                    </Link>
                   </div>
                 </div>
               </div>
