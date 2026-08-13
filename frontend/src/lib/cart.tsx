@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { api } from './api';
 import { track } from './analytics';
 
 const STORAGE_KEY = 'ta.cart';
@@ -30,7 +31,13 @@ export interface CartItem {
   /** Free-text note for made-to-measure lines; '' otherwise. Part of line
    *  identity — the same variant with a different note is a separate line. */
   measurements: string;
+  /** Epoch ms when the line was added; lines expire after CART_TTL_MS. */
+  addedAt: number;
 }
+
+/** A bag is a session artefact, not an archive — stale lines with dead
+ *  prices/products mislead more than they help. */
+const CART_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Line identity: variant + set selection + measurements + the price the line
  *  was added at — two adds of the same selection only merge when they showed
@@ -44,7 +51,7 @@ export function cartLineKey(
 
 interface CartContextValue {
   items: CartItem[];
-  add: (item: Omit<CartItem, 'qty'>, qty?: number) => void;
+  add: (item: Omit<CartItem, 'qty' | 'addedAt'>, qty?: number) => void;
   setQty: (lineKey: string, qty: number) => void;
   remove: (lineKey: string) => void;
   clear: () => void;
@@ -80,6 +87,9 @@ function load(): CartItem[] {
       )
       // Carts saved before made-to-measure notes lack the field; '' = no note.
       .map((i) => (typeof i.measurements === 'string' ? i : { ...i, measurements: '' }))
+      // Carts saved before expiry lack the stamp; treat them as fresh today.
+      .map((i) => (typeof i.addedAt === 'number' ? i : { ...i, addedAt: Date.now() }))
+      .filter((i) => Date.now() - i.addedAt < CART_TTL_MS)
       // Carts saved before per-product components carry include flags + addon
       // prices; fold them into the component-name arrays. Their snapshotted
       // unitPrice already priced that selection, so it stays as saved.
@@ -124,7 +134,48 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [items]);
 
-  const add = useCallback((item: Omit<CartItem, 'qty'>, qty = 1) => {
+  // Reconcile once per boot: a line whose piece or size has left the catalogue
+  // is dropped. Network failure keeps every line — fail open, never eat a bag.
+  useEffect(() => {
+    let cancelled = false;
+    const slugs = Array.from(new Set(load().map((i) => i.productSlug).filter(Boolean)));
+    if (slugs.length === 0) return;
+    void Promise.all(
+      slugs.map(async (slug) => {
+        try {
+          const raw = await api.get<
+            { variants?: Array<{ id: string }> } & { product?: { variants?: Array<{ id: string }> } }
+          >(`/api/products/${encodeURIComponent(slug)}`);
+          const detail = raw.product ?? raw;
+          // Only a well-formed detail may drop lines — an unexpected shape
+          // must never eat the bag.
+          if (!Array.isArray(detail.variants)) return null;
+          return { slug, variantIds: new Set(detail.variants.map((v) => v.id)) };
+        } catch (e) {
+          if ((e as { status?: number }).status === 404) {
+            return { slug, variantIds: new Set<string>() };
+          }
+          return null; // network trouble — leave this slug's lines alone
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      const bySlug = new Map(
+        results.filter((r): r is NonNullable<typeof r> => r !== null).map((r) => [r.slug, r.variantIds]),
+      );
+      setItems((prev) =>
+        prev.filter((i) => {
+          const ids = bySlug.get(i.productSlug);
+          return !ids || ids.has(i.variantId);
+        }),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const add = useCallback((item: Omit<CartItem, 'qty' | 'addedAt'>, qty = 1) => {
     track('add_to_cart', {
       productId: item.productId,
       props: { variantId: item.variantId, size: item.size, color: item.color, qty, price: item.unitPrice },
@@ -135,7 +186,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (existing) {
         return prev.map((i) => (cartLineKey(i) === key ? { ...i, qty: i.qty + qty } : i));
       }
-      return [...prev, { ...item, qty }];
+      return [...prev, { ...item, qty, addedAt: Date.now() }];
     });
   }, []);
 

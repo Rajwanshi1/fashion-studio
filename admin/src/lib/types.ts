@@ -114,6 +114,12 @@ export interface AdminProduct {
   variants: Variant[];
   /** "This order contains" — every piece of the set, in display order. */
   components: ProductComponent[];
+  /** Provenance — optional, shown on the PDP only when filled: the karigar's
+   *  first name, honestly counted hours, techniques, finish date (YYYY-MM-DD). */
+  karigarName: string;
+  hoursWorked: number | null;
+  techniques: string;
+  finishedOn: string | null;
 }
 
 export type OrderStatus =

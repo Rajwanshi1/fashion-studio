@@ -22,9 +22,11 @@ export type SectionKey =
   | 'lookbookCover'
   | 'lookbook'
   | 'ticker'
-  | 'footer';
+  | 'footer'
+  | 'facts'
+  | 'archive';
 
-export type FieldType = 'text' | 'textarea' | 'image' | 'stringList' | 'trustItems' | 'looks';
+export type FieldType = 'text' | 'textarea' | 'image' | 'stringList' | 'trustItems' | 'looks' | 'volumes';
 
 export interface FieldConfig {
   name: string;
@@ -129,6 +131,28 @@ export const SECTIONS: SectionConfig[] = [
       { name: 'whatsappUrl', label: 'WhatsApp link', type: 'text', hint: 'Full link, e.g. https://wa.me/…' },
     ],
   },
+  {
+    key: 'facts',
+    title: 'Brand Facts',
+    blurb: 'Address, phone & collection name',
+    fields: [
+      { name: 'addressLines', label: 'Studio address', type: 'stringList', hint: 'Up to 4 lines — Contact page.' },
+      { name: 'phone', label: 'Phone', type: 'text', hint: 'Shown on Contact and product pages.' },
+      { name: 'email', label: 'Email', type: 'text' },
+      { name: 'collectionName', label: 'Current collection', type: 'text', hint: 'Named on the shop page. Piece counts always come from the catalogue.' },
+      { name: 'leadStandard', label: 'Lead time — standard sizes', type: 'text' },
+      { name: 'leadCustom', label: 'Lead time — made to measure', type: 'text' },
+    ],
+  },
+  {
+    key: 'archive',
+    title: 'The Archive',
+    blurb: '/archive · every edition, forever',
+    fields: [
+      { name: 'intro', label: 'Intro', type: 'textarea', hint: 'The archive is never-delete: editions are added, not removed.' },
+      { name: 'volumes', label: 'Volumes', type: 'volumes', hint: 'Up to 6. Piece counts come from the catalogue — never typed.', focus: true },
+    ],
+  },
 ];
 
 /**
@@ -145,14 +169,14 @@ export const SECTION_DEFAULTS = {
     imageUrl: null,
     focusX: 50,
     focusY: 50,
-    seasonLabel: 'Spring / Summer 2026',
-    eyebrow: 'The Verdant Edit · Indo-Western Couture',
+    seasonLabel: 'Festive 2026',
+    eyebrow: 'Hand-embroidered, made to order · Jaipur',
     title: 'Tanvi Agnihotry',
-    titleItalic: 'heritage, made to move.',
+    titleItalic: 'jahan har rang ek kissa sunata hai.',
     ctaPrimary: 'Discover the Collection',
     ctaSecondary: 'Book an Appointment',
-    edgeLeft: 'Made to Order — India',
-    edgeRight: 'Vol. 01 / 24 Looks',
+    edgeLeft: 'Made to Order — Jaipur',
+    edgeRight: 'Rang Mehfil — Vol. 01',
   },
   featured: {
     imageUrl: null,
@@ -161,17 +185,17 @@ export const SECTION_DEFAULTS = {
     eyebrow: 'The New Collection',
     title: 'Rang',
     titleEm: 'Mehfil',
-    copy: 'Hand-embroidered indo-western silhouettes in moss, sage and pistachio — cut for the way the modern Indian woman actually moves. Each piece made to order, each made to last.',
+    copy: 'Hand-embroidered festive silhouettes in purple, maroon, ruby pink and ivory. Each piece made to order in our Jaipur atelier, each made to last.',
     ctaLabel: 'Explore the Edit',
     ctaHref: '/collection',
   },
   marquee: {
-    items: ['Made to Order', '— hand embroidered —', 'The Verdant Edit', '— Spring 2026 —'],
+    items: ['Made to Order', '— hand embroidered —', 'Rang Mehfil', '— Festive 2026 —'],
   },
   trust: {
     items: [
       { title: 'Made to Order', detail: 'Crafted on commission · 4–6 weeks' },
-      { title: 'Complimentary Fittings', detail: 'Virtual or in-studio, Mumbai' },
+      { title: 'Complimentary Fittings', detail: 'Virtual or in-studio, Jaipur' },
       { title: 'Worldwide Shipping', detail: 'Insured & tracked, on the house' },
     ],
   },
@@ -180,7 +204,7 @@ export const SECTION_DEFAULTS = {
     focusX: 50,
     focusY: 50,
     masthead: 'The Edit',
-    subItems: ['Volume 01', 'Spring 2026', '32 Looks'],
+    subItems: ['Volume 01', 'Festive 2026', 'Rang Mehfil'],
   },
   lookbook: {
     looks: [
@@ -189,9 +213,9 @@ export const SECTION_DEFAULTS = {
         focusX: 50,
         focusY: 50,
         lookNo: 'Look 01',
-        title: 'The garden, after rain.',
-        copy: 'Sage sequin jacket lehenga with a hand-draped dupatta. Structured shoulder, fluid hem.',
-        ctaHref: '/collection/lehenga',
+        title: 'Rang, unhurried.',
+        copy: 'A kalidaar kurta set in purple silk — resham lotus and french knots over a pintucked inset.',
+        ctaHref: '/collection',
       },
       { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 02', title: '', copy: '', ctaHref: '' },
       { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 03', title: '', copy: '', ctaHref: '' },
@@ -200,30 +224,55 @@ export const SECTION_DEFAULTS = {
         focusX: 50,
         focusY: 50,
         lookNo: 'Look 04',
-        title: 'Moss & mirror.',
-        copy: 'A tissue draped gown caught with mirror-work — light moving as you do.',
-        ctaHref: '/collection/kaftan',
+        title: 'Mehfil light.',
+        copy: 'Mirror-work catching the evening — light moving as you do.',
+        ctaHref: '/collection',
       },
       { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 05', title: '', copy: '', ctaHref: '' },
       { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 06', title: '', copy: '', ctaHref: '' },
       { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 07', title: '', copy: '', ctaHref: '' },
     ],
     quote: '"She does not choose between heritage and the present. She wears both, at once."',
-    quoteCite: '— The Verdant Edit',
+    quoteCite: '— Rang Mehfil',
   },
   ticker: {
     items: [
       'Complimentary Made-to-Order Consultation',
       'Worldwide Shipping',
-      'Spring 2026 — The Verdant Edit',
+      'Rang Mehfil — Festive 2026',
     ],
   },
   footer: {
     blurb:
-      'Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.',
-    instagramUrl: '',
+      'Hand-embroidered, made to order in our Jaipur atelier. Each piece cut to one woman, finished by one pair of hands.',
+    instagramUrl: 'https://instagram.com/tanviagnihotrylabel',
     pinterestUrl: '',
-    whatsappUrl: '',
+    whatsappUrl: 'https://wa.me/918118892523',
+  },
+  facts: {
+    addressLines: ['B-74, Rajendra Marg', 'Bapu Nagar, Jaipur'],
+    phone: '+91 81188 92523',
+    email: 'info@tanviagnihotry.com',
+    collectionName: 'Rang Mehfil',
+    leadStandard: '4–6 weeks',
+    leadCustom: '6–8 weeks',
+  },
+  archive: {
+    intro:
+      'Nothing leaves this page. Every edition the house makes stays in the archive — available, resting or sold out — because the archive is the proof.',
+    volumes: [
+      {
+        imageUrl: null,
+        focusX: 50,
+        focusY: 50,
+        volumeNo: 'Volume 01',
+        title: 'Rang Mehfil',
+        season: 'Festive 2026',
+        copy: 'Hand-embroidered kurta sets in purple, maroon, ruby pink and ivory — the first edition of the house, cut in the Bapu Nagar workroom.',
+        collections: ['Jharokha', 'Saaz', 'Meher', 'Gul', 'Bahaar'],
+        status: 'Available, made to order',
+      },
+    ],
   },
 } satisfies { [K in SectionKey]: EffectiveContent[K] };
 
@@ -364,6 +413,33 @@ export interface FooterContent {
   whatsappUrl: string;
 }
 
+export interface FactsContent {
+  addressLines: string[];
+  phone: string;
+  email: string;
+  collectionName: string;
+  leadStandard: string;
+  leadCustom: string;
+}
+
+export interface ArchiveVolumeContent {
+  imageUrl: string | null;
+  focusX: number;
+  focusY: number;
+  volumeNo: string;
+  title: string;
+  season: string;
+  copy: string;
+  /** products.collection values (sub-collections) this volume spans. */
+  collections: string[];
+  status: string;
+}
+
+export interface ArchiveContent {
+  intro: string;
+  volumes: ArchiveVolumeContent[];
+}
+
 export interface EffectiveContent {
   hero: HeroContent;
   featured: FeaturedContent;
@@ -373,6 +449,8 @@ export interface EffectiveContent {
   lookbook: LookbookContent;
   ticker: { items: string[] };
   footer: FooterContent;
+  facts: FactsContent;
+  archive: ArchiveContent;
 }
 
 /** Every section's effective content in one typed bundle, for the canvas. */
@@ -389,5 +467,7 @@ export function effectiveContent(
     lookbook: value('lookbook') as unknown as LookbookContent,
     ticker: value('ticker') as unknown as { items: string[] },
     footer: value('footer') as unknown as FooterContent,
+    facts: value('facts') as unknown as FactsContent,
+    archive: value('archive') as unknown as ArchiveContent,
   };
 }

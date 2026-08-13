@@ -238,6 +238,9 @@ img.img-slot { object-fit: cover; padding: 0; }
 
 .page-lookbook .look-no { font-family: var(--serif-display); font-size: 1rem; color: var(--gold-soft); letter-spacing: var(--track-wide); }
 .page-lookbook .caption { padding: 1rem 0; }
+.page-lookbook .caption.under { padding: 0.8rem 0 0; }
+.page-lookbook .caption.under h3 { font-size: clamp(1.1rem,2vw,1.5rem); margin: 0.4rem 0; }
+.page-lookbook .caption.under p { margin-bottom: 0.8rem; }
 .page-lookbook .caption h3 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: clamp(1.6rem,3vw,2.4rem); line-height: 1.2; margin: 0.8rem 0; }
 .page-lookbook .caption p { color: var(--celadon-200); font-size: var(--t-sm); max-width: 38ch; margin-bottom: 1.2rem; }
 .page-lookbook .caption .shop-look { font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--gold-pale); border-bottom: 1px solid var(--gold-soft); padding-bottom: 4px; }

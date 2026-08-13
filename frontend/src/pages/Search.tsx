@@ -9,10 +9,12 @@ import SearchIcon from '../components/SearchIcon';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/search.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 const POPULAR = ['Lehenga', 'Anarkali', 'Bridal', 'Sage', 'Made to Measure'];
 
 export default function Search() {
+  usePageTitle('Search');
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState(params.get('q') ?? '');
   const [results, setResults] = useState<ProductSummary[]>([]);

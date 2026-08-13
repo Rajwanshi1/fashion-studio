@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { useSiteContent } from '../lib/content';
 import Shop from '../components/Shop';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import { track } from '../lib/analytics';
 import '../styles/contact.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 // Brand marks from simple-icons (filled, single path)
 const INSTAGRAM_PATH =
@@ -30,7 +32,14 @@ function BrandIcon({ d }: { d: string }) {
 }
 
 export default function Contact() {
+  usePageTitle('Contact');
   const [sent, setSent] = useState(false);
+  const { footer, facts } = useSiteContent();
+  const socials = [
+    { t: 'Instagram', url: footer.instagramUrl, d: INSTAGRAM_PATH },
+    { t: 'Pinterest', url: footer.pinterestUrl, d: PINTEREST_PATH },
+    { t: 'WhatsApp', url: footer.whatsappUrl, d: WHATSAPP_PATH },
+  ].filter((s) => s.url);
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -56,37 +65,45 @@ export default function Contact() {
           <div className="ct-block">
             <h4>The Studio</h4>
             <p>
-              B-74, Rajendra Marg
-              <br />
-              Bapu Nagar, Jaipur
+              {facts.addressLines.map((line, i) => (
+                <span key={line}>
+                  {i > 0 && <br />}
+                  {line}
+                </span>
+              ))}
             </p>
           </div>
           <div className="ct-block">
             <h4>Contact Us</h4>
             <p>
-              <a href="tel:+918118892523">+91 81188 92523</a>
+              <a href={`tel:+${facts.phone.replace(/\D/g, '')}`}>{facts.phone}</a>
+              {facts.email && (
+                <>
+                  <br />
+                  <a href={`mailto:${facts.email}`}>{facts.email}</a>
+                </>
+              )}
             </p>
           </div>
           <div className="ct-block">
             <h4>Studio Hours</h4>
             <p>Open all days · 11am – 7pm IST</p>
           </div>
-          <div className="ct-block">
-            <h4>Follow</h4>
-            <p>
-              <a href="https://instagram.com/tanviagnihotrylabel">
-                <BrandIcon d={INSTAGRAM_PATH} /> Instagram
-              </a>{' '}
-              &nbsp;{' '}
-              <a href="#">
-                <BrandIcon d={PINTEREST_PATH} /> Pinterest
-              </a>{' '}
-              &nbsp;{' '}
-              <a href="https://wa.me/918118892523">
-                <BrandIcon d={WHATSAPP_PATH} /> WhatsApp
-              </a>
-            </p>
-          </div>
+          {socials.length > 0 && (
+            <div className="ct-block">
+              <h4>Follow</h4>
+              <p>
+                {socials.map((s, i) => (
+                  <span key={s.t}>
+                    {i > 0 && <> &nbsp; </>}
+                    <a href={s.url} target="_blank" rel="noreferrer">
+                      <BrandIcon d={s.d} /> {s.t}
+                    </a>
+                  </span>
+                ))}
+              </p>
+            </div>
+          )}
         </aside>
 
         <section className="ct-form">

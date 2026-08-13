@@ -3,8 +3,10 @@ import Shop from '../components/Shop';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/care.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 export default function ClientCare() {
+  usePageTitle('Client Care');
   return (
     <Shop page="page-care">
       <div className="crumbs">

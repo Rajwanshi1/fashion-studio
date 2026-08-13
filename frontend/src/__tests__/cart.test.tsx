@@ -14,7 +14,7 @@ import { CartProvider, cartLineKey, useCart, type CartItem } from '../lib/cart';
 
 const wrapper = ({ children }: { children: ReactNode }) => <CartProvider>{children}</CartProvider>;
 
-const base: Omit<CartItem, 'qty'> = {
+const base: Omit<CartItem, 'qty' | 'addedAt'> = {
   variantId: 'v1',
   productId: 'p1',
   productSlug: 'sage-sequin-jacket-lehenga',
@@ -27,14 +27,14 @@ const base: Omit<CartItem, 'qty'> = {
   excludedComponents: [],
   measurements: '',
 };
-const other: Omit<CartItem, 'qty'> = {
+const other: Omit<CartItem, 'qty' | 'addedAt'> = {
   ...base,
   variantId: 'v2',
   size: 'M',
   unitPrice: 17200000,
 };
 // Same variant as `base`, but with the optional pieces unticked — a distinct line.
-const trimmed: Omit<CartItem, 'qty'> = {
+const trimmed: Omit<CartItem, 'qty' | 'addedAt'> = {
   ...base,
   unitPrice: 18400000 - 1200000 - 2400000,
   includedComponents: [],
@@ -57,7 +57,7 @@ const legacyLine = {
   measurements: '',
 };
 // Same variant as `base`, with a made-to-measure note — also a distinct line.
-const noted: Omit<CartItem, 'qty'> = {
+const noted: Omit<CartItem, 'qty' | 'addedAt'> = {
   ...base,
   measurements: 'bust 36in, waist 30in',
 };

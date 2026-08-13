@@ -61,7 +61,7 @@ interface SeedProduct {
 }
 
 const MTO_DETAILS =
-  'Concealed side zip · cotton-silk lining\nDry clean only · handle embroidery with care\nMade to order in our Mumbai atelier · ships in 4–6 weeks';
+  'Concealed side zip · cotton-silk lining\nDry clean only · handle embroidery with care\nMade to order in our Jaipur atelier · ships in 4–6 weeks';
 
 // Slugs follow the admin's auto-derive: slugify(`${name} ${color}`).
 // The first four are the homepage bestsellers, in creation order.

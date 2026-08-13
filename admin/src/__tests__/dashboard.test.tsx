@@ -44,8 +44,8 @@ describe('Dashboard', () => {
     expect(screen.getByText('To Collect')).toBeInTheDocument();
     expect(screen.getByText('₹1,500')).toBeInTheDocument();
     expect(screen.getByText('3 orders with balance due')).toBeInTheDocument();
-    expect(screen.getByText('Out of Stock')).toBeInTheDocument();
-    // out-of-stock count card = 2 pieces
+    expect(screen.getByText('Made to Order Only')).toBeInTheDocument();
+    // made-to-order-only count card = 2 pieces with nothing on the shelf
     expect(screen.getByText('2', { selector: '.stat .v' })).toBeInTheDocument();
     // one row per piece, with colour and a way straight into the editor
     expect(screen.getByText('Pistachio Threadwork Anarkali')).toBeInTheDocument();

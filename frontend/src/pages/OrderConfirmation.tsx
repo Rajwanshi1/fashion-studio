@@ -9,6 +9,7 @@ import ImageSlot from '../components/ImageSlot';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/confirmation.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 const TIMELINE: Array<{ t: string; d: string }> = [
   { t: 'Order placed', d: 'Today · payment confirmed' },
@@ -29,6 +30,7 @@ const DONE_STEPS: Record<OrderStatus, number> = {
 };
 
 export default function OrderConfirmation() {
+  usePageTitle('Your Order');
   const { orderNumber = '' } = useParams();
   const [params] = useSearchParams();
   const location = useLocation();

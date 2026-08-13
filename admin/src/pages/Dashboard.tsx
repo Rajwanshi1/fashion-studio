@@ -91,13 +91,13 @@ export default function Dashboard() {
               hint={`${summary.pendingPayments} ${summary.pendingPayments === 1 ? 'order' : 'orders'} with balance due`}
             />
             <StatCard
-              label="Out of Stock"
+              label="Made to Order Only"
               value={summary.lowStock.length}
-              hint="Pieces with no sizes left"
+              hint="Pieces with nothing ready on the shelf"
             />
           </div>
 
-          <p className="section-label">Out of stock</p>
+          <p className="section-label">Made to order only</p>
           <DataTable
             columns={lowStockColumns}
             rows={summary.lowStock.slice(0, LOW_STOCK_CAP)}

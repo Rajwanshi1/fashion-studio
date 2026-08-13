@@ -12,6 +12,8 @@
 import { Fragment } from 'react';
 import { SECTION_DEFAULTS } from '../lib/siteContent';
 import type {
+  ArchiveContent,
+  FactsContent,
   FeaturedContent,
   FooterContent,
   HeroContent,
@@ -217,12 +219,12 @@ export function FooterPreview({ footer }: { footer: FooterContent }) {
         <div className="foot-brand">
           <p>{footer.blurb}</p>
         </div>
+        {/* The storefront's Shop column lists live categories from the API —
+            the preview stands in with the catalogue's current pair. */}
         <div className="foot-col">
           <h5>Shop</h5>
-          <a>Lehenga</a>
+          <a>All Pieces</a>
           <a>Anarkali</a>
-          <a>Suits</a>
-          <a>Kaftan</a>
           <a>Antifit</a>
         </div>
         <div className="foot-col">
@@ -243,9 +245,10 @@ export function FooterPreview({ footer }: { footer: FooterContent }) {
       <div className="foot-bottom">
         <span>© 2026 Tanvi Agnihotry</span>
         <div className="socials">
-          <a>Instagram</a>
-          <a>Pinterest</a>
-          <a>WhatsApp</a>
+          {/* Mirror of the storefront rule: no URL, no link. */}
+          {footer.instagramUrl && <a>Instagram</a>}
+          {footer.pinterestUrl && <a>Pinterest</a>}
+          {footer.whatsappUrl && <a>WhatsApp</a>}
         </div>
       </div>
     </footer>
@@ -254,13 +257,14 @@ export function FooterPreview({ footer }: { footer: FooterContent }) {
 
 /* ---- MIRROR of frontend/src/pages/Lookbook.tsx — cover + spreads + quote ---- */
 
-function CaptionPreview({ look }: { look: LookContent }) {
+function CaptionPreview({ look, under = false }: { look: LookContent; under?: boolean }) {
+  if (!look.title && !look.copy) return null;
   return (
-    <div className="caption">
+    <div className={`caption${under ? ' under' : ''}`}>
       <span className="look-no">{look.lookNo}</span>
-      <h3>{look.title}</h3>
-      <p>{look.copy}</p>
-      <a className="shop-look">Shop the Look →</a>
+      {look.title && <h3>{look.title}</h3>}
+      {look.copy && <p>{look.copy}</p>}
+      {look.ctaHref && <a className="shop-look">Shop the Look →</a>}
     </div>
   );
 }
@@ -325,8 +329,14 @@ export function LookbookPreview({
         </section>
 
         <section className="spread duo">
-          <LookSlotPreview className="ar34" look={looks[1]} label="Look 02" />
-          <LookSlotPreview className="ar34" look={looks[2]} label="Look 03" />
+          <div>
+            <LookSlotPreview className="ar34" look={looks[1]} label="Look 02" />
+            <CaptionPreview look={looks[1]} under />
+          </div>
+          <div>
+            <LookSlotPreview className="ar34" look={looks[2]} label="Look 03" />
+            <CaptionPreview look={looks[2]} under />
+          </div>
         </section>
 
         {/* the pull-quote sits mid-page, between the first duo and Look 04 */}
@@ -341,14 +351,71 @@ export function LookbookPreview({
         </section>
 
         <section className="spread duo">
-          <LookSlotPreview className="ar34" look={looks[4]} label="Look 05" />
-          <LookSlotPreview className="ar34" look={looks[5]} label="Look 06" />
+          <div>
+            <LookSlotPreview className="ar34" look={looks[4]} label="Look 05" />
+            <CaptionPreview look={looks[4]} under />
+          </div>
+          <div>
+            <LookSlotPreview className="ar34" look={looks[5]} label="Look 06" />
+            <CaptionPreview look={looks[5]} under />
+          </div>
         </section>
 
         <section className="spread">
-          <LookSlotPreview className="ar54" look={looks[6]} label="Look 07 — full bleed" />
+          <div>
+            <LookSlotPreview className="ar54" look={looks[6]} label="Look 07 — full bleed" />
+            <CaptionPreview look={looks[6]} under />
+          </div>
         </section>
       </main>
     </>
+  );
+}
+
+/* ---- Brand facts — not a storefront-markup mirror: the facts render inside
+   existing pages (Contact, PDP, shop), so the canvas shows them as a plain
+   card of label/value rows. ---- */
+
+/* ---- The Archive — plain-card preview (the /archive page's own layout is
+   not mirrored in storefront.css; counts come from the catalogue at render
+   time, so the preview shows the volume copy only). ---- */
+
+export function ArchivePreview({ archive }: { archive: ArchiveContent }) {
+  return (
+    <div className="archive-preview" style={{ padding: '1.2rem 1.4rem', background: '#fff' }}>
+      <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', fontStyle: 'italic' }}>{archive.intro}</p>
+      {archive.volumes.map((vol, i) => (
+        <div key={`${vol.volumeNo}-${i}`} style={{ marginBottom: '0.9rem' }}>
+          <p style={{ margin: 0, fontSize: '0.72rem', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+            {vol.volumeNo}
+            {vol.season && <> · {vol.season}</>}
+          </p>
+          <p style={{ margin: '0.15rem 0', fontSize: '1.05rem' }}>{vol.title}</p>
+          <p style={{ margin: 0, fontSize: '0.8rem', color: '#555' }}>
+            {[vol.collections.join(' · '), vol.status].filter(Boolean).join(' — ')}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function FactsPreview({ facts }: { facts: FactsContent }) {
+  const rows: Array<[string, string]> = [
+    ['Studio', facts.addressLines.join(', ')],
+    ['Phone', facts.phone],
+    ['Email', facts.email],
+    ['Current collection', facts.collectionName],
+    ['Lead time — standard', facts.leadStandard],
+    ['Lead time — made to measure', facts.leadCustom],
+  ];
+  return (
+    <div className="facts-preview" style={{ padding: '1.2rem 1.4rem', background: '#fff' }}>
+      {rows.map(([label, value]) => (
+        <p key={label} style={{ margin: '0 0 0.5rem', fontSize: '0.85rem' }}>
+          <strong style={{ display: 'inline-block', minWidth: '14em' }}>{label}</strong> {value}
+        </p>
+      ))}
+    </div>
   );
 }

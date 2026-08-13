@@ -34,6 +34,9 @@ const MAX_COMPONENTS = 10;
 
 interface FormState {
   name: string;
+  /** Edit mode only — the piece's URL name. Renames keep old links working
+   *  via server-side aliases. Created pieces get a server-generated slug. */
+  slug: string;
   categorySlug: string;
   description: string;
   details: string;
@@ -53,6 +56,11 @@ interface FormState {
   occasion: string;
   /** "This order contains" rows; priceRupees as typed, meaningful only when optional. */
   components: { id: string; name: string; optional: boolean; priceRupees: string }[];
+  /** Provenance (edit mode only) — honest facts, blank when unknown. */
+  karigarName: string;
+  hoursText: string;
+  techniques: string;
+  finishedOn: string;
 }
 
 const FLAG_OPTIONS: [FormState['flag'], string, string][] = [
@@ -64,6 +72,7 @@ const FLAG_OPTIONS: [FormState['flag'], string, string][] = [
 
 const EMPTY_FORM: FormState = {
   name: '',
+  slug: '',
   categorySlug: '',
   description: '',
   details: '',
@@ -82,6 +91,10 @@ const EMPTY_FORM: FormState = {
   fabric: '',
   occasion: '',
   components: [],
+  karigarName: '',
+  hoursText: '',
+  techniques: '',
+  finishedOn: '',
 };
 
 const SALE_ERROR = 'Sale price must be below the regular price';
@@ -210,6 +223,7 @@ export default function ProductEdit() {
         const saleRupees = rupees(product.salePrice);
         const nextForm: FormState = {
           name: product.name,
+          slug: product.slug,
           categorySlug: product.categorySlug,
           description: product.description,
           details: product.details,
@@ -226,6 +240,10 @@ export default function ProductEdit() {
           fabric: product.fabric,
           occasion: product.occasion,
           components: product.components.map((c) => componentRow(c.name, c.optional, rupees(c.price))),
+          karigarName: product.karigarName ?? '',
+          hoursText: product.hoursWorked != null ? String(product.hoursWorked) : '',
+          techniques: product.techniques ?? '',
+          finishedOn: product.finishedOn ?? '',
         };
         const nextStocks = Object.fromEntries(product.variants.map((v) => [v.id, String(v.stock)]));
         setForm(nextForm);
@@ -373,6 +391,14 @@ export default function ProductEdit() {
     // scroll-and-resubmit round trip per field (TA-022).
     const problems: string[] = [];
     if (!form.name.trim()) problems.push('Name is required');
+    if (!isNew && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(form.slug.trim())) {
+      problems.push('Slug must be lowercase words separated by single dashes, e.g. bahaar-purple');
+    }
+    const hoursTrim = form.hoursText.trim();
+    const hoursWorked = hoursTrim === '' ? null : Math.round(Number(hoursTrim));
+    if (hoursWorked !== null && (!Number.isFinite(hoursWorked) || hoursWorked <= 0)) {
+      problems.push('Hours of hand-work must be a whole number above 0 — leave blank if uncounted');
+    }
     if (!form.categorySlug) problems.push('Choose a category');
     if (!Number.isFinite(pricePaise) || pricePaise < 0 || form.priceRupees.trim() === '') {
       problems.push('Enter a valid price in rupees');
@@ -434,7 +460,17 @@ export default function ProductEdit() {
           },
         });
       } else {
-        await api(`/api/admin/products/${id}`, { method: 'PUT', body });
+        await api(`/api/admin/products/${id}`, {
+          method: 'PUT',
+          body: {
+            ...body,
+            slug: form.slug.trim(),
+            karigarName: form.karigarName.trim(),
+            hoursWorked,
+            techniques: form.techniques.trim(),
+            finishedOn: form.finishedOn || null,
+          },
+        });
         const changed = variants.filter(
           (v) => Math.round(Number(stocks[v.id]) || 0) !== v.stock,
         );
@@ -506,6 +542,21 @@ export default function ProductEdit() {
               required
             />
           </div>
+          {!isNew && (
+            <div className="field">
+              <label className="lab" htmlFor="p-slug">
+                Slug (web address)
+              </label>
+              <input
+                id="p-slug"
+                className="inp"
+                value={form.slug}
+                onChange={(e) => set('slug', e.target.value)}
+                spellCheck={false}
+              />
+              <p className="x">/product/{form.slug || '…'} — old links keep redirecting after a rename.</p>
+            </div>
+          )}
           <div className="field">
             <label className="lab" htmlFor="p-price">
               Price (₹ rupees)
@@ -888,11 +939,10 @@ export default function ProductEdit() {
           </label>
           {!form.active &&
             (() => {
+              // No stock nudge: 0 stock everywhere is the normal made-to-order state.
               const missing = [
                 form.images.length === 0 && 'add a photo',
                 !form.description.trim() && 'write a description',
-                Object.values(stocks).every((s) => Math.round(Number(s) || 0) === 0) &&
-                  'stock at least one size',
               ].filter(Boolean);
               return (
                 <p className="x">
@@ -904,6 +954,68 @@ export default function ProductEdit() {
               );
             })()}
         </div>
+
+        {!isNew && (
+          <>
+            <p className="section-label">Provenance</p>
+            <p className="x">
+              Shown on the piece's page only when filled — honest facts, never invented. Leave a
+              field blank rather than guessing.
+            </p>
+            <div className="grid2">
+              <div className="field">
+                <label className="lab" htmlFor="p-karigar">
+                  Karigar (first name)
+                </label>
+                <input
+                  id="p-karigar"
+                  className="inp"
+                  value={form.karigarName}
+                  onChange={(e) => set('karigarName', e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label className="lab" htmlFor="p-hours">
+                  Hours of hand-work
+                </label>
+                <input
+                  id="p-hours"
+                  className="inp"
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  value={form.hoursText}
+                  onChange={(e) => set('hoursText', e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label className="lab" htmlFor="p-techniques">
+                  Techniques
+                </label>
+                <input
+                  id="p-techniques"
+                  className="inp"
+                  placeholder="e.g. Zardozi · Resham · French knots"
+                  value={form.techniques}
+                  onChange={(e) => set('techniques', e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label className="lab" htmlFor="p-finished">
+                  Finished on
+                </label>
+                <input
+                  id="p-finished"
+                  className="inp"
+                  type="date"
+                  value={form.finishedOn}
+                  onChange={(e) => set('finishedOn', e.target.value)}
+                />
+              </div>
+            </div>
+          </>
+        )}
 
         <p className="section-label">Stock by size</p>
         <div className="variants-grid">

@@ -6,8 +6,10 @@ import ImageSlot from '../components/ImageSlot';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/cart.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 export default function CartPage() {
+  usePageTitle('Your Bag');
   const { items, setQty, remove, subtotal, count } = useCart();
   const navigate = useNavigate();
 

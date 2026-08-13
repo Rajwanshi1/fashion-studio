@@ -54,6 +54,23 @@ export const SECTION_SCHEMAS = {
   lookbook: z.object({ looks: z.array(look).max(7), quote: copy, quoteCite: str }).partial().strict(),
   ticker: z.object({ items: z.array(str.min(1)).max(8) }).strict(),
   footer: z.object({ blurb: copy, instagramUrl: url, pinterestUrl: url, whatsappUrl: url }).partial().strict(),
+  // Brand facts — the one place the address, phone and collection name live.
+  // Pages read these instead of hardcoding; piece counts are never a fact
+  // field (they come from the catalogue, or they drift into fiction).
+  facts: z.object({
+    addressLines: z.array(str).max(4), phone: str, email: str,
+    collectionName: str, leadStandard: str, leadCustom: str,
+  }).partial().strict(),
+  // The permanent archive: every edition ever made, never deleted. Piece
+  // counts are computed from the catalogue by the storefront — not stored.
+  // Budget: 6 volumes of short copy sits far under MAX_SECTION_BYTES.
+  archive: z.object({
+    intro: copy,
+    volumes: z.array(z.object({
+      imageUrl: image, focusX: pct, focusY: pct, volumeNo: str, title: str,
+      season: str, copy, collections: z.array(str).max(8), status: str,
+    }).partial().strict()).max(6),
+  }).partial().strict(),
 } as const;
 
 export type SectionKey = keyof typeof SECTION_SCHEMAS;

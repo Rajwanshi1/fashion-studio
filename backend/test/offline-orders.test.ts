@@ -240,13 +240,11 @@ describe('OrdersService — offline orders', () => {
       expect(v.stock).toBe(2);
     });
 
-    it('blocks the bill when a linked line exceeds stock, leaving nothing behind', async () => {
-      await expect(
-        service.createOfflineOrder(input({ items: [linkedItem({ quantity: 4 })] })),
-      ).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK' });
-      expect(ordersRepo.orders).toHaveLength(0);
+    it('records a bill past available stock — a paper sale is never refused', async () => {
+      const order = await service.createOfflineOrder(input({ items: [linkedItem({ quantity: 4 })] }));
+      expect(order.items[0].quantity).toBe(4);
       const [v] = await products.getVariantsForUpdate({}, [sageM().id]);
-      expect(v.stock).toBe(3);
+      expect(v.stock).toBe(-1); // 3 - 4: negative = cut-to-order backlog
     });
 
     it('rejects a variant that does not belong to the linked product', async () => {

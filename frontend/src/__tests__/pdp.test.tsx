@@ -434,7 +434,7 @@ describe('PDP', () => {
     });
   });
 
-  it('disables out-of-stock sizes', async () => {
+  it('keeps every size orderable, stocked or not (made to order)', async () => {
     mockFetch((url) => {
       if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;
       if (url.includes('/api/categories')) return [];
@@ -442,7 +442,8 @@ describe('PDP', () => {
     });
     renderApp('/product/sage-sequin-jacket-lehenga');
     await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
-    expect(screen.getByRole('button', { name: 'L' })).toBeDisabled();
+    // L has 0 stock in the fixture — under made-to-order it still sells.
+    expect(screen.getByRole('button', { name: 'L' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'S' })).toBeEnabled();
   });
 

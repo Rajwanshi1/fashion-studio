@@ -22,6 +22,11 @@ const MINIMAL_BODIES: Record<string, Record<string, unknown>> = {
   lookbook: { looks: [{ lookNo: '01', title: 'Verdant', ctaHref: '/shop', focusX: 42, focusY: 18 }], quote: 'Cloth remembers.' },
   ticker: { items: ['Made to order'] },
   footer: { blurb: 'Studio notes', instagramUrl: 'https://instagram.com/tanvi' },
+  facts: { addressLines: ['B-74, Rajendra Marg', 'Jaipur'], phone: '+91 81188 92523', collectionName: 'Rang Mehfil' },
+  archive: {
+    intro: 'Every edition, forever.',
+    volumes: [{ volumeNo: 'Volume 01', title: 'Rang Mehfil', season: 'Festive 2026', collections: ['Bahaar'], status: 'Available' }],
+  },
 };
 
 describe('site content API', () => {

@@ -5,6 +5,7 @@ import { displayPrice, displaySalePrice, effectiveBasePrice } from '../lib/forma
 import { swatchFill } from '../lib/colors';
 import type { ProductDetail, ProductImage, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
+import { useSiteContent } from '../lib/content';
 import { useWishlist } from '../lib/wishlist';
 import { track } from '../lib/analytics';
 import { useCartDrawer } from '../components/CartDrawer';
@@ -16,6 +17,7 @@ import type { GalleryTrigger } from '../components/StageCarousel';
 import Price from '../components/Price';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
+import { usePageTitle } from '../lib/usePageTitle';
 import '../styles/pdp.css';
 
 /** Positional fallback when a gallery row carries no pose. */
@@ -25,11 +27,13 @@ export default function Product() {
   const { slug = '' } = useParams();
   const navigate = useNavigate();
   const cart = useCart();
+  const { facts, footer } = useSiteContent();
   const wishlist = useWishlist();
   const { openDrawer } = useCartDrawer();
   const { showToast } = useToast();
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
+  usePageTitle(product?.name);
   const [related, setRelated] = useState<ProductSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +67,11 @@ export default function Product() {
           ('related' in raw ? raw.related : undefined) ?? detail.related ?? [];
         if (cancelled) return;
         setProduct(detail);
+        // An old (aliased) slug still resolves — canonicalise the address bar
+        // so what gets copied and shared is the piece's current URL.
+        if (detail.slug && detail.slug !== slug) {
+          navigate(`/product/${detail.slug}`, { replace: true });
+        }
         if (lastTrackedSlugRef.current !== detail.slug) {
           lastTrackedSlugRef.current = detail.slug;
           track('product_view', {
@@ -76,8 +85,9 @@ export default function Product() {
         // without the shopper choosing it.
         setColor(detail.color);
         setExcluded(new Set());
-        const firstInStock = detail.variants.find((v) => v.stock > 0) ?? detail.variants[0];
-        setVariantId(firstInStock?.id ?? '');
+        // Made to order: every size is orderable, so the first chip (XS) is
+        // simply the first choice — stock plays no part in selection.
+        setVariantId(detail.variants[0]?.id ?? '');
         if (rel.length) {
           setRelated(rel.filter((r) => r.id !== detail.id).slice(0, 4));
         } else {
@@ -271,7 +281,7 @@ export default function Product() {
         </div>
 
         <div className="info">
-          <div className="brandline">{product.collection || 'The Verdant Edit'}</div>
+          <div className="brandline">{product.collection || 'Tanvi Agnihotry'}</div>
           <h1>{product.name}</h1>
           <div className="price">
             {onSale && (
@@ -327,7 +337,6 @@ export default function Product() {
                 <button
                   key={v.id}
                   className={`size${custom ? ' custom' : ''}${v.id === variantId ? ' active' : ''}`}
-                  disabled={v.stock === 0}
                   onClick={() => {
                     setVariantId(v.id);
                     track('variant_select', { productId: product.id, props: { variantId: v.id, size: v.size } });
@@ -398,12 +407,18 @@ export default function Product() {
           <div className="mto">
             <span className="dot"></span>
             <p>
-              <strong>Made to order.</strong> Each piece is crafted on commission and dispatched in
-              4–6 weeks. Questions? Call us before ordering at{' '}
-              <a href="tel:+918118892523">+91 81188 92523</a> or on{' '}
-              <a href="https://wa.me/918118892523" target="_blank" rel="noreferrer">
-                WhatsApp
-              </a>
+              <strong>Made to order.</strong> Each piece is crafted on commission and dispatched in{' '}
+              {facts.leadStandard}. Questions? Call us before ordering at{' '}
+              <a href={`tel:+${facts.phone.replace(/\D/g, '')}`}>{facts.phone}</a>
+              {footer.whatsappUrl && (
+                <>
+                  {' '}
+                  or on{' '}
+                  <a href={footer.whatsappUrl} target="_blank" rel="noreferrer">
+                    WhatsApp
+                  </a>
+                </>
+              )}
               .
             </p>
           </div>
@@ -458,7 +473,7 @@ export default function Product() {
                 </ul>
               ) : (
                 <ul>
-                  <li>Hand-embroidered in our Mumbai atelier</li>
+                  <li>Hand-embroidered in our Jaipur atelier</li>
                   <li>Concealed side zip · cotton-silk lining</li>
                   <li>Dry clean only · handle embroidery with care</li>
                 </ul>
@@ -470,9 +485,9 @@ export default function Product() {
               Made to Order &amp; Fittings <span className="ic">+</span>
             </summary>
             <div className="acc-body">
-              Crafted on commission in our atelier. Standard sizes ship in 4–6 weeks;
-              made-to-measure in 6–8 weeks. Our team will reach out over call and WhatsApp within
-              48 hours of your order to take measurements.
+              Crafted on commission in our atelier. Standard sizes ship in {facts.leadStandard};
+              made-to-measure in {facts.leadCustom}. Our team will reach out over call and
+              WhatsApp within 48 hours of your order to take measurements.
             </div>
           </details>
           <details className="acc">
@@ -485,20 +500,40 @@ export default function Product() {
               sale.
             </div>
           </details>
+
+          {/* Provenance — the four facts nobody can copy (audit §06). Rendered
+              only when the atelier has filled them in; never invented. */}
+          {(product.karigarName || product.hoursWorked != null || product.techniques || product.finishedOn) && (
+            <div className="provenance">
+              <span className="eyebrow">Provenance</span>
+              <p>
+                {[
+                  product.karigarName && `Made by ${product.karigarName} in Bapu Nagar, Jaipur`,
+                  product.hoursWorked != null && `${product.hoursWorked} hours of hand-work`,
+                  product.techniques,
+                  product.finishedOn &&
+                    `finished ${new Date(product.finishedOn).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            </div>
+          )}
         </div>
       </main>
 
-      {/* CRAFT BAND */}
+      {/* CRAFT BAND — no invented numbers: small true facts age better than
+          big round ones (audit §03). */}
       <section className="craft">
         <div className="craft-grid">
           <ImageSlot label="Atelier / embroidery close-up" />
           <div>
             <span className="eyebrow">The Making</span>
-            <h2>Three hundred hours, by hand.</h2>
+            <h2>One workroom. One pair of hands.</h2>
             <p>
-              Every Verdant Edit piece begins as a single length of tissue. Our karigars map each
-              motif, lay the zardozi, and set every sequin by hand — a slow craft we refuse to
-              rush.
+              Every piece begins as a single length of silk in our Bapu Nagar workroom. A karigar
+              maps each motif, lays the thread, and sets every knot by hand — a slow craft we
+              refuse to rush.
             </p>
           </div>
         </div>

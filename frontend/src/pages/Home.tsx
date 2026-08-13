@@ -1,56 +1,36 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
+import { useLiveCategories } from '../lib/categories';
 import { MARQUEE_MIN_CHARS, fillTrack, useSiteContent } from '../lib/content';
-import { effectiveBasePrice } from '../lib/format';
-import type { Category, ProductDetail, ProductSummary, ProductsResponse } from '../lib/types';
-import { useCart } from '../lib/cart';
-import { useCartDrawer } from '../components/CartDrawer';
-import { useToast } from '../components/Toast';
+import type { ProductSummary, ProductsResponse } from '../lib/types';
 import { track } from '../lib/analytics';
 import Nav from '../components/Nav';
+import Ticker from '../components/Ticker';
 import Footer from '../components/Footer';
 import ImageSlot from '../components/ImageSlot';
 import Price from '../components/Price';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/home.css';
-
-const FALLBACK_CATS: Array<Pick<Category, 'slug' | 'name'>> = [
-  { slug: 'lehenga', name: 'Lehenga' },
-  { slug: 'anarkali', name: 'Anarkali' },
-  { slug: 'suits', name: 'Suits' },
-  { slug: 'kaftan', name: 'Kaftan' },
-];
+import { usePageTitle } from '../lib/usePageTitle';
 
 export default function Home() {
-  const [cats, setCats] = useState<Array<Pick<Category, 'slug' | 'name'>>>(FALLBACK_CATS);
+  usePageTitle('');
+  // Only categories with pieces — an empty door is worse than a shorter row.
+  const cats = useLiveCategories().slice(0, 4);
   const [best, setBest] = useState<ProductSummary[]>([]);
   const site = useSiteContent();
   // One copy of the marquee has to span the strip before it can be doubled into
   // a seamless loop — a one- or two-line marquee is repeated up to the length
   // the band was drawn for.
   const marquee = fillTrack(site.marquee.items, MARQUEE_MIN_CHARS);
-  const cart = useCart();
-  const { openDrawer } = useCartDrawer();
-  const { showToast } = useToast();
-  const navigate = useNavigate();
-
   useEffect(() => {
     let cancelled = false;
     api
-      .get<Category[] | { items: Category[] }>('/api/categories')
+      .get<ProductsResponse>('/api/products?sort=featured&page=1&limit=5')
       .then((data) => {
-        const list = Array.isArray(data) ? data : data.items;
-        if (!cancelled && list?.length) {
-          setCats([...list].sort((a, b) => a.position - b.position).slice(0, 4));
-        }
-      })
-      .catch(() => undefined);
-    api
-      .get<ProductsResponse>('/api/products?sort=featured&page=1&limit=4')
-      .then((data) => {
-        if (!cancelled) setBest(data.items.slice(0, 4));
+        if (!cancelled) setBest(data.items.slice(0, 5));
       })
       .catch(() => undefined);
     return () => {
@@ -58,42 +38,11 @@ export default function Home() {
     };
   }, []);
 
-  const quickAdd = async (p: ProductSummary) => {
-    try {
-      const raw = await api.get<ProductDetail | { product: ProductDetail }>(
-        `/api/products/${p.slug}`,
-      );
-      const detail = 'product' in raw && raw.product ? raw.product : (raw as ProductDetail);
-      const variant = detail.variants.find((v) => v.stock > 0) ?? detail.variants[0];
-      if (!variant) {
-        navigate(`/product/${p.slug}`);
-        return;
-      }
-      // Quick adds default to the full set — every piece included.
-      cart.add({
-        variantId: variant.id,
-        productId: detail.id,
-        productSlug: detail.slug,
-        name: detail.name,
-        size: variant.size,
-        color: detail.color,
-        unitPrice: effectiveBasePrice(detail) + detail.addonsTotal,
-        imageUrl: detail.imageUrl,
-        includedComponents: detail.components
-          .filter((c) => c.optional && c.price != null)
-          .map((c) => c.name),
-        excludedComponents: [],
-        measurements: '',
-      });
-      showToast('Added to your bag');
-      openDrawer();
-    } catch {
-      navigate(`/product/${p.slug}`);
-    }
-  };
-
   return (
     <div className="page-home">
+      {/* The announcement bar runs on every page — the homepage was the one
+          place it went missing (audit §02). */}
+      <Ticker />
       <Nav home />
 
       {/* HERO */}
@@ -130,24 +79,27 @@ export default function Home() {
         </div>
       </header>
 
-      {/* WARDROBE / CATEGORIES */}
-      <section className="wardrobe" id="cats" style={{ paddingTop: 'var(--section-y)' }}>
-        <div className="head-center">
-          <span className="eyebrow">The Wardrobe</span>
-          <h2>Shop by category</h2>
-        </div>
-        <div className="cats">
-          {cats.map((c) => (
-            <Link className="cat" key={c.slug} to={`/collection/${c.slug}`}>
-              <ImageSlot label={c.name} />
-              <div className="cap">
-                <span className="name">{c.name}</span>
-                <span className="go">Explore →</span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {/* WARDROBE / CATEGORIES — hidden entirely until at least one category
+          has pieces in it. */}
+      {cats.length > 0 && (
+        <section className="wardrobe" id="cats" style={{ paddingTop: 'var(--section-y)' }}>
+          <div className="head-center">
+            <span className="eyebrow">The Wardrobe</span>
+            <h2>Shop by category</h2>
+          </div>
+          <div className="cats">
+            {cats.map((c) => (
+              <Link className="cat" key={c.slug} to={`/collection/${c.slug}`}>
+                <ImageSlot label={c.name} />
+                <div className="cap">
+                  <span className="name">{c.name}</span>
+                  <span className="go">Explore →</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* MARQUEE */}
       <div className="marquee" aria-hidden="true">
@@ -187,12 +139,14 @@ export default function Home() {
         </div>
       </section>
 
-      {/* BESTSELLERS */}
+      {/* THE FIRST FIVE — a new house cannot have bestsellers, and customers
+          can smell an invented one. Honest, and it turns newness into an
+          invitation (audit §04). */}
       <section id="best" className="best">
         <div className="head-center">
-          <span className="eyebrow">Most Loved</span>
-          <h2>Bestsellers</h2>
-          <p>The pieces our clients return for — quietly extraordinary, endlessly re-wearable.</p>
+          <span className="eyebrow">Where to Begin</span>
+          <h2>The first five</h2>
+          <p>Where most women begin with us.</p>
         </div>
         {best.length > 0 ? (
           <div className="products">
@@ -207,9 +161,11 @@ export default function Home() {
                     <Price paise={p.price} />
                   </div>
                   <div className="add">
-                    <span className="quick" onClick={() => void quickAdd(p)}>
-                      Add to Bag
-                    </span>
+                    {/* No quick-add: a couture piece deserves its page (size,
+                        colour, MTM) — and a bare span invited accidental taps. */}
+                    <Link className="quick" to={`/product/${p.slug}`}>
+                      View the Piece
+                    </Link>
                   </div>
                 </div>
               </div>

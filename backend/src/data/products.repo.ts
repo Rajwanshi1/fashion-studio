@@ -87,10 +87,12 @@ export interface CreateProductInput {
   variants?: { size: string; stock: number }[];
 }
 
-/** No `slug`: a PUT can never rename a piece, so live /product/:slug links keep working. */
 export interface UpdateProductInput {
   categoryId?: string;
   name?: string;
+  /** Renaming a piece's slug records the outgoing slug in product_slug_aliases,
+   *  so every live /product/:slug link keeps resolving. */
+  slug?: string;
   description?: string;
   details?: string;
   price?: number;
@@ -105,6 +107,11 @@ export interface UpdateProductInput {
   salePrice?: number | null;
   costPrice?: number | null;
   colorFamily?: ColorFamily | null;
+  /** Provenance — optional; '' / null clears a field. */
+  karigarName?: string;
+  hoursWorked?: number | null;
+  techniques?: string;
+  finishedOn?: string | null;
   /** Absent leaves the gallery untouched; present replaces it wholesale. */
   images?: ProductImageInput[];
   /** Absent leaves the set untouched; present replaces it wholesale. */
@@ -242,6 +249,19 @@ function mapDetail(
     categoryId: row.category_id,
     createdAt: row.created_at.toISOString(),
     costPrice: row.cost_price ?? null,
+    karigarName: row.karigar_name ?? '',
+    hoursWorked: row.hours_worked ?? null,
+    techniques: row.techniques ?? '',
+    // date → 'YYYY-MM-DD'. pg hands DATE columns back as a LOCAL-midnight Date,
+    // so toISOString() would shift it a day west of UTC — format locally.
+    finishedOn:
+      row.finished_on instanceof Date
+        ? [
+            row.finished_on.getFullYear(),
+            String(row.finished_on.getMonth() + 1).padStart(2, '0'),
+            String(row.finished_on.getDate()).padStart(2, '0'),
+          ].join('-')
+        : (row.finished_on ?? null),
   };
 }
 
@@ -465,7 +485,16 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
     },
 
     async getBySlug(slug) {
-      const { rows } = await pool.query(`${DETAIL_SELECT} WHERE p.slug = $1 AND p.deleted_at IS NULL`, [slug]);
+      let { rows } = await pool.query(`${DETAIL_SELECT} WHERE p.slug = $1 AND p.deleted_at IS NULL`, [slug]);
+      if (!rows[0]) {
+        // Renamed pieces answer to their old slugs too. The payload's `slug`
+        // is the current one, so the storefront can canonicalise the URL.
+        ({ rows } = await pool.query(
+          `${DETAIL_SELECT} JOIN product_slug_aliases a ON a.product_id = p.id
+           WHERE a.old_slug = $1 AND p.deleted_at IS NULL`,
+          [slug],
+        ));
+      }
       if (!rows[0]) return null;
       const id = rows[0].id;
       const [variants, images, components] = await Promise.all([
@@ -605,6 +634,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
       const columns: Record<string, string> = {
         categoryId: 'category_id',
         name: 'name',
+        slug: 'slug',
         description: 'description',
         details: 'details',
         price: 'price',
@@ -619,6 +649,10 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         salePrice: 'sale_price',
         costPrice: 'cost_price',
         colorFamily: 'color_family',
+        karigarName: 'karigar_name',
+        hoursWorked: 'hours_worked',
+        techniques: 'techniques',
+        finishedOn: 'finished_on',
       };
       // A gallery in the payload also re-points the denormalized primary photo.
       const patch: UpdateProductInput = input.images
@@ -638,11 +672,30 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
       const updateSql = `UPDATE products SET ${sets.join(', ')} WHERE id = $1`;
       let rowCount: number | null;
       try {
-        if (!hasChildLists) {
+        if (!hasChildLists && patch.slug === undefined) {
           ({ rowCount } = await pool.query(updateSql, params));
         } else {
-          // Child-list replacement and the row update land together or not at all.
+          // Child-list replacement / slug rename and the row update land
+          // together or not at all.
           rowCount = await withTransaction(pool, async (client) => {
+            if (patch.slug !== undefined) {
+              const cur = await client.query('SELECT slug FROM products WHERE id = $1 FOR UPDATE', [id]);
+              if (!cur.rowCount) return 0;
+              const oldSlug: string = cur.rows[0].slug;
+              if (oldSlug !== patch.slug) {
+                // The outgoing slug becomes an alias of this piece, so every
+                // link ever shared keeps resolving. Aliases carry the product
+                // id, never another slug — no chains to walk or break.
+                await client.query(
+                  `INSERT INTO product_slug_aliases (old_slug, product_id) VALUES ($1, $2)
+                   ON CONFLICT (old_slug) DO UPDATE SET product_id = EXCLUDED.product_id`,
+                  [oldSlug, id],
+                );
+                // Renaming to a slug that is currently someone's alias: the
+                // live slug wins, the alias row is reclaimed.
+                await client.query('DELETE FROM product_slug_aliases WHERE old_slug = $1', [patch.slug]);
+              }
+            }
             const res = sets.length
               ? await client.query(updateSql, params)
               : await client.query('SELECT 1 FROM products WHERE id = $1', [id]);

@@ -6,7 +6,7 @@ import { Providers } from '../App';
 import Nav from '../components/Nav';
 import { useCart, type CartItem } from '../lib/cart';
 
-const item: Omit<CartItem, 'qty'> = {
+const item: Omit<CartItem, 'qty' | 'addedAt'> = {
   variantId: 'v1',
   productId: 'p1',
   productSlug: 'sage-sequin-jacket-lehenga',

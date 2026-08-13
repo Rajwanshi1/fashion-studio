@@ -106,17 +106,20 @@ describe('OrdersService', () => {
       await expect(service.createOrder(input({ items: [] }))).rejects.toMatchObject({ code: 'EMPTY_ORDER' });
     });
 
-    it('throws INSUFFICIENT_STOCK without decrementing anything', async () => {
-      await expect(
-        service.createOrder(
-          input({ items: [{ variantId: sageM().id, quantity: 1 }, { variantId: mossS().id, quantity: 2 }] }),
-        ),
-      ).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK' });
+    it('sells past zero — made-to-order stock goes negative and cancel restores it', async () => {
+      const order = await service.createOrder(
+        input({ items: [{ variantId: sageM().id, quantity: 1 }, { variantId: mossS().id, quantity: 2 }] }),
+      );
+      expect(ordersRepo.orders).toHaveLength(1);
       const [sage] = await products.getVariantsForUpdate({}, [sageM().id]);
       const [moss] = await products.getVariantsForUpdate({}, [mossS().id]);
-      expect(sage.stock).toBe(3);
-      expect(moss.stock).toBe(1);
-      expect(ordersRepo.orders).toHaveLength(0);
+      expect(sage.stock).toBe(2);
+      expect(moss.stock).toBe(-1); // negative = the atelier's cut-to-order backlog
+      await service.cancelOrder(order.id);
+      const [sageAfter] = await products.getVariantsForUpdate({}, [sageM().id]);
+      const [mossAfter] = await products.getVariantsForUpdate({}, [mossS().id]);
+      expect(sageAfter.stock).toBe(3);
+      expect(mossAfter.stock).toBe(1);
     });
 
     it('throws NOT_FOUND for unknown variants', async () => {
@@ -206,17 +209,17 @@ describe('OrdersService', () => {
       expect(v.stock).toBe(7); // 10 - 3 across both combos
     });
 
-    it('checks stock across combos of the same variant', async () => {
-      await expect(
-        service.createOrder(
-          input({
-            items: [
-              { variantId: setVariantId, quantity: 6 },
-              { variantId: setVariantId, quantity: 5, excludedComponents: ['Jacket'] },
-            ],
-          }),
-        ),
-      ).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK' });
+    it('aggregates stock across combos of the same variant, past zero', async () => {
+      await service.createOrder(
+        input({
+          items: [
+            { variantId: setVariantId, quantity: 6 },
+            { variantId: setVariantId, quantity: 5, excludedComponents: ['Jacket'] },
+          ],
+        }),
+      );
+      const [v] = await products.getVariantsForUpdate({}, [setVariantId]);
+      expect(v.stock).toBe(-1); // 10 - 11
     });
 
     it('honours a matching expectedUnitPrice and 409s a stale one', async () => {

@@ -106,6 +106,10 @@ export const DETAIL1: ProductDetail = {
   craft: 'Zardozi',
   fabric: 'Tissue',
   active: true,
+  karigarName: '',
+  hoursWorked: null,
+  techniques: '',
+  finishedOn: null,
   variants: [
     { id: 'v1', productId: 'p1', size: 'S', stock: 3 },
     { id: 'v2', productId: 'p1', size: 'M', stock: 2 },

@@ -15,6 +15,8 @@ import EditableSection from '../preview/EditableSection';
 import { DEVICE_VIEWPORT_HEIGHTS, DEVICE_WIDTHS } from '../preview/PreviewFrame';
 import type { PreviewDevice } from '../preview/PreviewFrame';
 import {
+  ArchivePreview,
+  FactsPreview,
   FeaturedPreview,
   FooterPreview,
   HeroPreview,
@@ -132,7 +134,19 @@ export default function Site() {
 
           <h2 className="canvas-segment">Announcement bar</h2>
           {editable('ticker', sections,<TickerPreview items={site.ticker.items} />, {
-            caption: 'Scrolls above the nav on every page except the homepage.',
+            caption: 'Scrolls above the nav on every page.',
+          })}
+
+          <h2 className="canvas-segment">Archive page</h2>
+          {editable('archive', sections,<ArchivePreview archive={site.archive} />, {
+            caption:
+              'The permanent record at /archive — volumes are added, never removed. Piece counts come from the catalogue.',
+          })}
+
+          <h2 className="canvas-segment">Site-wide</h2>
+          {editable('facts', sections,<FactsPreview facts={site.facts} />, {
+            caption:
+              'The brand facts every page pulls from — Contact, product lead times, the shop-page collection name. Piece counts always come from the catalogue.',
           })}
         </div>
       )}

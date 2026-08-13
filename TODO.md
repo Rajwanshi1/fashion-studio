@@ -7,26 +7,29 @@ work as it's discovered. Refresh the PR list with `gh pr list --state open`.
 Keep this file under ~60 lines.
 
 ## Open PRs (as of 2026-08-13)
-- #41→#42→#43 draft Audit remediation stack (may need a rebase over #39/#40)
 - #20 draft Admin mobile-first UX overhaul: app shell, UI kit, order pages
 - #12 draft Inline inventory editing from the products list
 - #11 draft Infra go-live follow-ups (resolver-proof delegation gate)
 
 ## Chores / known issues
-- Deploy #39+#40 (components + photo colours): backend image FIRST, then SPAs
-  (migrations 013/014 are additive — the old backend runs fine mid-deploy).
-  After deploy: `npm run backfill:photo-colors` over SSM (--dry-run first;
-  needs DATABASE_URL + ANTHROPIC_API_KEY) — PDPs show one catalogue-colour
-  swatch until it runs.
-- Components follow-ups, one chore PR after prod soak: migration 015 dropping
+- Audit remediation (merged via #43; migrations renumbered 015-017): after
+  deploy run docs/audit-remediation-runbook.md — CMS review, the 12 renames,
+  provenance.
+- Deploy #39+#40+#43 (components + photo colours + audit stacks): backend
+  image FIRST, then SPAs (migrations 013-017 are additive — the old backend
+  runs fine mid-deploy). After deploy: `npm run backfill:photo-colors` over
+  SSM (--dry-run first; needs DATABASE_URL + ANTHROPIC_API_KEY) — PDPs show
+  one catalogue-colour swatch until it runs.
+- Components follow-ups, one chore PR after prod soak: a migration dropping
   the dupatta_price/jacket_price columns on products + order_items; remove the
   checkout include-boolean shim (orders.routes.ts) and the admin
   legacyRemovedField 400s (admin.routes.ts).
 - Mobile e2e journey spec expects /collection/lehenga but the mobile "Women"
   link goes to /collection since #25 — align spec or nav (mobile project only,
   red on main).
-- From /code-review on #39/#40, cut for space: Home/Wishlist quick-add
-  duplication; repeated "· With X & Y" line template.
+- From /code-review on #39/#40, cut for space: Wishlist quick-add duplication;
+  repeated "· With X & Y" line template. (Home quick-add removed by the audit
+  stack.)
 - Site CMS follow-up (from /code-review on #38): consider replacing the
   hand-mirrored admin/src/preview/storefront.css with cross-package ?raw
   imports — trades drift risk for package coupling; discussion on #38.

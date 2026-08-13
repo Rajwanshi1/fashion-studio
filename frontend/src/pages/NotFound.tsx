@@ -1,8 +1,13 @@
 import { Link } from 'react-router-dom';
 import BrandLogo from '../components/BrandLogo';
+import { useNoIndex, usePageTitle } from '../lib/usePageTitle';
 import '../styles/notfound.css';
 
 export default function NotFound() {
+  usePageTitle('Page Not Found');
+  // CloudFront answers every unknown path 200 + this page — noindex keeps the
+  // soft-404 out of search results.
+  useNoIndex();
   return (
     <div className="page-nf">
       <div className="nf-brand">
@@ -24,12 +29,12 @@ export default function NotFound() {
             <Link className="btn-buy gold" to="/">
               Return Home
             </Link>
-            <Link className="btn-outline" to="/collection/lehenga">
+            <Link className="btn-outline" to="/collection">
               Explore the Collection
             </Link>
           </div>
           <div className="links">
-            <Link to="/collections">Collections</Link>
+            <Link to="/collection">The Collection</Link>
             <Link to="/lookbook">Lookbook</Link>
             <Link to="/the-house">The House</Link>
             <Link to="/contact">Contact</Link>

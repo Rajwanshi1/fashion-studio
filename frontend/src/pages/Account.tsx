@@ -10,6 +10,7 @@ import ImageSlot from '../components/ImageSlot';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/account.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 const BADGES: Record<OrderStatus, { cls: string; label: string }> = {
   pending_payment: { cls: 'crafting', label: 'Pending Payment' },
@@ -29,6 +30,7 @@ function fmtDate(iso: string): string {
 }
 
 export default function Account() {
+  usePageTitle('My Account');
   const { token, user, logout } = useAuth();
   const wishlist = useWishlist();
   const navigate = useNavigate();

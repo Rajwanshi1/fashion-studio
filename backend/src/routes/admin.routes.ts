@@ -260,9 +260,29 @@ const createProductSchema = productBaseSchema
     message: 'categoryId or categorySlug is required',
   });
 
-// No `slug`: a PUT can never rename a piece (zod strips it, so old clients that
-// still send one get a 200 with the slug untouched rather than a 400).
-const updateProductSchema = productBaseSchema.omit({ variants: true, slug: true }).partial();
+// A PUT may rename the slug: the repo records the outgoing slug as an alias so
+// every shared /product/:slug link keeps resolving (audit §05 — renaming the
+// catalogue must not break WhatsApp links or Google results).
+const updateProductSchema = productBaseSchema
+  .omit({ variants: true, slug: true })
+  .extend({
+    slug: z
+      .string()
+      .min(1)
+      .max(200)
+      .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Lowercase words separated by single dashes, e.g. bahaar-purple')
+      .optional(),
+    // Provenance (audit §06) — optional, honest facts only; blank clears.
+    karigarName: z.string().max(100).optional(),
+    hoursWorked: z.number().int().positive().nullable().optional(),
+    techniques: z.string().max(300).optional(),
+    finishedOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
+      .nullable()
+      .optional(),
+  })
+  .partial();
 
 /** Lowercase kebab-case; the same shape the seed data and pre-existing catalog slugs use. */
 function slugify(value: string): string {
@@ -313,7 +333,7 @@ export function adminRoutes(deps: AdminDeps) {
       .filter((p) => p.active)
       .filter((p) => {
         const sized = p.variants.filter((v) => v.size !== 'Custom');
-        return sized.length > 0 && sized.every((v) => v.stock === 0);
+        return sized.length > 0 && sized.every((v) => v.stock <= 0);
       })
       .map((p) => ({
         productId: p.id,

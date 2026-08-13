@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { usePageTracking } from './lib/analytics';
 import { AuthProvider } from './lib/auth';
 import { CartProvider } from './lib/cart';
@@ -8,7 +8,7 @@ import { WishlistProvider } from './lib/wishlist';
 import { ToastProvider } from './components/Toast';
 import { CartDrawerProvider } from './components/CartDrawer';
 import Home from './pages/Home';
-import Collections from './pages/Collections';
+import Archive from './pages/Archive';
 import Collection from './pages/Collection';
 import Product from './pages/Product';
 import CartPage from './pages/CartPage';
@@ -60,7 +60,10 @@ export function AppRoutes() {
       <PageTracking />
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/collections" element={<Collections />} />
+        {/* The old editorial /collections page invented five editions that
+            never existed (audit §02) — the archive is the honest replacement. */}
+        <Route path="/collections" element={<Navigate to="/archive" replace />} />
+        <Route path="/archive" element={<Archive />} />
         {/* Slugless: the whole catalogue, and the state a category clears to. */}
         <Route path="/collection" element={<Collection />} />
         <Route path="/collection/:categorySlug" element={<Collection />} />
@@ -74,6 +77,8 @@ export function AppRoutes() {
         <Route path="/search" element={<Search />} />
         <Route path="/lookbook" element={<Lookbook />} />
         <Route path="/the-house" element={<TheHouse />} />
+        {/* /about never existed but gets typed and linked — land it somewhere real. */}
+        <Route path="/about" element={<Navigate to="/the-house" replace />} />
         <Route path="/client-care" element={<ClientCare />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/size-guide" element={<SizeGuide />} />

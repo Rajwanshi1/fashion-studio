@@ -7,6 +7,8 @@
 import PreviewFrame, { DEVICE_VIEWPORT_HEIGHTS, DEVICE_WIDTHS } from './PreviewFrame';
 import type { PreviewDevice } from './PreviewFrame';
 import {
+  ArchivePreview,
+  FactsPreview,
   FeaturedPreview,
   FooterPreview,
   HeroPreview,
@@ -18,6 +20,8 @@ import {
 } from './sections';
 import { sectionValue } from '../lib/siteContent';
 import type {
+  ArchiveContent,
+  FactsContent,
   FeaturedContent,
   FooterContent,
   HeroContent,
@@ -98,5 +102,11 @@ export default function SectionLivePreview({
           <FooterPreview footer={value as unknown as FooterContent} />
         </PreviewFrame>
       );
+    // Plain-card previews — these sections render inside existing pages (or a
+    // page storefront.css does not mirror), so there is no markup to imitate.
+    case 'facts':
+      return <FactsPreview facts={value as unknown as FactsContent} />;
+    case 'archive':
+      return <ArchivePreview archive={value as unknown as ArchiveContent} />;
   }
 }

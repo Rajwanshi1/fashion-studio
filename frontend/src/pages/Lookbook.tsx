@@ -7,18 +7,23 @@ import Ambient from '../components/Ambient';
 import { useSiteContent } from '../lib/content';
 import type { Look } from '../lib/content';
 import '../styles/lookbook.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
-/** The caption beside a featured look. The layout is fixed — only looks 01 and
- *  04 carry one, and the section decides which side of the image it sits on. */
-function Caption({ look }: { look: Look }) {
+/** A look's caption. Renders nothing while the look has no words — and shows
+ *  whatever the boutique HAS written, for every look, not just 01 and 04
+ *  (CMS-filled captions used to vanish silently). */
+function Caption({ look, under = false }: { look: Look; under?: boolean }) {
+  if (!look.title && !look.copy) return null;
   return (
-    <div className="caption">
+    <div className={`caption${under ? ' under' : ''}`}>
       <span className="look-no">{look.lookNo}</span>
-      <h3>{look.title}</h3>
-      <p>{look.copy}</p>
-      <Link className="shop-look" to={look.ctaHref}>
-        Shop the Look →
-      </Link>
+      {look.title && <h3>{look.title}</h3>}
+      {look.copy && <p>{look.copy}</p>}
+      {look.ctaHref && (
+        <Link className="shop-look" to={look.ctaHref}>
+          Shop the Look →
+        </Link>
+      )}
     </div>
   );
 }
@@ -51,6 +56,7 @@ function LookSlot({
 }
 
 export default function Lookbook() {
+  usePageTitle('Lookbook');
   const { lookbookCover, lookbook } = useSiteContent();
   // Fixed slots: the page's shape never changes, only the content flowing in.
   const looks = lookbook.looks;
@@ -86,8 +92,14 @@ export default function Lookbook() {
         </section>
 
         <section className="spread duo">
-          <LookSlot className="ar34" look={looks[1]} label="Look 02" />
-          <LookSlot className="ar34" look={looks[2]} label="Look 03" />
+          <div>
+            <LookSlot className="ar34" look={looks[1]} label="Look 02" />
+            <Caption look={looks[1]} under />
+          </div>
+          <div>
+            <LookSlot className="ar34" look={looks[2]} label="Look 03" />
+            <Caption look={looks[2]} under />
+          </div>
         </section>
 
         <div className="pull">
@@ -101,12 +113,21 @@ export default function Lookbook() {
         </section>
 
         <section className="spread duo">
-          <LookSlot className="ar34" look={looks[4]} label="Look 05" />
-          <LookSlot className="ar34" look={looks[5]} label="Look 06" />
+          <div>
+            <LookSlot className="ar34" look={looks[4]} label="Look 05" />
+            <Caption look={looks[4]} under />
+          </div>
+          <div>
+            <LookSlot className="ar34" look={looks[5]} label="Look 06" />
+            <Caption look={looks[5]} under />
+          </div>
         </section>
 
         <section className="spread">
-          <LookSlot className="ar54" look={looks[6]} label="Look 07 — full bleed" />
+          <div>
+            <LookSlot className="ar54" look={looks[6]} label="Look 07 — full bleed" />
+            <Caption look={looks[6]} under />
+          </div>
         </section>
       </main>
       <Reveal />
