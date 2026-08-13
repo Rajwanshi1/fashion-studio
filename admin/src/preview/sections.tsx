@@ -243,9 +243,10 @@ export function FooterPreview({ footer }: { footer: FooterContent }) {
       <div className="foot-bottom">
         <span>© 2026 Tanvi Agnihotry</span>
         <div className="socials">
-          <a>Instagram</a>
-          <a>Pinterest</a>
-          <a>WhatsApp</a>
+          {/* Mirror of the storefront rule: no URL, no link. */}
+          {footer.instagramUrl && <a>Instagram</a>}
+          {footer.pinterestUrl && <a>Pinterest</a>}
+          {footer.whatsappUrl && <a>WhatsApp</a>}
         </div>
       </div>
     </footer>

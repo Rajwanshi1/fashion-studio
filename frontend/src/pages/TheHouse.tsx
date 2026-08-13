@@ -4,8 +4,10 @@ import ImageSlot from '../components/ImageSlot';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/house.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 export default function TheHouse() {
+  usePageTitle('The House');
   return (
     <Shop page="page-house">
       <header className="house-hero">

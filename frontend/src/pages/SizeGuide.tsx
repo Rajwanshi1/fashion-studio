@@ -5,6 +5,7 @@ import ImageSlot from '../components/ImageSlot';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/sizeguide.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 type Unit = 'in' | 'cm';
 
@@ -24,6 +25,7 @@ const ROWS_CM = [
 ];
 
 export default function SizeGuide() {
+  usePageTitle('Size & Fit Guide');
   const [unit, setUnit] = useState<Unit>('in');
   const rows = unit === 'in' ? ROWS_IN : ROWS_CM;
 

@@ -11,6 +11,7 @@ import ImageSlot from '../components/ImageSlot';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/plp.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'Custom'];
 const OCCASIONS = ['Wedding', 'Reception', 'Festive', 'Cocktail'];
@@ -28,6 +29,7 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
 ];
 
 export default function Collection() {
+  usePageTitle('The Collection');
   const { categorySlug = '' } = useParams();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();

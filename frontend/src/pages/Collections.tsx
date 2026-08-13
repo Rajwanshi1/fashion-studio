@@ -4,6 +4,7 @@ import ImageSlot from '../components/ImageSlot';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/collections.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 const COLLECTIONS = [
   {
@@ -64,6 +65,7 @@ const COLLECTIONS = [
 ];
 
 export default function Collections() {
+  usePageTitle('Collections');
   return (
     <Shop page="page-collections">
       <div className="crumbs">

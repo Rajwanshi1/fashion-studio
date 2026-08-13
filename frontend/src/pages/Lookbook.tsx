@@ -7,6 +7,7 @@ import Ambient from '../components/Ambient';
 import { useSiteContent } from '../lib/content';
 import type { Look } from '../lib/content';
 import '../styles/lookbook.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 /** The caption beside a featured look. The layout is fixed — only looks 01 and
  *  04 carry one, and the section decides which side of the image it sits on. */
@@ -51,6 +52,7 @@ function LookSlot({
 }
 
 export default function Lookbook() {
+  usePageTitle('Lookbook');
   const { lookbookCover, lookbook } = useSiteContent();
   // Fixed slots: the page's shape never changes, only the content flowing in.
   const looks = lookbook.looks;

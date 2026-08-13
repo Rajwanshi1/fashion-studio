@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast';
 import ImageSlot from '../components/ImageSlot';
 import Reveal from '../components/Reveal';
 import '../styles/auth.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 // Minimal Google Identity Services surface — we deliberately avoid the
 // @types/google.accounts dependency and declare only what we call.
@@ -90,6 +91,7 @@ function GoogleMark() {
 }
 
 export default function Login() {
+  usePageTitle('Sign In');
   const { login, loginWithGoogle, requestOtp, verifyOtp, register } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();

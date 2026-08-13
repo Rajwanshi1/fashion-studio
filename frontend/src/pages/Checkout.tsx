@@ -11,6 +11,7 @@ import ImageSlot from '../components/ImageSlot';
 import RazorpayMock from '../components/RazorpayMock';
 import BrandLogo from '../components/BrandLogo';
 import '../styles/checkout.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 const PRIORITY_FEE = 250000; // paise (₹2,500)
 
@@ -20,6 +21,7 @@ const COUNTRIES = ['India', 'United Arab Emirates', 'United Kingdom', 'United St
 type PayMethod = 'card' | 'upi' | 'cod';
 
 export default function Checkout() {
+  usePageTitle('Checkout');
   const { items, subtotal, count, clear } = useCart();
   const { user } = useAuth();
   const { showToast } = useToast();

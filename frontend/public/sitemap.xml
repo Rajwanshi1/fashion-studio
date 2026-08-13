@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Static core routes only. Product URLs are deliberately absent until the
+     catalogue's slugs settle (rename pass planned); revisit then. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://tanviagnihotry.com/</loc></url>
+  <url><loc>https://tanviagnihotry.com/collection</loc></url>
+  <url><loc>https://tanviagnihotry.com/lookbook</loc></url>
+  <url><loc>https://tanviagnihotry.com/the-house</loc></url>
+  <url><loc>https://tanviagnihotry.com/client-care</loc></url>
+  <url><loc>https://tanviagnihotry.com/contact</loc></url>
+  <url><loc>https://tanviagnihotry.com/size-guide</loc></url>
+</urlset>

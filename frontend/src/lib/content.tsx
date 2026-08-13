@@ -148,10 +148,11 @@ export const DEFAULT_CONTENT: SiteContent = {
   footer: {
     blurb:
       'Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.',
-    // Today's social links are placeholders (href="#") — no real URLs yet.
-    instagramUrl: '',
+    // Real handles (mirrored from the Contact page). Pinterest has no account
+    // yet — empty means the link simply doesn't render.
+    instagramUrl: 'https://instagram.com/tanviagnihotrylabel',
     pinterestUrl: '',
-    whatsappUrl: '',
+    whatsappUrl: 'https://wa.me/918118892523',
   },
 };
 

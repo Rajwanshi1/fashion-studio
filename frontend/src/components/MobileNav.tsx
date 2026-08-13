@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useSiteContent } from '../lib/content';
 import BrandLogo from './BrandLogo';
 
 const LINKS = [
@@ -27,6 +28,12 @@ export default function MobileNav({
   /** Opens the inline nav search bar instead of navigating to /search. */
   onSearch?: () => void;
 }) {
+  const { footer } = useSiteContent();
+  const socials = [
+    { t: 'Instagram', url: footer.instagramUrl },
+    { t: 'Pinterest', url: footer.pinterestUrl },
+    { t: 'WhatsApp', url: footer.whatsappUrl },
+  ].filter((s) => s.url);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -89,11 +96,15 @@ export default function MobileNav({
             ),
           )}
         </div>
-        <div className="mnav-social">
-          <a href="#">Instagram</a>
-          <a href="#">Pinterest</a>
-          <a href="#">WhatsApp</a>
-        </div>
+        {socials.length > 0 && (
+          <div className="mnav-social">
+            {socials.map((s) => (
+              <a key={s.t} href={s.url} target="_blank" rel="noreferrer">
+                {s.t}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
       <div className="mnav-foot">
         <Link to="/contact" onClick={onClose}>

@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { usePageTracking } from './lib/analytics';
 import { AuthProvider } from './lib/auth';
 import { CartProvider } from './lib/cart';
@@ -74,6 +74,8 @@ export function AppRoutes() {
         <Route path="/search" element={<Search />} />
         <Route path="/lookbook" element={<Lookbook />} />
         <Route path="/the-house" element={<TheHouse />} />
+        {/* /about never existed but gets typed and linked — land it somewhere real. */}
+        <Route path="/about" element={<Navigate to="/the-house" replace />} />
         <Route path="/client-care" element={<ClientCare />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/size-guide" element={<SizeGuide />} />

@@ -7,10 +7,10 @@ interface FooterProps {
   mark?: boolean;
 }
 
-/** A social handle. Until the studio supplies a real URL the link stays the
- *  placeholder anchor it is today — never href="", which self-navigates. */
+/** A social handle. No URL, no link — a dead href="#" reads as a broken
+ *  storefront, which is worse than a shorter row. */
 function Social({ url, children }: { url: string; children: string }) {
-  if (!url) return <a href="#">{children}</a>;
+  if (!url) return null;
   return (
     <a href={url} target="_blank" rel="noreferrer">
       {children}

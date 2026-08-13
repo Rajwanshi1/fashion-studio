@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /checkout
+Disallow: /cart
+Disallow: /account
+Disallow: /login
+
+Sitemap: https://tanviagnihotry.com/sitemap.xml

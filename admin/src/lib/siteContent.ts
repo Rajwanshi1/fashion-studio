@@ -221,9 +221,9 @@ export const SECTION_DEFAULTS = {
   footer: {
     blurb:
       'Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.',
-    instagramUrl: '',
+    instagramUrl: 'https://instagram.com/tanviagnihotrylabel',
     pinterestUrl: '',
-    whatsappUrl: '',
+    whatsappUrl: 'https://wa.me/918118892523',
   },
 } satisfies { [K in SectionKey]: EffectiveContent[K] };
 

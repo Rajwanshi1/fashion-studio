@@ -12,9 +12,6 @@ Keep this file under ~60 lines.
 - #11 draft Infra go-live follow-ups (resolver-proof delegation gate)
 
 ## Chores / known issues
-- Deploy #37+#38 (site CMS preview): backend image FIRST, then SPAs (new admin
-  PUTs focus keys an old backend 400s); post-deploy, load admin /site once —
-  the preview iframes inherit the CloudFront-only CSP (unverifiable locally).
 - Site CMS follow-up (from /code-review on #38): consider replacing the
   hand-mirrored admin/src/preview/storefront.css with cross-package ?raw
   imports — trades drift risk for package coupling; discussion on #38.
