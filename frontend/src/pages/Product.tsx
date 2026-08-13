@@ -246,7 +246,7 @@ export default function Product() {
         </div>
 
         <div className="info">
-          <div className="brandline">{product.collection || 'The Verdant Edit'}</div>
+          <div className="brandline">{product.collection || 'Tanvi Agnihotry'}</div>
           <h1>{product.name}</h1>
           <div className="price">
             {onSale && (
@@ -419,7 +419,7 @@ export default function Product() {
                 </ul>
               ) : (
                 <ul>
-                  <li>Hand-embroidered in our Mumbai atelier</li>
+                  <li>Hand-embroidered in our Jaipur atelier</li>
                   <li>Concealed side zip · cotton-silk lining</li>
                   <li>Dry clean only · handle embroidery with care</li>
                 </ul>
@@ -449,17 +449,18 @@ export default function Product() {
         </div>
       </main>
 
-      {/* CRAFT BAND */}
+      {/* CRAFT BAND — no invented numbers: small true facts age better than
+          big round ones (audit §03). */}
       <section className="craft">
         <div className="craft-grid">
           <ImageSlot label="Atelier / embroidery close-up" />
           <div>
             <span className="eyebrow">The Making</span>
-            <h2>Three hundred hours, by hand.</h2>
+            <h2>One workroom. One pair of hands.</h2>
             <p>
-              Every Verdant Edit piece begins as a single length of tissue. Our karigars map each
-              motif, lay the zardozi, and set every sequin by hand — a slow craft we refuse to
-              rush.
+              Every piece begins as a single length of silk in our Bapu Nagar workroom. A karigar
+              maps each motif, lays the thread, and sets every knot by hand — a slow craft we
+              refuse to rush.
             </p>
           </div>
         </div>

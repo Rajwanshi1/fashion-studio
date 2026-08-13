@@ -32,7 +32,7 @@ describe('effectiveContent', () => {
     });
     expect(site.hero.title).toBe('Custom headline');
     // blank loses to the default, exactly as the storefront merges
-    expect(site.hero.eyebrow).toBe('The Verdant Edit · Indo-Western Couture');
+    expect(site.hero.eyebrow).toBe('Hand-embroidered, made to order · Jaipur');
     expect(site.ticker.items[0]).toBe('Complimentary Made-to-Order Consultation');
     // untouched sections arrive whole
     expect(site.trust.items).toHaveLength(3);
@@ -121,7 +121,7 @@ describe('site canvas', () => {
     expect(heroDoc.head.querySelector('style[data-storefront]')).not.toBeNull();
     expect(within(heroDoc.body).getByText('Custom headline')).toBeInTheDocument();
     // blank-loses: the untouched italic line previews the built-in copy
-    expect(within(heroDoc.body).getByText('heritage, made to move.')).toBeInTheDocument();
+    expect(within(heroDoc.body).getByText('jahan har rang ek kissa sunata hai.')).toBeInTheDocument();
   });
 
   it('shows loading, then an error when the fetch fails', async () => {

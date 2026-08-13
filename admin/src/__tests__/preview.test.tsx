@@ -44,9 +44,9 @@ describe('section mirrors', () => {
     );
     const h1 = container.querySelector('.hero-inner h1') as HTMLElement;
     expect(h1).toHaveTextContent('A New Season');
-    expect(h1.querySelector('.ital')).toHaveTextContent('heritage, made to move.');
+    expect(h1.querySelector('.ital')).toHaveTextContent('jahan har rang ek kissa sunata hai.');
     expect(container.querySelector('.hero .veil')).not.toBeNull();
-    expect(container.querySelector('.side-label')).toHaveTextContent('Spring / Summer 2026');
+    expect(container.querySelector('.side-label')).toHaveTextContent('Festive 2026');
     expect(screen.getByAltText('A New Season')).toHaveStyle({ objectPosition: '50% 50%' });
     // CTAs are pictures of buttons — nothing to navigate to
     expect(screen.queryByRole('link')).toBeNull();
@@ -117,8 +117,8 @@ describe('section mirrors', () => {
     // only looks 01 and 04 carry captions
     const captions = container.querySelectorAll('.caption');
     expect(captions).toHaveLength(2);
-    expect(captions[0]).toHaveTextContent('The garden, after rain.');
-    expect(captions[1]).toHaveTextContent('Moss & mirror.');
+    expect(captions[0]).toHaveTextContent('Rang, unhurried.');
+    expect(captions[1]).toHaveTextContent('Mehfil light.');
   });
 });
 

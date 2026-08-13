@@ -15,23 +15,26 @@ export default function TheHouse() {
         <div className="ht">
           <span className="eyebrow">The House of Tanvi Agnihotry</span>
           <h1>
-            Heritage,
+            jahan har rang
             <br />
-            made to move.
+            ek kissa sunata hai.
           </h1>
         </div>
       </header>
 
+      {/* Open with a fact only this house has — facts age well, manifestos
+          don't (audit §04, §06). */}
       <section className="manifesto">
         <p className="lede">
-          We began with a simple conviction — that an Indian woman should never have to choose
-          between the weight of tradition and the ease of the present.
+          Tanvi Agnihotry began in a Bapu Nagar workroom in Jaipur, with one length of silk and a
+          karigar who had been setting zardozi for thirty years. That workroom is still where
+          every piece is made.
         </p>
         <p>
-          Tanvi Agnihotry is an indo-western couture house built on hand-craft. Every piece is
-          conceived in our studio, embroidered by karigars who have carried their craft for
-          generations, and cut to the way you actually live — at the wedding, the reception, and
-          every evening in between.
+          Ours is a made-to-order house built on hand-craft. Every piece is conceived in our
+          Jaipur studio, embroidered by karigars who have carried their craft for generations,
+          and cut to the way you actually live — at the wedding, the reception, and every evening
+          in between.
         </p>
       </section>
 
@@ -41,11 +44,11 @@ export default function TheHouse() {
           <div className="stext">
             <div className="num">01</div>
             <span className="eyebrow">The Beginning</span>
-            <h2>From a single length of tissue.</h2>
+            <h2>From a single length of silk.</h2>
             <p>
-              Founded in 2026, the house grew from a studio in Mumbai and a small circle of master
-              embroiderers. We chose green as our signature — the colour of renewal — and built
-              every collection around it.
+              Founded in 2026, the house began in Bapu Nagar with a small circle of master
+              embroiderers. The first collection, Rang Mehfil, set the pattern the house still
+              follows: hand embroidery, jewel colour, and a name in the mother tongue.
             </p>
           </div>
         </div>
@@ -53,7 +56,7 @@ export default function TheHouse() {
           <div className="stext">
             <div className="num">02</div>
             <span className="eyebrow">The Craft</span>
-            <h2>Three hundred hours, by hand.</h2>
+            <h2>By hand, at its own pace.</h2>
             <p>
               Zardozi, mukaish, chikankari, mirror — our karigars map each motif and set every
               sequin individually. Nothing is rushed; nothing is machine-finished where a hand can
@@ -101,14 +104,15 @@ export default function TheHouse() {
         </div>
       </section>
 
+      {/* Drift-proof facts only — no invented counts (audit §03). */}
       <section className="stats">
         <div className="stat">
-          <div className="big">40+</div>
-          <div className="lbl">Master Karigars</div>
+          <div className="big">One</div>
+          <div className="lbl">Workroom — Bapu Nagar, Jaipur</div>
         </div>
         <div className="stat">
-          <div className="big">300 hrs</div>
-          <div className="lbl">Avg. per Piece</div>
+          <div className="big">By hand</div>
+          <div className="lbl">Zardozi · Mukaish · Chikankari · Mirror</div>
         </div>
         <div className="stat">
           <div className="big">100%</div>

@@ -90,7 +90,7 @@
 /* ---- bestsellers: atelier-style centered grid ---- */
 .page-home .best { padding: var(--section-y) var(--gutter); }
 .page-home .head-center p { margin: 1.1rem auto 0; color: var(--fg-muted); font-size: var(--t-sm); max-width: 50ch; }
-.page-home .products { display: grid; grid-template-columns: repeat(4,1fr); gap: clamp(0.8rem,2vw,1.8rem); }
+.page-home .products { display: grid; grid-template-columns: repeat(5,1fr); gap: clamp(0.8rem,2vw,1.8rem); }
 @media (max-width: 980px){ .page-home .products { grid-template-columns: repeat(2,1fr); } }
 .page-home .product .img-slot { width: 100%; aspect-ratio: 3/4; }
 .page-home .product .meta { padding-top: 1.1rem; text-align: center; }

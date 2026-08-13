@@ -62,14 +62,14 @@ describe('site section editor', () => {
       imageUrl: null,
       focusX: 50,
       focusY: 50,
-      seasonLabel: 'Spring / Summer 2026',
-      eyebrow: 'The Verdant Edit · Indo-Western Couture',
+      seasonLabel: 'Festive 2026',
+      eyebrow: 'Hand-embroidered, made to order · Jaipur',
       title: 'The Verdant Season',
-      titleItalic: 'heritage, made to move.',
+      titleItalic: 'jahan har rang ek kissa sunata hai.',
       ctaPrimary: 'Discover the Collection',
       ctaSecondary: 'Book an Appointment',
-      edgeLeft: 'Made to Order — India',
-      edgeRight: 'Vol. 01 / 24 Looks',
+      edgeLeft: 'Made to Order — Jaipur',
+      edgeRight: 'Rang Mehfil — Vol. 01',
     });
 
     // saved → back on the Site list
@@ -86,7 +86,7 @@ describe('site section editor', () => {
     // the storefront falls back to its default for a blank string — so does the
     // editor, which shows what the site actually renders.
     expect(screen.getByLabelText('Eyebrow')).toHaveValue(
-      'The Verdant Edit · Indo-Western Couture',
+      'Hand-embroidered, made to order · Jaipur',
     );
     // and says so, once, so clearing a field is not a silent no-op
     expect(screen.getByText('Leaving a field blank restores the built-in copy.')).toBeInTheDocument();
@@ -114,7 +114,7 @@ describe('site section editor', () => {
     const put = calls.find((c) => c.method === 'PUT');
     expect(put?.url).toMatch(/\/api\/admin\/content\/marquee$/);
     expect(put?.body).toEqual({
-      items: ['— hand embroidered —', 'Made to Order', 'The Verdant Edit'],
+      items: ['— hand embroidered —', 'Made to Order', 'Rang Mehfil'],
     });
   });
 
@@ -310,7 +310,7 @@ describe('site section editor', () => {
 
     renderApp('/site/lookbook');
 
-    expect(await screen.findByLabelText('Look 1 title')).toHaveValue('The garden, after rain.');
+    expect(await screen.findByLabelText('Look 1 title')).toHaveValue('Rang, unhurried.');
     expect(screen.getByLabelText('Look 7 number')).toHaveValue('Look 07');
     expect(screen.queryByLabelText('Look 8 number')).not.toBeInTheDocument();
     // looks 1 and 4 are the two the storefront prints a caption for
@@ -334,7 +334,7 @@ describe('site section editor', () => {
     expect(body.quote).toBe(
       '"She does not choose between heritage and the present. She wears both, at once."',
     );
-    expect(body.quoteCite).toBe('— The Verdant Edit');
+    expect(body.quoteCite).toBe('— Rang Mehfil');
   });
 
   it('keeps edits made while a look photo was still uploading', async () => {

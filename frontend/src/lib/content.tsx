@@ -69,14 +69,14 @@ export const DEFAULT_CONTENT: SiteContent = {
     imageUrl: null,
     focusX: 50,
     focusY: 50,
-    seasonLabel: 'Spring / Summer 2026',
-    eyebrow: 'The Verdant Edit · Indo-Western Couture',
+    seasonLabel: 'Festive 2026',
+    eyebrow: 'Hand-embroidered, made to order · Jaipur',
     title: 'Tanvi Agnihotry',
-    titleItalic: 'heritage, made to move.',
+    titleItalic: 'jahan har rang ek kissa sunata hai.',
     ctaPrimary: 'Discover the Collection',
     ctaSecondary: 'Book an Appointment',
-    edgeLeft: 'Made to Order — India',
-    edgeRight: 'Vol. 01 / 24 Looks',
+    edgeLeft: 'Made to Order — Jaipur',
+    edgeRight: 'Rang Mehfil — Vol. 01',
   },
   featured: {
     imageUrl: null,
@@ -85,18 +85,18 @@ export const DEFAULT_CONTENT: SiteContent = {
     eyebrow: 'The New Collection',
     title: 'Rang',
     titleEm: 'Mehfil',
-    copy: 'Hand-embroidered indo-western silhouettes in moss, sage and pistachio — cut for the way the modern Indian woman actually moves. Each piece made to order, each made to last.',
+    copy: 'Hand-embroidered festive silhouettes in purple, maroon, ruby pink and ivory. Each piece made to order in our Jaipur atelier, each made to last.',
     ctaLabel: 'Explore the Edit',
     ctaHref: '/collection',
   },
   // The four unique lines; the marquee track prints the list twice to loop.
   marquee: {
-    items: ['Made to Order', '— hand embroidered —', 'The Verdant Edit', '— Spring 2026 —'],
+    items: ['Made to Order', '— hand embroidered —', 'Rang Mehfil', '— Festive 2026 —'],
   },
   trust: {
     items: [
       { title: 'Made to Order', detail: 'Crafted on commission · 4–6 weeks' },
-      { title: 'Complimentary Fittings', detail: 'Virtual or in-studio, Mumbai' },
+      { title: 'Complimentary Fittings', detail: 'Virtual or in-studio, Jaipur' },
       { title: 'Worldwide Shipping', detail: 'Insured & tracked, on the house' },
     ],
   },
@@ -105,7 +105,7 @@ export const DEFAULT_CONTENT: SiteContent = {
     focusX: 50,
     focusY: 50,
     masthead: 'The Edit',
-    subItems: ['Volume 01', 'Spring 2026', '32 Looks'],
+    subItems: ['Volume 01', 'Festive 2026', 'Rang Mehfil'],
   },
   lookbook: {
     // Looks 02, 03, 05, 06 and 07 are images only today — no caption copy.
@@ -115,9 +115,9 @@ export const DEFAULT_CONTENT: SiteContent = {
         focusX: 50,
         focusY: 50,
         lookNo: 'Look 01',
-        title: 'The garden, after rain.',
-        copy: 'Sage sequin jacket lehenga with a hand-draped dupatta. Structured shoulder, fluid hem.',
-        ctaHref: '/collection/lehenga',
+        title: 'Rang, unhurried.',
+        copy: 'A kalidaar kurta set in purple silk — resham lotus and french knots over a pintucked inset.',
+        ctaHref: '/collection',
       },
       { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 02', title: '', copy: '', ctaHref: '' },
       { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 03', title: '', copy: '', ctaHref: '' },
@@ -126,28 +126,28 @@ export const DEFAULT_CONTENT: SiteContent = {
         focusX: 50,
         focusY: 50,
         lookNo: 'Look 04',
-        title: 'Moss & mirror.',
-        copy: 'A tissue draped gown caught with mirror-work — light moving as you do.',
-        ctaHref: '/collection/kaftan',
+        title: 'Mehfil light.',
+        copy: 'Mirror-work catching the evening — light moving as you do.',
+        ctaHref: '/collection',
       },
       { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 05', title: '', copy: '', ctaHref: '' },
       { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 06', title: '', copy: '', ctaHref: '' },
       { imageUrl: null, focusX: 50, focusY: 50, lookNo: 'Look 07', title: '', copy: '', ctaHref: '' },
     ],
     quote: '"She does not choose between heritage and the present. She wears both, at once."',
-    quoteCite: '— The Verdant Edit',
+    quoteCite: '— Rang Mehfil',
   },
   // The three real messages; the ticker track adds the '·' separators.
   ticker: {
     items: [
       'Complimentary Made-to-Order Consultation',
       'Worldwide Shipping',
-      'Spring 2026 — The Verdant Edit',
+      'Rang Mehfil — Festive 2026',
     ],
   },
   footer: {
     blurb:
-      'Indo-western couture, made to order in India. Crafting timeless pieces for the modern Indian woman since 2026.',
+      'Hand-embroidered, made to order in our Jaipur atelier. Each piece cut to one woman, finished by one pair of hands.',
     // Real handles (mirrored from the Contact page). Pinterest has no account
     // yet — empty means the link simply doesn't render.
     instagramUrl: 'https://instagram.com/tanviagnihotrylabel',

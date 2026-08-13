@@ -41,9 +41,9 @@ export default function Home() {
       })
       .catch(() => undefined);
     api
-      .get<ProductsResponse>('/api/products?sort=featured&page=1&limit=4')
+      .get<ProductsResponse>('/api/products?sort=featured&page=1&limit=5')
       .then((data) => {
-        if (!cancelled) setBest(data.items.slice(0, 4));
+        if (!cancelled) setBest(data.items.slice(0, 5));
       })
       .catch(() => undefined);
     return () => {
@@ -146,12 +146,14 @@ export default function Home() {
         </div>
       </section>
 
-      {/* BESTSELLERS */}
+      {/* THE FIRST FIVE — a new house cannot have bestsellers, and customers
+          can smell an invented one. Honest, and it turns newness into an
+          invitation (audit §04). */}
       <section id="best" className="best">
         <div className="head-center">
-          <span className="eyebrow">Most Loved</span>
-          <h2>Bestsellers</h2>
-          <p>The pieces our clients return for — quietly extraordinary, endlessly re-wearable.</p>
+          <span className="eyebrow">Where to Begin</span>
+          <h2>The first five</h2>
+          <p>Where most women begin with us.</p>
         </div>
         {best.length > 0 ? (
           <div className="products">

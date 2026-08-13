@@ -115,7 +115,7 @@ describe('mergeContent', () => {
     });
     expect(DEFAULT_CONTENT.hero.title).toBe('Tanvi Agnihotry');
     expect(DEFAULT_CONTENT.trust.items[0].title).toBe('Made to Order');
-    expect(DEFAULT_CONTENT.lookbook.looks[0].title).toBe('The garden, after rain.');
+    expect(DEFAULT_CONTENT.lookbook.looks[0].title).toBe('Rang, unhurried.');
     expect(DEFAULT_CONTENT.ticker.items[0]).toBe('Complimentary Made-to-Order Consultation');
   });
 });
