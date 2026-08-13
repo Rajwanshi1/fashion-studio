@@ -45,14 +45,13 @@
 .page-pdp .opt-label .help { color: var(--gold); cursor: pointer; }
 
 .page-pdp .swatches { display: flex; gap: 0.7rem; margin-bottom: 1.8rem; }
-.page-pdp .swatch { width: 30px; height: 30px; border-radius: 999px; cursor: pointer; outline: 1px solid var(--hairline); outline-offset: 3px; transition: outline-color var(--dur) var(--ease); border: 0; padding: 0; }
+.page-pdp .swatch { display: inline-block; width: 30px; height: 30px; border-radius: 999px; outline: 1px solid var(--hairline); outline-offset: 3px; transition: outline-color var(--dur) var(--ease); border: 0; padding: 0; }
 .page-pdp .swatch.active { outline-color: var(--gold); }
 
 .page-pdp .sizes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .page-pdp .size { min-width: 48px; padding: 0.7em 0.9em; text-align: center; border: 1px solid var(--hairline); background: none; font-family: var(--sans); font-size: 0.8rem; letter-spacing: 0.04em; cursor: pointer; transition: all var(--dur) var(--ease); }
 .page-pdp .size:hover { border-color: var(--gold); }
 .page-pdp .size.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.page-pdp .size:disabled { opacity: 0.4; cursor: not-allowed; text-decoration: line-through; }
 .page-pdp .size.custom { letter-spacing: var(--track-wide); text-transform: uppercase; font-size: 0.66rem; }
 
 .page-pdp .set-includes { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 1.6rem; }

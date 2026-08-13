@@ -13,8 +13,10 @@ import Price from '../components/Price';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
 import '../styles/wishlist.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 export default function Wishlist() {
+  usePageTitle('Wishlist');
   const wishlist = useWishlist();
   const cart = useCart();
   const { openDrawer } = useCartDrawer();
@@ -51,7 +53,8 @@ export default function Wishlist() {
         `/api/products/${p.slug}`,
       );
       const detail = 'product' in raw && raw.product ? raw.product : (raw as ProductDetail);
-      const variant = detail.variants.find((v) => v.stock > 0) ?? detail.variants[0];
+      // Made to order: every size is orderable — default to the first chip.
+      const variant = detail.variants[0];
       if (!variant) {
         navigate(`/product/${p.slug}`);
         return;

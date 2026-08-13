@@ -52,13 +52,5 @@
 .page-plp .promo-tile .eyebrow { color: var(--gold-soft); display: block; margin-bottom: 1rem; }
 .page-plp .promo-tile h3 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: clamp(1.6rem,3vw,2.3rem); line-height: 1.15; margin: 0 0 1.4rem; }
 
-/* colour swatch fills (data-driven colours, tokens where they exist) */
-.page-plp .sw.c-sage, .page-pdp .swatch.c-sage { background: #9CB6AA; }
-.page-plp .sw.c-moss, .page-pdp .swatch.c-moss { background: #7C9A8C; }
-.page-plp .sw.c-pistachio, .page-pdp .swatch.c-pistachio { background: #DDE7CB; }
-.page-plp .sw.c-antique-gold, .page-pdp .swatch.c-antique-gold { background: #C9AE7A; }
-.page-plp .sw.c-deep-forest, .page-pdp .swatch.c-deep-forest { background: #34423A; }
-.page-plp .sw.c-eucalyptus, .page-pdp .swatch.c-eucalyptus { background: #E8EFE2; }
-.page-plp .sw.c-celadon, .page-pdp .swatch.c-celadon { background: #CFE0D8; }
-.page-plp .sw.c-mint, .page-pdp .swatch.c-mint { background: #D9E6DA; }
-.page-plp .sw.c-default, .page-pdp .swatch.c-default { background: #B9D0C6; }
+/* Swatch colours come from COLOR_FAMILY_META (inline style) — one source of
+   truth for the whole catalogue, no per-name CSS classes. */

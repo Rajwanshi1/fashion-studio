@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { displayPrice, displaySalePrice, effectiveBasePrice } from '../lib/format';
+import { COLOR_FAMILY_META } from '../lib/types';
 import type { ProductDetail, ProductImage, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useWishlist } from '../lib/wishlist';
@@ -15,19 +16,8 @@ import type { GalleryTrigger } from '../components/StageCarousel';
 import Price from '../components/Price';
 import Reveal from '../components/Reveal';
 import Ambient from '../components/Ambient';
+import { usePageTitle } from '../lib/usePageTitle';
 import '../styles/pdp.css';
-
-const COLOR_CLASS: Record<string, string> = {
-  Sage: 'c-sage',
-  Moss: 'c-moss',
-  Pistachio: 'c-pistachio',
-  'Antique Gold': 'c-antique-gold',
-  'Deep Forest': 'c-deep-forest',
-  Eucalyptus: 'c-eucalyptus',
-  Celadon: 'c-celadon',
-  Mint: 'c-mint',
-};
-const SWATCH_PALETTE = ['Sage', 'Moss', 'Antique Gold', 'Deep Forest'];
 
 /** Positional fallback when a gallery row carries no pose. */
 const poseLabel = (img: ProductImage, i: number) => img.pose || `View ${i + 1}`;
@@ -41,12 +31,12 @@ export default function Product() {
   const { showToast } = useToast();
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
+  usePageTitle(product?.name);
   const [related, setRelated] = useState<ProductSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [thumb, setThumb] = useState(0);
-  const [color, setColor] = useState('');
   const [variantId, setVariantId] = useState('');
   const [qty, setQty] = useState(1);
   // Set pieces are included by default; unticking removes them from the price.
@@ -81,11 +71,11 @@ export default function Product() {
             props: { slug: detail.slug, name: detail.name, price: detail.price },
           });
         }
-        setColor(detail.color);
         setIncDupatta(detail.dupattaPrice != null);
         setIncJacket(detail.jacketPrice != null);
-        const firstInStock = detail.variants.find((v) => v.stock > 0) ?? detail.variants[0];
-        setVariantId(firstInStock?.id ?? '');
+        // Made to order: every size is orderable, so the first chip (XS) is
+        // simply the first choice — stock plays no part in selection.
+        setVariantId(detail.variants[0]?.id ?? '');
         if (rel.length) {
           setRelated(rel.filter((r) => r.id !== detail.id).slice(0, 4));
         } else {
@@ -148,13 +138,6 @@ export default function Product() {
     setThumb(i);
   };
 
-  const swatches = useMemo(() => {
-    if (!product) return SWATCH_PALETTE;
-    return SWATCH_PALETTE.includes(product.color)
-      ? SWATCH_PALETTE
-      : [product.color, ...SWATCH_PALETTE.slice(0, 3)];
-  }, [product]);
-
   const selectedVariant = product?.variants.find((v) => v.id === variantId);
   const isMadeToMeasure = selectedVariant?.size === 'Custom';
   const detailLines = useMemo(
@@ -184,7 +167,7 @@ export default function Product() {
         productSlug: product.slug,
         name: product.name,
         size: selectedVariant.size,
-        color,
+        color: product.color,
         unitPrice: liveTotal,
         imageUrl: product.imageUrl,
         includeDupatta: chosenDupatta != null,
@@ -279,23 +262,21 @@ export default function Product() {
 
           <div className="opt-label">
             <span>
-              Colour — <strong id="colorName">{color}</strong>
+              Colour — <strong id="colorName">{product.color}</strong>
             </span>
           </div>
-          <div className="swatches" id="swatches">
-            {swatches.map((c) => (
-              <button
-                key={c}
-                className={`swatch ${COLOR_CLASS[c] ?? 'c-default'}${c === color ? ' active' : ''}`}
-                aria-label={c}
-                title={c}
-                onClick={() => {
-                  setColor(c);
-                  track('color_select', { productId: product.id, props: { color: c } });
-                }}
+          {product.colorFamily && (
+            <div className="swatches" id="swatches">
+              {/* One truthful dot: this piece's colour family. Other colourways
+                  are separate pieces, not options on this page. */}
+              <span
+                className="swatch active"
+                title={product.color}
+                aria-hidden="true"
+                style={{ background: COLOR_FAMILY_META[product.colorFamily].swatch }}
               />
-            ))}
-          </div>
+            </div>
+          )}
 
           <div className="opt-label">
             <span>Size</span>
@@ -312,7 +293,6 @@ export default function Product() {
                 <button
                   key={v.id}
                   className={`size${custom ? ' custom' : ''}${v.id === variantId ? ' active' : ''}`}
-                  disabled={v.stock === 0}
                   onClick={() => {
                     setVariantId(v.id);
                     track('variant_select', { productId: product.id, props: { variantId: v.id, size: v.size } });

@@ -91,11 +91,9 @@ export default function ProductPicker({ products, onPick }: Props) {
                       key={v.id}
                       type="button"
                       className="chip"
-                      disabled={v.stock <= 0}
-                      title={v.stock <= 0 ? 'Out of stock — record it as a custom line instead' : undefined}
                       onClick={() => pick(p, v.id, v.size, v.stock)}
                     >
-                      {v.size} · {v.stock} in stock
+                      {v.size} · {v.stock > 0 ? `${v.stock} in stock` : 'made to order'}
                     </button>
                   ))}
                 </div>

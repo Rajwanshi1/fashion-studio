@@ -568,8 +568,7 @@ export function OrderIntakeForm({ initial, documentIds, measurementSets, onDone 
               />
               {row.variantId && row.stock !== undefined && Math.round(Number(row.qty) || 0) > row.stock && (
                 <p className="parse-note" role="note">
-                  Only {row.stock} in stock — the bill will be refused unless you lower the
-                  quantity or unlink the piece.
+                  Only {Math.max(row.stock, 0)} ready in stock — the rest will be cut to order.
                 </p>
               )}
             </div>

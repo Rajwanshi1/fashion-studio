@@ -790,11 +790,10 @@ export default function ProductEdit() {
           </label>
           {!form.active &&
             (() => {
+              // No stock nudge: 0 stock everywhere is the normal made-to-order state.
               const missing = [
                 form.images.length === 0 && 'add a photo',
                 !form.description.trim() && 'write a description',
-                Object.values(stocks).every((s) => Math.round(Number(s) || 0) === 0) &&
-                  'stock at least one size',
               ].filter(Boolean);
               return (
                 <p className="x">
