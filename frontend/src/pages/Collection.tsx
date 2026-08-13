@@ -1,9 +1,8 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { track } from '../lib/analytics';
 import { useSiteContent } from '../lib/content';
-import { displayPrice } from '../lib/format';
 import type { Category, ColorFamily, ProductSort, ProductsResponse, ProductSummary } from '../lib/types';
 import { COLOR_FAMILIES, COLOR_FAMILY_META } from '../lib/types';
 import Shop from '../components/Shop';
@@ -14,12 +13,11 @@ import Ambient from '../components/Ambient';
 import '../styles/plp.css';
 import { usePageTitle } from '../lib/usePageTitle';
 
-const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'Custom'];
-const OCCASIONS = ['Wedding', 'Reception', 'Festive', 'Cocktail'];
-/** Heading and sidebar label for the slugless route — the whole catalogue. */
+/** Heading and sidebar label for the slugless route — the whole catalogue.
+ *  Only server-backed dimensions are offered as filters (category, colour,
+ *  collection, sort) — the old size/occasion/price controls filtered nothing
+ *  or only the visible page, which is worse than no filter (audit §02). */
 const ALL_PIECES = 'All Pieces';
-const PRICE_MIN = 50000; // rupees
-const PRICE_MAX = 300000; // rupees
 
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'featured', label: 'Featured' },
@@ -50,9 +48,6 @@ export default function Collection() {
   const [error, setError] = useState<string | null>(null);
 
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [sizes, setSizes] = useState<string[]>([]);
-  const [occasions, setOccasions] = useState<string[]>([]);
-  const [priceMax, setPriceMax] = useState(PRICE_MAX);
 
   useEffect(() => {
     api
@@ -103,12 +98,7 @@ export default function Collection() {
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' '));
 
-  const items = useMemo(() => {
-    let list = data?.items ?? [];
-    if (occasions.length) list = list.filter((p) => occasions.includes(p.occasion));
-    if (priceMax < PRICE_MAX) list = list.filter((p) => displayPrice(p) <= priceMax * 100);
-    return list;
-  }, [data, occasions, priceMax]);
+  const items = data?.items ?? [];
 
   // Value-based guard (not a one-shot boolean): a plain "have we run before"
   // flag is inverted by StrictMode's mount double-invoke (invocation 1 flips
@@ -118,35 +108,21 @@ export default function Collection() {
   // slug ref is: both StrictMode invocations see the snapshot still matches
   // the initial values and bail, and the snapshot only advances once an
   // event actually fires.
-  const lastFilterRef = useRef<{ color: string; occasions: string[]; priceMax: number; collection: string }>({
-    color,
-    occasions,
-    priceMax,
-    collection,
-  });
+  const lastFilterRef = useRef<{ color: string; collection: string }>({ color, collection });
   useEffect(() => {
     const last = lastFilterRef.current;
-    const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
-    if (
-      last.color === color &&
-      sameList(last.occasions, occasions) &&
-      last.priceMax === priceMax &&
-      last.collection === collection
-    ) {
+    if (last.color === color && last.collection === collection) {
       return;
     }
     const t = setTimeout(() => {
-      lastFilterRef.current = { color, occasions, priceMax, collection };
-      track('filter_apply', { props: { category: categorySlug, color, occasions, priceMax, collection } });
+      lastFilterRef.current = { color, collection };
+      track('filter_apply', { props: { category: categorySlug, color, collection } });
     }, 500);
     return () => clearTimeout(t);
     // categorySlug intentionally excluded: only filter changes should re-arm
     // the debounce, not a category navigation on its own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [color, occasions, priceMax, collection]);
-
-  const toggleIn = (list: string[], v: string) =>
-    list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
+  }, [color, collection]);
 
   /** Set/clear the server-filter search params in one go; any change resets paging. */
   const patchParams = (patch: Record<string, string>) => {
@@ -176,9 +152,6 @@ export default function Collection() {
   };
 
   const clearAll = () => {
-    setSizes([]);
-    setOccasions([]);
-    setPriceMax(PRICE_MAX);
     if (collection || color) patchParams({ collection: '', color: '' });
   };
 
@@ -198,9 +171,6 @@ export default function Collection() {
 
   const pages = data?.pages ?? 1;
   const total = data?.total ?? 0;
-  // Colour and collection are server filters, so `total` still describes the
-  // rendered set; only the client-side filters make it stale.
-  const hasClientFilters = sizes.length > 0 || occasions.length > 0 || priceMax < PRICE_MAX;
   const colorMeta = color ? COLOR_FAMILY_META[color as ColorFamily] : undefined;
 
   const cards: ProductSummary[] = items;
@@ -241,7 +211,9 @@ export default function Collection() {
               {ALL_PIECES}
             </label>
             {(cats.length
-              ? cats
+              ? // Empty categories are hidden (audit: no doors to empty rooms) —
+                // unless one IS the current route, which must stay clearable.
+                cats.filter((c) => (c.productCount ?? 0) > 0 || c.slug === categorySlug)
               : // Categories failed to load: keep the current one visible so it can
                 // still be cleared. On the slugless route there is nothing to stand in for.
                 allPieces
@@ -277,20 +249,6 @@ export default function Collection() {
               })}
             </div>
           </div>
-          <div className="fgroup">
-            <h4>Size</h4>
-            <div className="fsizes">
-              {SIZES.map((s) => (
-                <button
-                  key={s}
-                  className={`fsize${sizes.includes(s) ? ' on' : ''}`}
-                  onClick={() => setSizes((prev) => toggleIn(prev, s))}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
           {collectionNames.length > 0 && (
             <div className="fgroup">
               <h4>Collection</h4>
@@ -306,43 +264,12 @@ export default function Collection() {
               ))}
             </div>
           )}
-          <div className="fgroup">
-            <h4>Occasion</h4>
-            {OCCASIONS.map((o) => (
-              <label className="fopt" key={o}>
-                <input
-                  type="checkbox"
-                  checked={occasions.includes(o)}
-                  onChange={() => setOccasions((prev) => toggleIn(prev, o))}
-                />{' '}
-                {o}
-              </label>
-            ))}
-          </div>
-          <div className="fgroup">
-            <h4>Price</h4>
-            <div className="frange">
-              <span>₹50,000</span>
-              <input
-                type="range"
-                min={PRICE_MIN}
-                max={PRICE_MAX}
-                value={priceMax}
-                onChange={(e) => setPriceMax(Number(e.target.value))}
-                style={{ flex: 1, accentColor: 'var(--forest-700)' }}
-                aria-label="Maximum price"
-              />
-              <span>₹3,00,000+</span>
-            </div>
-          </div>
         </aside>
 
         {/* RESULTS */}
         <section>
           <div className="plp-bar">
-            <span className="count">
-              {loading ? 'Loading…' : `${hasClientFilters ? cards.length : total} Pieces`}
-            </span>
+            <span className="count">{loading ? 'Loading…' : `${total} Pieces`}</span>
             <div className="sort">
               <label htmlFor="sort">Sort</label>
               <select id="sort" value={sort} onChange={(e) => setSort(e.target.value)}>
@@ -372,22 +299,6 @@ export default function Collection() {
                 </button>
               </span>
             )}
-            {sizes.map((s) => (
-              <span className="ac" key={s}>
-                Size {s}{' '}
-                <button aria-label={`Remove size ${s}`} onClick={() => setSizes((p) => toggleIn(p, s))}>
-                  ✕
-                </button>
-              </span>
-            ))}
-            {occasions.map((o) => (
-              <span className="ac" key={o}>
-                {o}{' '}
-                <button aria-label={`Remove ${o}`} onClick={() => setOccasions((p) => toggleIn(p, o))}>
-                  ✕
-                </button>
-              </span>
-            ))}
             {collection && (
               <span className="ac">
                 {collection}{' '}
@@ -396,15 +307,7 @@ export default function Collection() {
                 </button>
               </span>
             )}
-            {priceMax < PRICE_MAX && (
-              <span className="ac">
-                Under ₹{priceMax.toLocaleString('en-IN')}{' '}
-                <button aria-label="Remove price filter" onClick={() => setPriceMax(PRICE_MAX)}>
-                  ✕
-                </button>
-              </span>
-            )}
-            {(hasClientFilters || collection !== '' || color !== '') && (
+            {(collection !== '' || color !== '') && (
               <button className="clear" onClick={clearAll}>
                 Clear all
               </button>

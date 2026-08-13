@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useLiveCategories } from '../lib/categories';
 import { useSiteContent } from '../lib/content';
 import BrandLogo from './BrandLogo';
 
@@ -20,6 +21,7 @@ function Social({ url, children }: { url: string; children: string }) {
 
 export default function Footer({ mark = false }: FooterProps) {
   const { footer } = useSiteContent();
+  const categories = useLiveCategories();
   return (
     <footer className="foot" style={mark ? { marginTop: 0 } : undefined}>
       {mark && <div className="foot-mark">Tanvi Agnihotry</div>}
@@ -33,20 +35,23 @@ export default function Footer({ mark = false }: FooterProps) {
           )}
           <p>{footer.blurb}</p>
         </div>
+        {/* One column set on every page (the old mark/inner split disagreed
+            with itself, audit §02). Shop lists only categories with pieces. */}
         <div className="foot-col">
           <h5>Shop</h5>
-          <Link to="/collection/lehenga">Lehenga</Link>
-          <Link to="/collection/anarkali">Anarkali</Link>
-          <Link to="/collection/suits">Suits</Link>
-          <Link to="/collection/kaftan">Kaftan</Link>
-          <Link to="/collection/antifit">Antifit</Link>
+          <Link to="/collection">All Pieces</Link>
+          {categories.map((c) => (
+            <Link key={c.slug} to={`/collection/${c.slug}`}>
+              {c.name}
+            </Link>
+          ))}
         </div>
         <div className="foot-col">
           <h5>The House</h5>
           <Link to="/the-house">Our Story</Link>
-          {mark ? <Link to="/lookbook">Lookbook</Link> : <Link to="/the-house">Artisanship</Link>}
+          <Link to="/lookbook">Lookbook</Link>
           <Link to="/contact">Made to Order</Link>
-          {mark ? <Link to="/client-care">Client Care</Link> : <Link to="/client-care">Press</Link>}
+          <Link to="/client-care">Client Care</Link>
         </div>
         <div className="foot-col">
           <h5>Client Care</h5>

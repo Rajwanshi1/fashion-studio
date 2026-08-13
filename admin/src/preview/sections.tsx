@@ -218,12 +218,12 @@ export function FooterPreview({ footer }: { footer: FooterContent }) {
         <div className="foot-brand">
           <p>{footer.blurb}</p>
         </div>
+        {/* The storefront's Shop column lists live categories from the API —
+            the preview stands in with the catalogue's current pair. */}
         <div className="foot-col">
           <h5>Shop</h5>
-          <a>Lehenga</a>
+          <a>All Pieces</a>
           <a>Anarkali</a>
-          <a>Suits</a>
-          <a>Kaftan</a>
           <a>Antifit</a>
         </div>
         <div className="foot-col">
@@ -256,13 +256,14 @@ export function FooterPreview({ footer }: { footer: FooterContent }) {
 
 /* ---- MIRROR of frontend/src/pages/Lookbook.tsx — cover + spreads + quote ---- */
 
-function CaptionPreview({ look }: { look: LookContent }) {
+function CaptionPreview({ look, under = false }: { look: LookContent; under?: boolean }) {
+  if (!look.title && !look.copy) return null;
   return (
-    <div className="caption">
+    <div className={`caption${under ? ' under' : ''}`}>
       <span className="look-no">{look.lookNo}</span>
-      <h3>{look.title}</h3>
-      <p>{look.copy}</p>
-      <a className="shop-look">Shop the Look →</a>
+      {look.title && <h3>{look.title}</h3>}
+      {look.copy && <p>{look.copy}</p>}
+      {look.ctaHref && <a className="shop-look">Shop the Look →</a>}
     </div>
   );
 }
@@ -327,8 +328,14 @@ export function LookbookPreview({
         </section>
 
         <section className="spread duo">
-          <LookSlotPreview className="ar34" look={looks[1]} label="Look 02" />
-          <LookSlotPreview className="ar34" look={looks[2]} label="Look 03" />
+          <div>
+            <LookSlotPreview className="ar34" look={looks[1]} label="Look 02" />
+            <CaptionPreview look={looks[1]} under />
+          </div>
+          <div>
+            <LookSlotPreview className="ar34" look={looks[2]} label="Look 03" />
+            <CaptionPreview look={looks[2]} under />
+          </div>
         </section>
 
         {/* the pull-quote sits mid-page, between the first duo and Look 04 */}
@@ -343,12 +350,21 @@ export function LookbookPreview({
         </section>
 
         <section className="spread duo">
-          <LookSlotPreview className="ar34" look={looks[4]} label="Look 05" />
-          <LookSlotPreview className="ar34" look={looks[5]} label="Look 06" />
+          <div>
+            <LookSlotPreview className="ar34" look={looks[4]} label="Look 05" />
+            <CaptionPreview look={looks[4]} under />
+          </div>
+          <div>
+            <LookSlotPreview className="ar34" look={looks[5]} label="Look 06" />
+            <CaptionPreview look={looks[5]} under />
+          </div>
         </section>
 
         <section className="spread">
-          <LookSlotPreview className="ar54" look={looks[6]} label="Look 07 — full bleed" />
+          <div>
+            <LookSlotPreview className="ar54" look={looks[6]} label="Look 07 — full bleed" />
+            <CaptionPreview look={looks[6]} under />
+          </div>
         </section>
       </main>
     </>

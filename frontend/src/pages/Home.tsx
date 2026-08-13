@@ -1,10 +1,12 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
+import { useLiveCategories } from '../lib/categories';
 import { MARQUEE_MIN_CHARS, fillTrack, useSiteContent } from '../lib/content';
-import type { Category, ProductSummary, ProductsResponse } from '../lib/types';
+import type { ProductSummary, ProductsResponse } from '../lib/types';
 import { track } from '../lib/analytics';
 import Nav from '../components/Nav';
+import Ticker from '../components/Ticker';
 import Footer from '../components/Footer';
 import ImageSlot from '../components/ImageSlot';
 import Price from '../components/Price';
@@ -13,16 +15,10 @@ import Ambient from '../components/Ambient';
 import '../styles/home.css';
 import { usePageTitle } from '../lib/usePageTitle';
 
-const FALLBACK_CATS: Array<Pick<Category, 'slug' | 'name'>> = [
-  { slug: 'lehenga', name: 'Lehenga' },
-  { slug: 'anarkali', name: 'Anarkali' },
-  { slug: 'suits', name: 'Suits' },
-  { slug: 'kaftan', name: 'Kaftan' },
-];
-
 export default function Home() {
   usePageTitle('');
-  const [cats, setCats] = useState<Array<Pick<Category, 'slug' | 'name'>>>(FALLBACK_CATS);
+  // Only categories with pieces — an empty door is worse than a shorter row.
+  const cats = useLiveCategories().slice(0, 4);
   const [best, setBest] = useState<ProductSummary[]>([]);
   const site = useSiteContent();
   // One copy of the marquee has to span the strip before it can be doubled into
@@ -31,15 +27,6 @@ export default function Home() {
   const marquee = fillTrack(site.marquee.items, MARQUEE_MIN_CHARS);
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<Category[] | { items: Category[] }>('/api/categories')
-      .then((data) => {
-        const list = Array.isArray(data) ? data : data.items;
-        if (!cancelled && list?.length) {
-          setCats([...list].sort((a, b) => a.position - b.position).slice(0, 4));
-        }
-      })
-      .catch(() => undefined);
     api
       .get<ProductsResponse>('/api/products?sort=featured&page=1&limit=5')
       .then((data) => {
@@ -53,6 +40,9 @@ export default function Home() {
 
   return (
     <div className="page-home">
+      {/* The announcement bar runs on every page — the homepage was the one
+          place it went missing (audit §02). */}
+      <Ticker />
       <Nav home />
 
       {/* HERO */}
@@ -89,24 +79,27 @@ export default function Home() {
         </div>
       </header>
 
-      {/* WARDROBE / CATEGORIES */}
-      <section className="wardrobe" id="cats" style={{ paddingTop: 'var(--section-y)' }}>
-        <div className="head-center">
-          <span className="eyebrow">The Wardrobe</span>
-          <h2>Shop by category</h2>
-        </div>
-        <div className="cats">
-          {cats.map((c) => (
-            <Link className="cat" key={c.slug} to={`/collection/${c.slug}`}>
-              <ImageSlot label={c.name} />
-              <div className="cap">
-                <span className="name">{c.name}</span>
-                <span className="go">Explore →</span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {/* WARDROBE / CATEGORIES — hidden entirely until at least one category
+          has pieces in it. */}
+      {cats.length > 0 && (
+        <section className="wardrobe" id="cats" style={{ paddingTop: 'var(--section-y)' }}>
+          <div className="head-center">
+            <span className="eyebrow">The Wardrobe</span>
+            <h2>Shop by category</h2>
+          </div>
+          <div className="cats">
+            {cats.map((c) => (
+              <Link className="cat" key={c.slug} to={`/collection/${c.slug}`}>
+                <ImageSlot label={c.name} />
+                <div className="cap">
+                  <span className="name">{c.name}</span>
+                  <span className="go">Explore →</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* MARQUEE */}
       <div className="marquee" aria-hidden="true">

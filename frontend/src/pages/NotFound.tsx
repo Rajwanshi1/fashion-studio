@@ -34,7 +34,7 @@ export default function NotFound() {
             </Link>
           </div>
           <div className="links">
-            <Link to="/collections">Collections</Link>
+            <Link to="/collection">The Collection</Link>
             <Link to="/lookbook">Lookbook</Link>
             <Link to="/the-house">The House</Link>
             <Link to="/contact">Contact</Link>

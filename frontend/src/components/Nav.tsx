@@ -46,20 +46,12 @@ export default function Nav({ home = false }: NavProps) {
           <span></span>
           <span></span>
         </button>
+        {/* One canonical set on every page — two different navs read as two
+            different shops (audit §02). */}
         <div className="nav-links left">
-          {home ? (
-            <>
-              <Link to="/collections">Collections</Link>
-              <Link to="/lookbook">Lookbook</Link>
-              <Link to="/the-house">About Us</Link>
-            </>
-          ) : (
-            <>
-              <Link to="/collection">Women</Link>
-              <Link to="/collections">Collections</Link>
-              <Link to="/lookbook">Lookbook</Link>
-            </>
-          )}
+          <Link to="/collection">The Collection</Link>
+          <Link to="/lookbook">Lookbook</Link>
+          <Link to="/the-house">The House</Link>
         </div>
         <div className="wordmark">
           <Link to="/">

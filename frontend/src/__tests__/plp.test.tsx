@@ -67,7 +67,7 @@ describe('PLP', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Lehenga' })).toBeInTheDocument();
   });
 
-  it('refetches server-side when a collection is picked, and filters occasions client-side', async () => {
+  it('refetches server-side when a collection is picked; no cosmetic filters offered', async () => {
     const fetchMock = mockFetch((url) => {
       if (url.includes('/api/categories')) return CATEGORIES;
       if (url.includes('/api/collections')) return ['Festive Edit', 'The Verdant Edit'];
@@ -85,10 +85,11 @@ describe('PLP', () => {
       expect(productUrls(fetchMock).some((u) => u.includes('collection=Festive%20Edit'))).toBe(true);
     });
 
-    // Occasion checkboxes now really filter (P1 = Wedding, P2 = Festive).
-    await user.click(screen.getByRole('checkbox', { name: 'Wedding' }));
-    expect(screen.getAllByText('Sage Sequin Jacket Lehenga').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Moss Tissue Mirror Lehenga')).not.toBeInTheDocument();
+    // The old size/occasion/price controls filtered nothing (or only the
+    // visible page) — they are gone, not fixed (audit §02).
+    expect(screen.queryByRole('checkbox', { name: 'Wedding' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Size')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Maximum price')).not.toBeInTheDocument();
   });
 
   it('refetches with the chosen sort', async () => {
@@ -146,7 +147,7 @@ describe('PLP', () => {
     const filterCalls = vi.mocked(track).mock.calls.filter(([type]) => type === 'filter_apply');
     expect(filterCalls).toHaveLength(1);
     expect(filterCalls[0][1]).toEqual({
-      props: { category: 'lehenga', color: 'blue', occasions: [], priceMax: 300000, collection: '' },
+      props: { category: 'lehenga', color: 'blue', collection: '' },
     });
   });
 

@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { useSiteContent } from '../lib/content';
 import BrandLogo from './BrandLogo';
 
+// The same canonical set as the desktop nav (plus Client Care, which desktop
+// carries in the footer) — one nav, every page, every width.
 const LINKS = [
-  { t: 'Women', h: '/collection' },
-  { t: 'Collections', h: '/collections' },
+  { t: 'The Collection', h: '/collection' },
   { t: 'Lookbook', h: '/lookbook' },
   { t: 'The House', h: '/the-house' },
   { t: 'Client Care', h: '/client-care' },
