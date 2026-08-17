@@ -140,10 +140,17 @@ const productImagePresignSchema = z
     // Both or neither: naming needs the piece's name AND the pixels.
     productName: z.string().min(1).optional(),
     imageBase64: z.string().max(MAX_IMAGE_BASE64).optional(),
+    // Downscaled-copy widths the client will also upload (admin image.ts
+    // generates them from the master). Each gets its own presigned PUT.
+    renditionWidths: z.array(z.number().int().min(100).max(2000)).max(6).optional(),
   })
   .refine((v) => (v.productName === undefined) === (v.imageBase64 === undefined), {
     message: 'productName and imageBase64 must be sent together',
   });
+
+/** Product photos never change under a key (keys are unique per upload), so
+ *  `immutable` is honest — browsers and the CDN may cache them for a year. */
+const PRODUCT_IMAGE_CACHE_CONTROL = 'public,max-age=31536000,immutable';
 
 const flagSchema = z.enum(['bestseller', 'new', 'sale']).nullable();
 
@@ -220,6 +227,10 @@ const productBaseSchema = z.object({
         pose: z.string().optional(),
         color: z.string().max(40).optional(),
         colorHex: z.string().regex(/^#[0-9a-f]{6}$/i).or(z.literal('')).optional(),
+        // Master pixel dimensions — the admin sends them only when every
+        // rendition upload landed; absent keeps the row srcset-less.
+        width: z.number().int().positive().optional(),
+        height: z.number().int().positive().optional(),
       }),
     )
     .max(12)
@@ -442,11 +453,12 @@ export function adminRoutes(deps: AdminDeps) {
   // best-effort: anything unusable falls back to the uuid key, pose null.
   r.post('/uploads/product-image', zValidator('json', productImagePresignSchema, zodHook), async (c) => {
     if (!deps.objectStore) return c.json({ error: 'Uploads are not configured' }, 503);
-    const { contentType, productName, imageBase64 } = c.req.valid('json');
+    const { contentType, productName, imageBase64, renditionWidths } = c.req.valid('json');
     let key: string | null = null;
     let pose: string | null = null;
     let color: string | null = null;
     let colorHex: string | null = null;
+    // Vision naming runs ONCE, on the master — renditions inherit its key.
     if (productName && imageBase64 && deps.catalogAi) {
       try {
         const bytes = Buffer.from(imageBase64, 'base64');
@@ -464,9 +476,18 @@ export function adminRoutes(deps: AdminDeps) {
       }
     }
     if (!key) key = newStorageKey('products');
-    const { url, headers } = await deps.objectStore.presignPut(key, contentType);
+    const { url, headers } = await deps.objectStore.presignPut(key, contentType, PRODUCT_IMAGE_CACHE_CONTROL);
+    // One presigned PUT per rendition; keys derive from the master's so the
+    // storefront can rebuild them from the stored URL alone (`_w{width}.jpg`).
+    const renditions = await Promise.all(
+      (renditionWidths ?? []).map(async (width) => {
+        const renditionKey = key!.replace(/\.jpg$/, `_w${width}.jpg`);
+        const presigned = await deps.objectStore!.presignPut(renditionKey, contentType, PRODUCT_IMAGE_CACHE_CONTROL);
+        return { width, key: renditionKey, uploadUrl: presigned.url, headers: presigned.headers };
+      }),
+    );
     return c.json(
-      { key, uploadUrl: url, headers, publicUrl: deps.objectStore.publicUrl(key), pose, color, colorHex },
+      { key, uploadUrl: url, headers, publicUrl: deps.objectStore.publicUrl(key), pose, color, colorHex, renditions },
       201,
     );
   });

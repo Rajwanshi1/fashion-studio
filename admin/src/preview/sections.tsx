@@ -32,10 +32,14 @@ interface PreviewImageProps {
   className?: string;
   focusX?: number;
   focusY?: number;
+  /** Intrinsic dims when known (product photos) — CMS images carry none.
+   *  No renditions/srcset in the preview; dims just reserve layout. */
+  width?: number | null;
+  height?: number | null;
 }
 
 export function PreviewImage({
-  src, alt = '', label = '', className = '', focusX, focusY,
+  src, alt = '', label = '', className = '', focusX, focusY, width, height,
 }: PreviewImageProps) {
   const cls = className ? `img-slot ${className}` : 'img-slot';
   if (src) {
@@ -46,7 +50,16 @@ export function PreviewImage({
     // the canvas mounts ~11 full-resolution originals, nearly all below the
     // fold, to paint scaled-down previews.
     return (
-      <img className={cls} src={src} alt={alt || label} style={style} loading="lazy" decoding="async" />
+      <img
+        className={cls}
+        src={src}
+        alt={alt || label}
+        style={style}
+        width={width ?? undefined}
+        height={height ?? undefined}
+        loading="lazy"
+        decoding="async"
+      />
     );
   }
   return (

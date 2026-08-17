@@ -48,6 +48,9 @@
 .page-plp .promo-tile { grid-column: span 2; background: var(--forest-800); color: var(--celadon-100); display: grid; grid-template-columns: 1fr 1fr; align-items: center; }
 @media (max-width: 560px){ .page-plp .promo-tile { grid-column: span 2; grid-template-columns: 1fr; } }
 .page-plp .promo-tile .img-slot { width: 100%; height: 100%; min-height: 320px; }
+/* Single-column tile: a fixed aspect ratio (the grid's 4:5 card shape) keeps
+   the photo from reflowing the copy below it as it loads at mobile widths. */
+@media (max-width: 560px){ .page-plp .promo-tile .img-slot { height: auto; min-height: 0; aspect-ratio: 4 / 5; } }
 .page-plp .promo-tile .pt { padding: clamp(1.6rem,4vw,3rem); }
 .page-plp .promo-tile .eyebrow { color: var(--gold-soft); display: block; margin-bottom: 1rem; }
 .page-plp .promo-tile h3 { font-family: var(--serif-soft); font-style: italic; font-weight: 300; font-size: clamp(1.6rem,3vw,2.3rem); line-height: 1.15; margin: 0 0 1.4rem; }

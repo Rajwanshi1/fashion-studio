@@ -79,6 +79,9 @@ export const P1: ProductSummary = {
   addonsTotal: 0,
   colorFamily: 'green',
   salePrice: null,
+  imageWidth: null,
+  imageHeight: null,
+  imageColorHex: null,
 };
 
 /** On sale: base 1,72,000 → 1,29,000. Exercises the card's struck-through price. */
@@ -97,6 +100,9 @@ export const P2: ProductSummary = {
   addonsTotal: 0,
   colorFamily: 'green',
   salePrice: 12900000,
+  imageWidth: null,
+  imageHeight: null,
+  imageColorHex: null,
 };
 
 export const DETAIL1: ProductDetail = {

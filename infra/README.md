@@ -32,8 +32,12 @@ source of truth — the old `app.yaml`/`edge.yaml` templates have been removed:
    `/qr-socials/` via a viewer-request CloudFront Function that rewrites the two
    entry paths to `qr-socials/index.html`) and admin. The socials app has no
    distribution or bucket of its own — its build is synced to the `qr-socials/`
-   prefix of the storefront bucket. With a domain: CloudFront aliases + A/AAAA
-   alias records for apex/www (storefront), `admin.` and `api.`.
+   prefix of the storefront bucket. A third **media** distribution serves the
+   uploads bucket's public `products/*` prefix (own cert in the waf stack,
+   `media.<domain>` alias, `KeepLegacyPublicRead` gates the old direct-S3
+   reads) — rollout choreography in `docs/media-cdn-runbook.md`. With a
+   domain: CloudFront aliases + A/AAAA alias records for apex/www
+   (storefront), `admin.`, `api.` and `media.`.
 
 Every `deploy_stack` call enables stack termination protection right after deploying,
 so deleting a stack first needs `update-termination-protection --no-...`.

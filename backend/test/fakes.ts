@@ -261,6 +261,10 @@ const addonsTotal = (p: AdminProduct) =>
   p.components.reduce((sum, c) => sum + (c.optional ? (c.price ?? 0) : 0), 0);
 
 function toSummary(p: AdminProduct): ProductSummary {
+  // Mirrors the repo's first-image lateral join: dims/hex ride along from the
+  // first gallery row; null when the gallery is empty (color_hex is '' on a
+  // hex-less row, matching the column default).
+  const first = p.images[0];
   return {
     id: p.id,
     slug: p.slug,
@@ -276,6 +280,9 @@ function toSummary(p: AdminProduct): ProductSummary {
     addonsTotal: addonsTotal(p),
     colorFamily: p.colorFamily,
     salePrice: p.salePrice,
+    imageWidth: first?.width ?? null,
+    imageHeight: first?.height ?? null,
+    imageColorHex: first ? first.colorHex : null,
   };
 }
 
@@ -469,6 +476,8 @@ export class FakeProductsRepo implements ProductsRepo {
         pose: im.pose ?? '',
         color: im.color ?? '',
         colorHex: im.colorHex ?? '',
+        width: im.width ?? null,
+        height: im.height ?? null,
       })),
       components: toComponents(input.components),
       // Mirrors the real repo: new pieces start hidden unless explicitly published.
@@ -519,6 +528,8 @@ export class FakeProductsRepo implements ProductsRepo {
         pose: im.pose ?? '',
         color: im.color ?? '',
         colorHex: im.colorHex ?? '',
+        width: im.width ?? null,
+        height: im.height ?? null,
       }));
       p.imageUrl = p.images[0]?.url ?? null;
     }
@@ -1324,8 +1335,11 @@ export class FakeMeasurementsRepo implements MeasurementsRepo {
 export class FakeObjectStore implements ObjectStore {
   objects = new Map<string, { bytes: Uint8Array; contentType: string }>();
 
-  async presignPut(key: string, contentType: string) {
-    return { url: `https://uploads.test/${encodeURIComponent(key)}`, headers: { 'Content-Type': contentType } };
+  // Mirrors S3ObjectStore: cacheControl becomes a header the client must send.
+  async presignPut(key: string, contentType: string, cacheControl?: string) {
+    const headers: Record<string, string> = { 'Content-Type': contentType };
+    if (cacheControl) headers['Cache-Control'] = cacheControl;
+    return { url: `https://uploads.test/${encodeURIComponent(key)}`, headers };
   }
 
   async presignGet(key: string): Promise<string> {

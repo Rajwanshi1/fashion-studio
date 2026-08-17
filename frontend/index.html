@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/brand-logo.png" />
+    <!-- Product photos come from the media CDN — warm the connection before
+         the first <img> needs it. Harmless when the host doesn't resolve
+         (local dev serves photos from the API origin instead). -->
+    <link rel="preconnect" href="https://media.tanviagnihotry.com" />
+    <link rel="dns-prefetch" href="https://media.tanviagnihotry.com" />
     <title>Tanvi Agnihotry — Hand-embroidered, made to order · Jaipur</title>
     <meta
       name="description"

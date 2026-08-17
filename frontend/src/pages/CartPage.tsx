@@ -32,7 +32,7 @@ export default function CartPage() {
 
           {items.map((i) => (
             <article className="line" key={cartLineKey(i)}>
-              <ImageSlot src={i.imageUrl} label={i.name} alt={i.name} />
+              <ImageSlot src={i.imageUrl} label={i.name} alt={i.name} sizes="96px" />
               <div>
                 <div className="nm">
                   <Link to={`/product/${i.productSlug}`}>{i.name}</Link>

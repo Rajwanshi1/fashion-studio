@@ -105,7 +105,15 @@ export default function NavSearch({ onClose }: { onClose: () => void }) {
                 const salePrice = displaySalePrice(p);
                 return (
                   <Link className="hit" key={p.id} to={`/product/${p.slug}`} onClick={onClose}>
-                    <ImageSlot src={p.imageUrl} label={p.name} alt={p.name} />
+                    <ImageSlot
+                      src={p.imageUrl}
+                      label={p.name}
+                      alt={p.name}
+                      width={p.imageWidth}
+                      height={p.imageHeight}
+                      placeholderHex={p.imageColorHex || undefined}
+                      sizes="44px"
+                    />
                     <span className="nm">{p.name}</span>
                     <span className="pr">
                       {salePrice != null && (

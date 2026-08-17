@@ -15,6 +15,7 @@ import { createReceiptsRepo } from './data/receipts.repo';
 import { createScansRepo } from './data/scans.repo';
 import { createUsersRepo } from './data/users.repo';
 import { createPool, makeTxRunner } from './db';
+import { makeUrlRewriter } from './lib/media';
 import { migrate } from './migrate';
 import { seed } from './seed';
 import { createAnthropicClient } from './services/ai/anthropic';
@@ -50,10 +51,17 @@ async function main() {
     ? null
     : new LocalObjectStore(config.uploadsDir, config.publicApiUrl);
   // Region is passed explicitly because publicUrl builds a virtual-hosted URL
-  // for the public-read products/ prefix.
+  // for the public-read products/ prefix; MEDIA_BASE_URL switches new uploads'
+  // public URLs onto the CDN host instead.
   const objectStore = config.s3UploadsBucket
-    ? new S3ObjectStore(config.s3UploadsBucket, { region: config.awsRegion })
+    ? new S3ObjectStore(config.s3UploadsBucket, {
+        region: config.awsRegion,
+        publicBaseUrl: config.mediaBaseUrl,
+      })
     : localUploads!;
+  // Read-time rewrite of legacy raw-S3 image URLs onto the CDN (lib/media.ts);
+  // identity while MEDIA_BASE_URL is unset.
+  const rewriteMediaUrl = makeUrlRewriter(config.mediaBaseUrl, config.s3UploadsBucket, config.awsRegion);
   // Null until the key exists, which keeps the parse endpoint answering 503 and
   // the intake wizard falling back to manual entry. Models come from PARSE_SPECS
   // per document kind, so no model is passed here.
@@ -70,9 +78,9 @@ async function main() {
   const app = createApp({
     repos: {
       users: createUsersRepo(pool),
-      products: createProductsRepo(pool),
-      wishlist: createWishlistRepo(pool),
-      orders: createOrdersRepo(pool),
+      products: createProductsRepo(pool, rewriteMediaUrl),
+      wishlist: createWishlistRepo(pool, rewriteMediaUrl),
+      orders: createOrdersRepo(pool, rewriteMediaUrl),
       payments: createPaymentsRepo(pool),
       scans: createScansRepo(pool),
       clicks: createClicksRepo(pool),
@@ -125,6 +133,11 @@ async function main() {
   else console.log('whatsapp: invoice sends masked — set WHATSAPP_PROVIDER to enable');
   if (config.s3UploadsBucket) {
     console.log(`uploads: S3 bucket ${config.s3UploadsBucket} — product images (public products/) + documents (private)`);
+    if (config.mediaBaseUrl) {
+      console.log(`uploads: media CDN ${config.mediaBaseUrl} — new public URLs + read-time legacy rewrite`);
+    } else {
+      console.log('uploads: media CDN masked — set MEDIA_BASE_URL to serve product photos via the edge');
+    }
   } else {
     console.warn(`uploads: local dev store at ${config.uploadsDir} — set S3_UPLOADS_BUCKET in production`);
   }

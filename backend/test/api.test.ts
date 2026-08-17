@@ -850,7 +850,9 @@ describe('API', () => {
           active: true,
           imageUrl: 'https://cdn.test/legacy.jpg', // a gallery always wins
           images: [
-            { url: 'https://cdn.test/a.jpg', pose: 'front', color: 'Sage', colorHex: '#9cb6aa' },
+            // Dims travel only when the admin measured the master (all
+            // renditions landed); the other rows stay srcset-less (null).
+            { url: 'https://cdn.test/a.jpg', pose: 'front', color: 'Sage', colorHex: '#9cb6aa', width: 2000, height: 2500 },
             { url: 'https://cdn.test/b.jpg' },
             { url: 'https://cdn.test/c.jpg', pose: 'detail' },
           ],
@@ -859,14 +861,18 @@ describe('API', () => {
       expect(created.status).toBe(201);
       const product = await created.json();
       expect(product.images).toEqual([
-        { url: 'https://cdn.test/a.jpg', pose: 'front', color: 'Sage', colorHex: '#9cb6aa' },
-        { url: 'https://cdn.test/b.jpg', pose: '', color: '', colorHex: '' },
-        { url: 'https://cdn.test/c.jpg', pose: 'detail', color: '', colorHex: '' },
+        { url: 'https://cdn.test/a.jpg', pose: 'front', color: 'Sage', colorHex: '#9cb6aa', width: 2000, height: 2500 },
+        { url: 'https://cdn.test/b.jpg', pose: '', color: '', colorHex: '', width: null, height: null },
+        { url: 'https://cdn.test/c.jpg', pose: 'detail', color: '', colorHex: '', width: null, height: null },
       ]);
       expect(product.imageUrl).toBe('https://cdn.test/a.jpg');
 
       const summary = (await (await app.request('/api/products?search=Gallery')).json()).items[0];
       expect(summary.imageUrl).toBe(product.images[0].url);
+      // The first-image lateral join surfaces dims + hex on the summary shape.
+      expect(summary.imageWidth).toBe(2000);
+      expect(summary.imageHeight).toBe(2500);
+      expect(summary.imageColorHex).toBe('#9cb6aa');
 
       // Reordering is a wholesale replace, primary photo included.
       const reordered = await app.request(

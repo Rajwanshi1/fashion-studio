@@ -222,7 +222,7 @@ describe('site section editor', () => {
     expect(calls.some((c) => c.method === 'PUT')).toBe(false);
 
     await act(async () => {
-      land({ publicUrl: UPLOADED, pose: null, color: null, colorHex: null });
+      land({ publicUrl: UPLOADED, pose: null, color: null, colorHex: null, width: null, height: null });
     });
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -358,7 +358,7 @@ describe('site section editor', () => {
     await userEvent.type(screen.getByLabelText('Look 2 caption'), 'Ivory hour, after the rain.');
 
     await act(async () => {
-      land({ publicUrl: UPLOADED, pose: null, color: null, colorHex: null });
+      land({ publicUrl: UPLOADED, pose: null, color: null, colorHex: null, width: null, height: null });
     });
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));

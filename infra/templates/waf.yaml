@@ -13,8 +13,14 @@ Parameters:
   HostedZoneId:
     Type: String
     Default: ''
+  # Ops inbox for WAF alarms. '' (the default) creates no topic and no alarm —
+  # byte-identical behaviour to the pre-alerts stack.
+  AlertEmail:
+    Type: String
+    Default: ''
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, '']]
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, '']]
 Resources:
   # DNS validation completes only after the registrar delegates to the Route 53
   # zone — deploy.sh gates this stack behind an NS-delegation check so the
@@ -34,6 +40,20 @@ Resources:
         - { DomainName: !Sub 'www.${DomainName}', HostedZoneId: !Ref HostedZoneId }
         - { DomainName: !Sub 'admin.${DomainName}', HostedZoneId: !Ref HostedZoneId }
         - { DomainName: !Sub 'api.${DomainName}', HostedZoneId: !Ref HostedZoneId }
+      Tags: [{ Key: Project, Value: fashion-studio }, { Key: Env, Value: !Ref EnvName }]
+  # Separate cert for the media CDN host — deliberately NOT a new SAN on the
+  # Certificate above: changing an ACM cert's SAN set REPLACES the cert, and
+  # the existing one is in use by three live CloudFront distributions, so a
+  # replacement would race deletion of the old cert against the distributions
+  # letting go of it. A second cert has no such trap.
+  MediaCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Condition: HasDomain
+    Properties:
+      DomainName: !Sub 'media.${DomainName}'
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - { DomainName: !Sub 'media.${DomainName}', HostedZoneId: !Ref HostedZoneId }
       Tags: [{ Key: Project, Value: fashion-studio }, { Key: Env, Value: !Ref EnvName }]
   WebAcl:
     Type: AWS::WAFv2::WebACL
@@ -113,9 +133,69 @@ Resources:
             SampledRequestsEnabled: true
             CloudWatchMetricsEnabled: true
             MetricName: !Sub 'fashion-${EnvName}-oversize-body'
+        # Catalogue-scrape brake for the media CDN. Heavy HUMAN browsing runs
+        # ~300–600 image requests per 5 minutes (PDP galleries + renditions),
+        # and WAF counts BEFORE the CloudFront cache, so cache hits count too —
+        # 1000/5min clears every real shopper with headroom, while a scraper
+        # pulling the whole catalogue (hundreds of products × gallery ×
+        # renditions) blows through it in seconds. A referer/hotlink rule is
+        # deliberately omitted: it would break WhatsApp/OG link previews and
+        # Google Images, which fetch with no or foreign referers.
+        - Name: media-scrape-rate
+          Priority: 3
+          Action: { Block: {} }
+          Statement:
+            RateBasedStatement:
+              Limit: 1000
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  FieldToMatch: { UriPath: {} }
+                  PositionalConstraint: STARTS_WITH
+                  SearchString: /products/
+                  TextTransformations: [{ Priority: 0, Type: NONE }]
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub 'fashion-${EnvName}-media-rate'
+  # Alerts live in THIS stack (us-east-1) because CLOUDFRONT-scope WAF metrics
+  # only exist in us-east-1 — an ap-south-1 alarm would watch an empty metric.
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlertEmail
+    Properties:
+      TopicName: !Sub 'fashion-${EnvName}-waf-alerts'
+      Subscription:
+        - { Protocol: email, Endpoint: !Ref AlertEmail }
+  # NOTE: confirm the exact dimension set against a real datapoint at changeset
+  # time (aws cloudwatch list-metrics --namespace AWS/WAFV2 --region us-east-1) —
+  # WAFV2 publishes WebACL/Rule/Region=Global for CLOUDFRONT scope, but a
+  # mismatch here fails silently (alarm stays INSUFFICIENT_DATA/notBreaching).
+  MediaScrapeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
+    Properties:
+      AlarmDescription: media-scrape-rate WAF rule blocked at least one request (possible catalogue scrape)
+      Namespace: AWS/WAFV2
+      MetricName: BlockedRequests
+      Dimensions:
+        - { Name: WebACL, Value: !Sub 'fashion-${EnvName}' }
+        - { Name: Rule, Value: media-scrape-rate }
+        - { Name: Region, Value: Global }
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
 Outputs:
   WebAclArn:
     Value: !GetAtt WebAcl.Arn
   CertificateArn:
     Condition: HasDomain
     Value: !Ref Certificate
+  MediaCertificateArn:
+    Condition: HasDomain
+    Value: !Ref MediaCertificate

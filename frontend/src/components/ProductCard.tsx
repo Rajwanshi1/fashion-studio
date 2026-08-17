@@ -39,7 +39,15 @@ export default function ProductCard({ product, fav = true, quick = true }: Produ
             {saved ? '♥' : '♡'}
           </button>
         )}
-        <ImageSlot src={product.imageUrl} label={product.name} alt={product.name} />
+        <ImageSlot
+          src={product.imageUrl}
+          label={product.name}
+          alt={product.name}
+          width={product.imageWidth}
+          height={product.imageHeight}
+          placeholderHex={product.imageColorHex || undefined}
+          sizes="(max-width: 560px) 50vw, (max-width: 1100px) 33vw, 25vw"
+        />
         {quick && (
           <button
             className="quick"

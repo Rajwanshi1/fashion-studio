@@ -123,13 +123,24 @@ function rupees(paise: number | null): string {
 }
 
 /** Gallery row with a client-side id for stable list keys — the id never
- *  leaves the form (the save payload strips back to {url, pose, color, colorHex}). */
-const galleryImage = (url: string, pose: string, color = '', colorHex = ''): GalleryImage => ({
+ *  leaves the form (the save payload strips back to {url, pose, color,
+ *  colorHex, width?, height?}). Dims are null for pasted URLs and for uploads
+ *  whose renditions did not all land — the storefront then skips srcset. */
+const galleryImage = (
+  url: string,
+  pose: string,
+  color = '',
+  colorHex = '',
+  width: number | null = null,
+  height: number | null = null,
+): GalleryImage => ({
   id: crypto.randomUUID(),
   url,
   pose,
   color,
   colorHex,
+  width,
+  height,
 });
 
 /** Component row with a client-side id for stable list keys — the id never
@@ -214,7 +225,14 @@ export default function ProductEdit() {
         const gallery: GalleryImage[] =
           product.images && product.images.length > 0
             ? product.images.map((img) =>
-                galleryImage(img.url, img.pose ?? '', img.color ?? '', img.colorHex ?? ''),
+                galleryImage(
+                  img.url,
+                  img.pose ?? '',
+                  img.color ?? '',
+                  img.colorHex ?? '',
+                  img.width ?? null,
+                  img.height ?? null,
+                ),
               )
             : product.imageUrl
               ? [galleryImage(product.imageUrl, '')]
@@ -362,10 +380,10 @@ export default function ProductEdit() {
     let added = 0;
     for (const file of files) {
       try {
-        const { publicUrl, pose, color, colorHex } = await uploadProductImage(file, form.name);
+        const { publicUrl, pose, color, colorHex, width, height } = await uploadProductImage(file, form.name);
         setForm((f) => ({
           ...f,
-          images: [...f.images, galleryImage(publicUrl, pose ?? '', color ?? '', colorHex ?? '')],
+          images: [...f.images, galleryImage(publicUrl, pose ?? '', color ?? '', colorHex ?? '', width, height)],
         }));
         added += 1;
       } catch (err) {
@@ -437,7 +455,16 @@ export default function ProductEdit() {
       flag: form.flag === '' ? null : form.flag,
       salePrice: form.flag === 'sale' ? salePaise : null,
       costPrice,
-      images: form.images.map(({ url, pose, color, colorHex }) => ({ url, pose, color, colorHex })),
+      // Dims travel only when BOTH are known (else omitted — JSON drops
+      // undefined), so the server never stores a half-measured photo.
+      images: form.images.map(({ url, pose, color, colorHex, width, height }) => ({
+        url,
+        pose,
+        color,
+        colorHex,
+        width: width != null && height != null ? width : undefined,
+        height: width != null && height != null ? height : undefined,
+      })),
       active: form.active,
       collection: form.collection.trim(),
       craft: form.craft.trim(),

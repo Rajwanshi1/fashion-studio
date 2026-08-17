@@ -145,6 +145,7 @@ export default function Account() {
                       src={first?.imageUrl ?? null}
                       label="Order"
                       alt={first?.productName ?? 'Order'}
+                      sizes="96px"
                     />
                     <div className="items">
                       <div className="nm">
