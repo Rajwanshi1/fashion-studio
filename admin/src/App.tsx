@@ -23,6 +23,7 @@ import Payments from './pages/Payments';
 import Users from './pages/Users';
 import Socials from './pages/Socials';
 import Analytics from './pages/Analytics';
+import Sessions from './pages/Sessions';
 import NotFound from './pages/NotFound';
 import Site from './pages/Site';
 import SiteSectionEdit from './pages/SiteSectionEdit';
@@ -60,6 +61,7 @@ export const appRoutes = createRoutesFromElements(
         <Route path="/users" element={<Users />} />
         <Route path="/socials" element={<Socials />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/sessions" element={<Sessions />} />
       </Route>
     </Route>
     <Route path="*" element={<NotFound />} />

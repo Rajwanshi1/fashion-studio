@@ -57,6 +57,9 @@ export default function Layout() {
           <NavLink to="/analytics" className={navClass}>
             Analytics
           </NavLink>
+          <NavLink to="/sessions" className={navClass}>
+            Sessions
+          </NavLink>
         </nav>
         <div className="side-foot">
           {user && (

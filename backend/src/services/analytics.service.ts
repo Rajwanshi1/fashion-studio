@@ -4,14 +4,26 @@ import type {
   EventsRepo,
   NewEvent,
   SearchRow,
+  SessionOutcomeFilter,
+  SessionSummary,
   SizeRow,
   SourceRow,
+  TimelineEvent,
   TopProduct,
   TrendDay,
+  VisitorDetail,
 } from '../data/events.repo';
 
 const MAX_PATH_LEN = 512;
 const MAX_PROPS_LEN = 2048;
+/** Oldest client timestamp accepted — anything staler clamps to the edge. */
+const MAX_EVENT_AGE_MS = 10 * 60 * 1000;
+export const SESSIONS_PAGE_SIZE = 50;
+
+// Self-identified crawlers/monitors — their whole batch is dropped (still
+// 204: a bot's beacon deserves no error worth retrying). The UA itself is
+// only ever matched, never stored.
+const BOT_UA = /bot|crawl|spider|slurp|headlesschrome|lighthouse|pingdom|uptime|monitor/i;
 
 export type Device = 'mobile' | 'desktop';
 
@@ -25,6 +37,8 @@ export interface BatchEvent {
   path?: string;
   productId?: string;
   props?: Record<string, unknown>;
+  /** Client's Date.now() when the event was queued (epoch ms). */
+  occurredAt?: number;
 }
 
 export interface EventBatch {
@@ -61,16 +75,29 @@ export interface AnalyticsSummary {
   colors: ColorRow[];
 }
 
+export interface SessionsPage {
+  sessions: SessionSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface AnalyticsService {
-  recordBatch(batch: EventBatch, userAgent: string | null): Promise<void>;
+  recordBatch(batch: EventBatch, userAgent: string | null, ip?: string | null): Promise<void>;
   summary(days: number): Promise<AnalyticsSummary>;
+  listSessions(days: number, outcome: SessionOutcomeFilter, page: number): Promise<SessionsPage>;
+  sessionTimeline(sessionId: string): Promise<TimelineEvent[]>;
+  visitorDetail(visitorId: string): Promise<VisitorDetail>;
 }
 
 export function createAnalyticsService(deps: { events: EventsRepo }): AnalyticsService {
   return {
-    async recordBatch(batch, userAgent) {
+    async recordBatch(batch, userAgent, ip) {
+      if (userAgent && BOT_UA.test(userAgent)) return;
+
       const device = classifyDevice(userAgent);
       const userId = batch.userId ?? null;
+      const now = Date.now();
 
       const rows: NewEvent[] = batch.events.map((event) => {
         const path = event.path ? event.path.slice(0, MAX_PATH_LEN) : null;
@@ -78,6 +105,14 @@ export function createAnalyticsService(deps: { events: EventsRepo }): AnalyticsS
         // its payload but never loses the event itself.
         let props: object = event.props ?? {};
         if (JSON.stringify(props).length > MAX_PROPS_LEN) props = {};
+
+        // Client clocks lie: clamp to [now − 10min, now] so a queued-then-
+        // beaconed event keeps its real moment but can never predate the
+        // window or land in the future. Missing = now.
+        const occurredAt =
+          typeof event.occurredAt === 'number'
+            ? Math.min(Math.max(event.occurredAt, now - MAX_EVENT_AGE_MS), now)
+            : now;
 
         return {
           eventType: event.type,
@@ -88,6 +123,9 @@ export function createAnalyticsService(deps: { events: EventsRepo }): AnalyticsS
           productId: event.productId ?? null,
           device,
           props,
+          occurredAt: new Date(occurredAt),
+          ip: ip ?? null,
+          orderId: null,
         };
       });
 
@@ -139,5 +177,13 @@ export function createAnalyticsService(deps: { events: EventsRepo }): AnalyticsS
         colors,
       };
     },
+
+    async listSessions(days, outcome, page) {
+      const { sessions, total } = await deps.events.listSessions(days, outcome, page, SESSIONS_PAGE_SIZE);
+      return { sessions, total, page, pageSize: SESSIONS_PAGE_SIZE };
+    },
+
+    sessionTimeline: (sessionId) => deps.events.sessionTimeline(sessionId),
+    visitorDetail: (visitorId) => deps.events.visitorDetail(visitorId),
   };
 }

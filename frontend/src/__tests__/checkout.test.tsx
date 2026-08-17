@@ -100,6 +100,27 @@ describe('checkout', () => {
     expect(body.items[1].expectedUnitPrice).toBe(body.items[0].expectedUnitPrice);
   });
 
+  it('attaches the tracker identity so the server can stamp order_created', async () => {
+    seedCart();
+    const fetchMock = mockFetch(checkoutRoutes);
+    renderApp('/checkout');
+
+    const user = userEvent.setup();
+    await fillForm(user);
+    await user.click(screen.getByRole('button', { name: /Place Order/ }));
+    await screen.findByRole('dialog', { name: 'Razorpay · Test Mode' });
+
+    const orderCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]).endsWith('/api/orders') && c[1]?.method === 'POST',
+    );
+    const body = JSON.parse(String(orderCall?.[1]?.body));
+    // The ids in the body are the tracker's own — the same visitor the
+    // beacons report.
+    expect(body.analytics.visitorId).toBe(localStorage.getItem('ta.visitor'));
+    const session = JSON.parse(localStorage.getItem('ta.session') ?? '{}');
+    expect(body.analytics.sessionId).toBe(session.id);
+  });
+
   it('payments disabled: 503 from checkout shows the coming-soon notice, order saved', async () => {
     seedCart();
     mockFetch((url, init) => {

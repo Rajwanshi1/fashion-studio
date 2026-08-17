@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "parse:photo": "tsx --env-file-if-exists=.env scripts/parse-photo.ts",
     "backfill:photo-colors": "tsx --env-file-if-exists=.env scripts/backfill-photo-colors.ts",
+    "prune:events": "tsx --env-file-if-exists=.env scripts/prune-events.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

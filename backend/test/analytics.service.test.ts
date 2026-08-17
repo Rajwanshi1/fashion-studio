@@ -147,6 +147,107 @@ describe('AnalyticsService.recordBatch', () => {
     expect(calls).toBe(1);
     expect(events.rows).toHaveLength(2);
   });
+
+  it('stamps a missing occurredAt as now', async () => {
+    const events = new FakeEventsRepo();
+    const service = createAnalyticsService({ events });
+    const before = Date.now();
+    await service.recordBatch({ visitorId: VISITOR, sessionId: SESSION, events: [{ type: 'page_view' }] }, null);
+    const t = events.rows[0].occurredAt!.getTime();
+    expect(t).toBeGreaterThanOrEqual(before);
+    expect(t).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('keeps an in-window occurredAt as sent (a late-flushed batch keeps real moments)', async () => {
+    const events = new FakeEventsRepo();
+    const service = createAnalyticsService({ events });
+    const sent = Date.now() - 60_000; // one minute ago — inside the 10-min window
+    await service.recordBatch(
+      { visitorId: VISITOR, sessionId: SESSION, events: [{ type: 'page_view', occurredAt: sent }] },
+      null,
+    );
+    expect(events.rows[0].occurredAt!.getTime()).toBe(sent);
+  });
+
+  it('clamps an occurredAt older than 10 minutes to the window edge', async () => {
+    const events = new FakeEventsRepo();
+    const service = createAnalyticsService({ events });
+    const before = Date.now();
+    await service.recordBatch(
+      {
+        visitorId: VISITOR,
+        sessionId: SESSION,
+        events: [{ type: 'page_view', occurredAt: before - 60 * 60 * 1000 }],
+      },
+      null,
+    );
+    const after = Date.now();
+    const t = events.rows[0].occurredAt!.getTime();
+    expect(t).toBeGreaterThanOrEqual(before - 10 * 60 * 1000);
+    expect(t).toBeLessThanOrEqual(after - 10 * 60 * 1000);
+  });
+
+  it('clamps a future occurredAt to now (client clocks lie)', async () => {
+    const events = new FakeEventsRepo();
+    const service = createAnalyticsService({ events });
+    const before = Date.now();
+    await service.recordBatch(
+      {
+        visitorId: VISITOR,
+        sessionId: SESSION,
+        events: [{ type: 'page_view', occurredAt: before + 60 * 60 * 1000 }],
+      },
+      null,
+    );
+    const t = events.rows[0].occurredAt!.getTime();
+    expect(t).toBeGreaterThanOrEqual(before);
+    expect(t).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('stores the request ip on every event of the batch, defaulting to null', async () => {
+    const events = new FakeEventsRepo();
+    const service = createAnalyticsService({ events });
+    await service.recordBatch(
+      { visitorId: VISITOR, sessionId: SESSION, events: [{ type: 'page_view' }, { type: 'search' }] },
+      null,
+      '203.0.113.9',
+    );
+    expect(events.rows.every((r) => r.ip === '203.0.113.9')).toBe(true);
+
+    await service.recordBatch({ visitorId: VISITOR, sessionId: SESSION, events: [{ type: 'page_view' }] }, null);
+    expect(events.rows[2].ip).toBeNull();
+  });
+
+  it('clients can never set orderId through /track — it is always null', async () => {
+    const events = new FakeEventsRepo();
+    const service = createAnalyticsService({ events });
+    await service.recordBatch({ visitorId: VISITOR, sessionId: SESSION, events: [{ type: 'page_view' }] }, null);
+    expect(events.rows[0].orderId).toBeNull();
+  });
+
+  it.each([
+    'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; bingbot/2.0)',
+    'Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/120.0 Safari/537.36',
+    'Chrome-Lighthouse',
+    'Pingdom.com_bot_version_1.4',
+    'Better Uptime Bot/1.0',
+  ])('drops the whole batch for bot UA %j (204 semantics, no insert)', async (ua) => {
+    const events = new FakeEventsRepo();
+    const service = createAnalyticsService({ events });
+    await service.recordBatch(
+      { visitorId: VISITOR, sessionId: SESSION, events: [{ type: 'page_view' }, { type: 'product_view' }] },
+      ua,
+    );
+    expect(events.rows).toHaveLength(0);
+  });
+
+  it('does not drop real browser UAs', async () => {
+    const events = new FakeEventsRepo();
+    const service = createAnalyticsService({ events });
+    await service.recordBatch({ visitorId: VISITOR, sessionId: SESSION, events: [{ type: 'page_view' }] }, IPHONE_UA);
+    expect(events.rows).toHaveLength(1);
+  });
 });
 
 describe('AnalyticsService.summary', () => {
@@ -260,5 +361,100 @@ describe('AnalyticsService.summary', () => {
     const summary = await service.summary(30);
     // 302 / 3 = 100.666... -> rounds to 101
     expect(summary.kpis.aov).toBe(101);
+  });
+});
+
+describe('AnalyticsService sessions', () => {
+  const S_ORDERED = '55555555-5555-5555-5555-555555555551';
+  const S_CHECKOUT = '55555555-5555-5555-5555-555555555552';
+  const S_CARTED = '55555555-5555-5555-5555-555555555553';
+  const S_BROWSED = '55555555-5555-5555-5555-555555555554';
+
+  const base = { visitorId: VISITOR, userId: null, path: '/shop', productId: null, device: 'desktop', props: {} };
+
+  async function seedFourOutcomes(events: FakeEventsRepo) {
+    // Ranking bait: the ordered/checkout sessions also carted — the deepest
+    // stage must win.
+    await events.insertBatch([
+      { ...base, eventType: 'session_start', sessionId: S_ORDERED },
+      { ...base, eventType: 'add_to_cart', sessionId: S_ORDERED },
+      { ...base, eventType: 'checkout_start', sessionId: S_ORDERED },
+      { ...base, eventType: 'order_placed', sessionId: S_ORDERED },
+      { ...base, eventType: 'session_start', sessionId: S_CHECKOUT },
+      { ...base, eventType: 'add_to_cart', sessionId: S_CHECKOUT },
+      { ...base, eventType: 'checkout_start', sessionId: S_CHECKOUT },
+      { ...base, eventType: 'session_start', sessionId: S_CARTED },
+      { ...base, eventType: 'add_to_cart', sessionId: S_CARTED },
+      { ...base, eventType: 'session_start', sessionId: S_BROWSED },
+      { ...base, eventType: 'page_view', sessionId: S_BROWSED },
+    ]);
+  }
+
+  it('ranks outcomes ordered > checkout > carted > browsed and pages with a total', async () => {
+    const events = new FakeEventsRepo();
+    const service = createAnalyticsService({ events });
+    await seedFourOutcomes(events);
+
+    const page = await service.listSessions(30, 'all', 1);
+    expect(page.total).toBe(4);
+    expect(page.pageSize).toBe(50);
+    const byId = new Map(page.sessions.map((s) => [s.sessionId, s]));
+    expect(byId.get(S_ORDERED)?.outcome).toBe('ordered');
+    expect(byId.get(S_CHECKOUT)?.outcome).toBe('checkout');
+    expect(byId.get(S_CARTED)?.outcome).toBe('carted');
+    expect(byId.get(S_BROWSED)?.outcome).toBe('browsed');
+
+    const ordered = await service.listSessions(30, 'ordered', 1);
+    expect(ordered.sessions.map((s) => s.sessionId)).toEqual([S_ORDERED]);
+    // Ranked buckets are disjoint: the ordered session carted too, but only
+    // shows under 'ordered'.
+    const carted = await service.listSessions(30, 'carted', 1);
+    expect(carted.sessions.map((s) => s.sessionId)).toEqual([S_CARTED]);
+  });
+
+  it('marks a carted-then-idle session abandoned, but never an ordered or fresh one', async () => {
+    const events = new FakeEventsRepo();
+    const service = createAnalyticsService({ events });
+    const stale = new Date(Date.now() - 40 * 60 * 1000); // idle past the 30-min window
+    await events.insertBatch([
+      { ...base, eventType: 'add_to_cart', sessionId: S_CARTED, occurredAt: stale },
+      { ...base, eventType: 'add_to_cart', sessionId: S_ORDERED, occurredAt: stale },
+      { ...base, eventType: 'order_placed', sessionId: S_ORDERED, occurredAt: stale },
+      { ...base, eventType: 'add_to_cart', sessionId: S_CHECKOUT }, // just now — still live
+    ]);
+    const abandoned = await service.listSessions(30, 'abandoned', 1);
+    expect(abandoned.sessions.map((s) => s.sessionId)).toEqual([S_CARTED]);
+    expect(abandoned.sessions[0].abandoned).toBe(true);
+  });
+
+  it('sessionTimeline returns events in occurredAt order with product names', async () => {
+    const PRODUCT_ID = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+    const events = new FakeEventsRepo();
+    events.productNames.set(PRODUCT_ID, 'Sage Sequin Jacket Lehenga');
+    const service = createAnalyticsService({ events });
+    const t0 = new Date(Date.now() - 120_000);
+    // Inserted out of order — the timeline must sort by occurredAt.
+    await events.insertBatch([
+      { ...base, eventType: 'product_view', sessionId: SESSION, productId: PRODUCT_ID, occurredAt: new Date(t0.getTime() + 30_000) },
+      { ...base, eventType: 'session_start', sessionId: SESSION, occurredAt: t0 },
+    ]);
+    const timeline = await service.sessionTimeline(SESSION);
+    expect(timeline.map((e) => e.eventType)).toEqual(['session_start', 'product_view']);
+    expect(timeline[1].productName).toBe('Sage Sequin Jacket Lehenga');
+  });
+
+  it('visitorDetail counts OTHER visitors sharing the latest ip, never its own sessions', async () => {
+    const OTHER = '99999999-9999-9999-9999-999999999999';
+    const OTHER_SESSION = '88888888-8888-8888-8888-888888888888';
+    const events = new FakeEventsRepo();
+    const service = createAnalyticsService({ events });
+    await events.insertBatch([
+      { ...base, eventType: 'session_start', sessionId: SESSION, ip: '203.0.113.9' },
+      { ...base, eventType: 'session_start', sessionId: S_CARTED, ip: '203.0.113.9' },
+      { ...base, eventType: 'session_start', sessionId: OTHER_SESSION, visitorId: OTHER, ip: '203.0.113.9' },
+    ]);
+    const detail = await service.visitorDetail(VISITOR);
+    expect(detail.sessions).toHaveLength(2);
+    expect(detail.sameIpSessions).toBe(1); // only the OTHER visitor's session
   });
 });
