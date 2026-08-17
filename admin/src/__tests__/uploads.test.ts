@@ -168,6 +168,34 @@ describe('uploadProductImage', () => {
     expect(vi.mocked(prepareRenditions)).toHaveBeenCalledWith(expect.any(Blob), 2000, 2500, ALL_WIDTHS);
   });
 
+  it('skips rendition work entirely when opted out (site-CMS images) and reports null dims', async () => {
+    const puts: string[] = [];
+    const bodies: PresignBody[] = [];
+    mockFetch((url, init) => {
+      if (url.endsWith('/api/admin/uploads/product-image')) {
+        bodies.push(JSON.parse(String(init?.body)) as PresignBody);
+        return { json: { ...PRODUCT_PRESIGN, renditions: [] } };
+      }
+      if (init?.method === 'PUT') {
+        puts.push(url);
+        return { status: 200, json: {} };
+      }
+      return undefined;
+    });
+
+    const result = await uploadProductImage(new File(['x'], 'hero.jpg', { type: 'image/jpeg' }), undefined, {
+      renditions: false,
+    });
+
+    expect(bodies[0].renditionWidths).toEqual([]); // server presigns nothing extra
+    expect(puts).toEqual([PRODUCT_PRESIGN.uploadUrl]); // one PUT: the master
+    expect(vi.mocked(prepareRenditions)).not.toHaveBeenCalled(); // no re-encodes
+    // No dims claimed — site_content stores no width, and nothing may ever
+    // advertise srcset rungs that were not uploaded.
+    expect(result.width).toBeNull();
+    expect(result.height).toBeNull();
+  });
+
   it('nulls the dims when ANY rendition PUT fails, so the storefront never emits a broken srcset', async () => {
     mockFetch((url, init) => {
       if (url.endsWith('/api/admin/uploads/product-image')) return { json: PRODUCT_PRESIGN };

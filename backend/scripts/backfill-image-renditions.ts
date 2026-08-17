@@ -19,15 +19,19 @@
 import { CopyObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { createPool } from '../src/db';
+import { PRODUCT_IMAGE_CACHE_CONTROL as CACHE_CONTROL, renditionKey } from '../src/lib/media';
 
 const RENDITION_WIDTHS = [320, 640, 1080, 1600];
 const RENDITION_JPEG_QUALITY = 85;
-const CACHE_CONTROL = 'public,max-age=31536000,immutable';
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes('--dry-run');
 const productFlag = argv.indexOf('--product');
 const productSlug = productFlag === -1 ? null : (argv[productFlag + 1] ?? null);
+// A bare `--product` (slug forgotten) must not degrade into "whole catalogue".
+if (productFlag !== -1 && (!productSlug || productSlug.startsWith('--'))) {
+  bail('--product needs a slug.');
+}
 
 function bail(msg: string): never {
   console.error(`${msg}\n\n  npm run backfill:image-renditions -- [--dry-run] [--product <slug>]`);
@@ -118,7 +122,7 @@ async function main(): Promise<void> {
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
-          Key: key.replace(/\.jpg$/, `_w${w}.jpg`),
+          Key: renditionKey(key, w),
           Body: resized,
           ContentType: 'image/jpeg',
           CacheControl: CACHE_CONTROL,

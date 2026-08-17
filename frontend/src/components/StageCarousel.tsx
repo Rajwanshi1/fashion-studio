@@ -117,12 +117,15 @@ export default function StageCarousel({
   }, [index]);
 
   // New gallery (product switch / edited piece): jump back to the start.
-  // The parent clamps `thumb` on its side.
+  // The parent clamps `thumb` on its side. Reveal around the CURRENT index,
+  // not [0,1] — today's caller resets index to 0 with the swap, but a caller
+  // that swaps images mid-gallery must not blank its visible slide.
   useEffect(() => {
     trackRef.current?.scrollTo({ left: 0, behavior: 'auto' });
     pendingRef.current = null;
     lastEmittedRef.current = 0;
-    setRevealed(new Set([0, 1]));
+    setRevealed(new Set([0, 1, index - 1, index, index + 1].filter((n) => n >= 0)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [images]);
 
   useEffect(

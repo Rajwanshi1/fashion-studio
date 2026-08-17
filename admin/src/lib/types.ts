@@ -113,10 +113,11 @@ export interface AdminProduct {
   /** Paise; what the piece cost to make. Admin-only — never on a public endpoint. */
   costPrice: number | null;
   /** First gallery photo's dims/hex, mirrored off the API summary shape —
-   *  unused by the admin UI today. */
-  imageWidth?: number | null;
-  imageHeight?: number | null;
-  imageColorHex?: string | null;
+   *  unused by the admin UI today. Required-nullable to stay byte-identical
+   *  with backend/src/types.ts ProductSummary (the mirror invariant). */
+  imageWidth: number | null;
+  imageHeight: number | null;
+  imageColorHex: string | null;
   /** Ordered gallery; images[0].url mirrors imageUrl. */
   images: ProductImage[];
   active: boolean;

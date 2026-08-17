@@ -15,7 +15,7 @@ import { createReceiptsRepo } from './data/receipts.repo';
 import { createScansRepo } from './data/scans.repo';
 import { createUsersRepo } from './data/users.repo';
 import { createPool, makeTxRunner } from './db';
-import { makeUrlRewriter } from './lib/media';
+import { makeJsonUrlRewriter, makeUrlRewriter } from './lib/media';
 import { migrate } from './migrate';
 import { seed } from './seed';
 import { createAnthropicClient } from './services/ai/anthropic';
@@ -62,6 +62,8 @@ async function main() {
   // Read-time rewrite of legacy raw-S3 image URLs onto the CDN (lib/media.ts);
   // identity while MEDIA_BASE_URL is unset.
   const rewriteMediaUrl = makeUrlRewriter(config.mediaBaseUrl, config.s3UploadsBucket, config.awsRegion);
+  // Same net for site_content's jsonb (CMS images have no other repair path).
+  const rewriteContentUrls = makeJsonUrlRewriter(config.mediaBaseUrl, config.s3UploadsBucket, config.awsRegion);
   // Null until the key exists, which keeps the parse endpoint answering 503 and
   // the intake wizard falling back to manual entry. Models come from PARSE_SPECS
   // per document kind, so no model is passed here.
@@ -89,7 +91,7 @@ async function main() {
       receipts: createReceiptsRepo(pool),
       documents: createDocumentsRepo(pool),
       measurements: createMeasurementsRepo(pool),
-      content: createContentRepo(pool),
+      content: createContentRepo(pool, rewriteContentUrls),
     },
     paymentProvider: config.paymentProvider === 'mock' ? new MockRazorpayProvider() : null,
     objectStore,

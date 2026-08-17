@@ -91,18 +91,7 @@ export async function uploadDocument(kind: DocumentKind, file: File): Promise<Up
     method: 'POST',
     body: { kind, contentType },
   });
-  let res = await fetch(presign.uploadUrl, { method: 'PUT', headers: presign.headers, body: blob });
-  if (res.status === 401 || res.status === 403) {
-    const token = storedToken();
-    if (token) {
-      res = await fetch(presign.uploadUrl, {
-        method: 'PUT',
-        headers: { ...presign.headers, Authorization: `Bearer ${token}` },
-        body: blob,
-      });
-    }
-  }
-  if (!res.ok) throw new Error(`Photo upload failed (${res.status})`);
+  await putToPresigned(presign.uploadUrl, presign.headers, blob);
   return { documentId: presign.documentId, kind, previewUrl: URL.createObjectURL(blob) };
 }
 
@@ -168,8 +157,7 @@ function base64(bytes: Uint8Array): string {
 /**
  * Raw PUT to a presigned URL with the presign's exact headers. Plain first
  * (S3 presigned URLs reject an Authorization header); the dev-only local
- * transport answers 401/403 instead, so retry with the admin JWT — the same
- * dance as uploadDocument.
+ * transport answers 401/403 instead, so retry with the admin JWT.
  */
 async function putToPresigned(url: string, headers: Record<string, string>, blob: Blob): Promise<void> {
   let res = await fetch(url, { method: 'PUT', headers, body: blob });
@@ -202,6 +190,12 @@ async function putToPresigned(url: string, headers: Record<string, string>, blob
 export async function uploadProductImage(
   file: File,
   productName?: string,
+  opts?: {
+    /** false = skip rendition generation AND report null dims. Site-CMS images
+     *  are the caller: site_content stores no width, so renditions would be
+     *  unreferenced orphans and 4 extra re-encodes per hero photo. */
+    renditions?: boolean;
+  },
 ): Promise<{
   publicUrl: string;
   pose: string | null;
@@ -211,7 +205,8 @@ export async function uploadProductImage(
   height: number | null;
 }> {
   const { blob, contentType, width, height } = await prepareImage(file);
-  const renditionWidths = RENDITION_WIDTHS.filter((w) => w < width);
+  const wantRenditions = opts?.renditions !== false;
+  const renditionWidths = wantRenditions ? RENDITION_WIDTHS.filter((w) => w < width) : [];
   const name = productName?.trim() ?? '';
   const plainBody = { contentType, renditionWidths };
   const body = name
@@ -262,8 +257,9 @@ export async function uploadProductImage(
     pose: presign.pose ?? null,
     color: presign.color ?? null,
     colorHex: presign.colorHex ?? null,
-    // Dims are the srcset gate — only claim them when every candidate exists.
-    width: allRenditionsLanded ? width : null,
-    height: allRenditionsLanded ? height : null,
+    // Dims are the srcset gate — only claim them when every candidate exists
+    // (and never for opted-out uploads, whose candidates were never made).
+    width: wantRenditions && allRenditionsLanded ? width : null,
+    height: wantRenditions && allRenditionsLanded ? height : null,
   };
 }

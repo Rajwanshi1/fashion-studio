@@ -8,6 +8,7 @@ import type { PaymentsRepo } from '../data/payments.repo';
 import type { ProductsRepo, UpdateProductInput } from '../data/products.repo';
 import type { UsersRepo } from '../data/users.repo';
 import { deliveryTotals } from '../lib/deliveries';
+import { PRODUCT_IMAGE_CACHE_CONTROL, renditionKey } from '../lib/media';
 import { normalizePhone } from '../lib/phone';
 import { customersToVcf } from '../lib/vcard';
 import { AuthEnv, requireAdmin, requireAuth } from '../middleware/auth';
@@ -148,9 +149,6 @@ const productImagePresignSchema = z
     message: 'productName and imageBase64 must be sent together',
   });
 
-/** Product photos never change under a key (keys are unique per upload), so
- *  `immutable` is honest — browsers and the CDN may cache them for a year. */
-const PRODUCT_IMAGE_CACHE_CONTROL = 'public,max-age=31536000,immutable';
 
 const flagSchema = z.enum(['bestseller', 'new', 'sale']).nullable();
 
@@ -478,12 +476,12 @@ export function adminRoutes(deps: AdminDeps) {
     if (!key) key = newStorageKey('products');
     const { url, headers } = await deps.objectStore.presignPut(key, contentType, PRODUCT_IMAGE_CACHE_CONTROL);
     // One presigned PUT per rendition; keys derive from the master's so the
-    // storefront can rebuild them from the stored URL alone (`_w{width}.jpg`).
+    // storefront can rebuild them from the stored URL alone (lib/media.ts).
     const renditions = await Promise.all(
       (renditionWidths ?? []).map(async (width) => {
-        const renditionKey = key!.replace(/\.jpg$/, `_w${width}.jpg`);
-        const presigned = await deps.objectStore!.presignPut(renditionKey, contentType, PRODUCT_IMAGE_CACHE_CONTROL);
-        return { width, key: renditionKey, uploadUrl: presigned.url, headers: presigned.headers };
+        const rKey = renditionKey(key!, width);
+        const presigned = await deps.objectStore!.presignPut(rKey, contentType, PRODUCT_IMAGE_CACHE_CONTROL);
+        return { width, key: rKey, uploadUrl: presigned.url, headers: presigned.headers };
       }),
     );
     return c.json(

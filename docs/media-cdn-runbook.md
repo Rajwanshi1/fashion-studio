@@ -34,8 +34,16 @@ aws cloudformation describe-change-set --region us-east-1 \
 ```
 
 Review: expect **Add** MediaCertificate/AlertTopic/MediaScrapeAlarm and
-**Modify** WebAcl (new rule, `Replacement=False`). The existing `Certificate`
-must NOT appear — if it does, stop. Then execute the changeset (console or
+**Modify** WebAcl (new media rule + a `/products/` carve-out on the existing
+app-wide rate rule, `Replacement=False`). The existing `Certificate`
+must NOT appear — if it does, stop.
+
+Rate-limit note: `media-scrape-rate` starts at **3000/5min/IP** — an IP is a
+carrier CGNAT pool (Jio/Airtel), not one shopper, so the budget covers ~4–6
+concurrent heavy browsers while a catalogue scrape still trips it in under a
+minute. After launch, tune against the media access logs + the
+`fashion-prod-media-rate` metric. Fill `ALERT_EMAIL` in `infra/params/prod.env`
+in the same change so the alarm actually mails someone (empty = silent). Then execute the changeset (console or
 `execute-change-set`). The cert DNS-validates against the existing hosted
 zone automatically; wait for ISSUED and note the ARN:
 

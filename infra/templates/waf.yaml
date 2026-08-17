@@ -66,11 +66,27 @@ Resources:
         CloudWatchMetricsEnabled: true
         MetricName: !Sub 'fashion-${EnvName}-acl'
       Rules:
+        # App-wide brake (API + SPA shells). Image requests are carved OUT:
+        # once the media distribution exists they'd eat this budget too (WAF
+        # counts pre-cache), and a couple of CGNAT'd gallery browsers would
+        # trip an app-wide block. /products/ is S3-key-shaped — no API or SPA
+        # path starts with it — so this is a no-op for the other distributions;
+        # media traffic answers to media-scrape-rate below instead.
         - Name: rate-limit-per-ip
           Priority: 0
           Action: { Block: {} }
           Statement:
-            RateBasedStatement: { Limit: 2000, AggregateKeyType: IP }
+            RateBasedStatement:
+              Limit: 2000
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                NotStatement:
+                  Statement:
+                    ByteMatchStatement:
+                      FieldToMatch: { UriPath: {} }
+                      PositionalConstraint: STARTS_WITH
+                      SearchString: /products/
+                      TextTransformations: [{ Priority: 0, Type: NONE }]
           VisibilityConfig:
             SampledRequestsEnabled: true
             CloudWatchMetricsEnabled: true
@@ -135,18 +151,22 @@ Resources:
             MetricName: !Sub 'fashion-${EnvName}-oversize-body'
         # Catalogue-scrape brake for the media CDN. Heavy HUMAN browsing runs
         # ~300–600 image requests per 5 minutes (PDP galleries + renditions),
-        # and WAF counts BEFORE the CloudFront cache, so cache hits count too —
-        # 1000/5min clears every real shopper with headroom, while a scraper
-        # pulling the whole catalogue (hundreds of products × gallery ×
-        # renditions) blows through it in seconds. A referer/hotlink rule is
-        # deliberately omitted: it would break WhatsApp/OG link previews and
-        # Google Images, which fetch with no or foreign referers.
+        # and WAF counts BEFORE the CloudFront cache, so cache hits count too.
+        # The IP is NOT one shopper: Jio/Airtel CGNAT puts many households
+        # behind one address, so the limit budgets several concurrent heavy
+        # browsers (~4–6 × 600) — while a scraper pulling the whole catalogue
+        # (hundreds of products × gallery × renditions × masters) still blows
+        # through it in well under a minute. Tune against the media
+        # distribution's access logs + this rule's metric after launch. A
+        # referer/hotlink rule is deliberately omitted: it would break
+        # WhatsApp/OG link previews and Google Images, which fetch with no or
+        # foreign referers.
         - Name: media-scrape-rate
           Priority: 3
           Action: { Block: {} }
           Statement:
             RateBasedStatement:
-              Limit: 1000
+              Limit: 3000
               AggregateKeyType: IP
               ScopeDownStatement:
                 ByteMatchStatement:

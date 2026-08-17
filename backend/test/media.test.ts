@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeUrlRewriter, rewriteLegacyMediaUrl } from '../src/lib/media';
+import { makeJsonUrlRewriter, makeUrlRewriter, renditionKey, rewriteLegacyMediaUrl } from '../src/lib/media';
 
 const BUCKET = 'fashion-prod-uploads-123456789012';
 const REGION = 'ap-south-1';
@@ -45,5 +45,42 @@ describe('makeUrlRewriter', () => {
     const rw = makeUrlRewriter(null, BUCKET, REGION);
     expect(rw(LEGACY)).toBe(LEGACY);
     expect(rw(null)).toBeNull();
+  });
+});
+
+describe('makeJsonUrlRewriter', () => {
+  const CDN = `${BASE}/products/2026/08/sage-gown-front-a1b2c3.jpg`;
+
+  it('rewrites legacy URLs at any depth of a site_content section', () => {
+    const rw = makeJsonUrlRewriter(BASE, BUCKET, REGION);
+    const section = {
+      imageUrl: LEGACY,
+      looks: [{ imageUrl: LEGACY, title: 'Look 1' }, { imageUrl: 'https://cdn.example.com/x.jpg' }],
+    };
+    expect(rw(section)).toEqual({
+      imageUrl: CDN,
+      looks: [{ imageUrl: CDN, title: 'Look 1' }, { imageUrl: 'https://cdn.example.com/x.jpg' }],
+    });
+  });
+
+  it('returns the same reference when nothing is legacy (no re-parse cost)', () => {
+    const rw = makeJsonUrlRewriter(BASE, BUCKET, REGION);
+    const section = { imageUrl: 'https://cdn.example.com/x.jpg', copy: 'hand embroidered' };
+    expect(rw(section)).toBe(section);
+    expect(rw(null)).toBeNull();
+  });
+
+  it('is the identity when the CDN is not configured', () => {
+    const rw = makeJsonUrlRewriter(null, BUCKET, REGION);
+    const section = { imageUrl: LEGACY };
+    expect(rw(section)).toBe(section);
+  });
+});
+
+describe('renditionKey', () => {
+  it('derives the sibling key that presign, backfill and the storefront srcset all share', () => {
+    expect(renditionKey('products/2026/08/sage-gown-front-a1b2c3.jpg', 640)).toBe(
+      'products/2026/08/sage-gown-front-a1b2c3_w640.jpg',
+    );
   });
 });

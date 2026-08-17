@@ -40,3 +40,35 @@ export function makeUrlRewriter(
   if (!mediaBaseUrl || !bucket) return (url) => url;
   return (url) => (url == null ? url : rewriteLegacyMediaUrl(url, mediaBaseUrl, bucket, region));
 }
+
+/** Rewrites every legacy URL inside an arbitrary jsonb value (site_content
+ *  sections bury imageUrls at several depths). The prefix is specific enough
+ *  that a whole-document text swap is exact, and S3 URLs never contain the
+ *  characters JSON would escape. Identity when the CDN is off. */
+export type JsonRewriter = (value: unknown) => unknown;
+
+export function makeJsonUrlRewriter(
+  mediaBaseUrl: string | null,
+  bucket: string | null,
+  region: string,
+): JsonRewriter {
+  if (!mediaBaseUrl || !bucket) return (value) => value;
+  const legacyPrefix = `https://${bucket}.s3.${region}.amazonaws.com/`;
+  return (value) => {
+    if (value == null) return value;
+    const text = JSON.stringify(value);
+    if (!text.includes(legacyPrefix)) return value;
+    return JSON.parse(text.replaceAll(legacyPrefix, `${mediaBaseUrl}/`));
+  };
+}
+
+/** Renditions sit beside their master as `<key>_w{width}.jpg` — this rule is
+ *  load-bearing in three places (presign fan-out, backfill script, and the
+ *  storefront's srcset builder, which mirrors it cross-package). */
+export function renditionKey(masterKey: string, width: number): string {
+  return masterKey.replace(/\.jpg$/, `_w${width}.jpg`);
+}
+
+/** Product photos and their renditions never change under a key — browsers
+ *  and the CDN may cache them for a year. */
+export const PRODUCT_IMAGE_CACHE_CONTROL = 'public,max-age=31536000,immutable';

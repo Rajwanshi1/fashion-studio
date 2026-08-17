@@ -13,10 +13,12 @@ interface ProductCardProps {
   fav?: boolean;
   /** Show the slide-up Quick View bar. */
   quick?: boolean;
+  /** First-row cards are the PLP's LCP element — load those eagerly. */
+  eager?: boolean;
 }
 
 /** `.pcard` product card per shop.css (flag / fav / quick-view variants). */
-export default function ProductCard({ product, fav = true, quick = true }: ProductCardProps) {
+export default function ProductCard({ product, fav = true, quick = true, eager = false }: ProductCardProps) {
   const wishlist = useWishlist();
   const navigate = useNavigate();
   const saved = wishlist.has(product.id);
@@ -47,6 +49,7 @@ export default function ProductCard({ product, fav = true, quick = true }: Produ
           height={product.imageHeight}
           placeholderHex={product.imageColorHex || undefined}
           sizes="(max-width: 560px) 50vw, (max-width: 1100px) 33vw, 25vw"
+          eager={eager}
         />
         {quick && (
           <button
