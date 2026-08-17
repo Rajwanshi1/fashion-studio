@@ -45,6 +45,7 @@ export default function CartPage() {
                       Includes {i.includedComponents.join(' · ')}
                     </span>
                   )}
+                  {i.customColor && <span>Custom colour</span>}
                   <span className="tag">Made to Order · 4–6 weeks</span>
                 </div>
                 {i.measurements && <div className="line-note">{i.measurements}</div>}

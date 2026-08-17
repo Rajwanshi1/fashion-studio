@@ -25,6 +25,7 @@ const base: Omit<CartItem, 'qty' | 'addedAt'> = {
   imageUrl: null,
   includedComponents: [],
   excludedComponents: [],
+  customColor: false,
   measurements: '',
 };
 const other: Omit<CartItem, 'qty' | 'addedAt'> = {
@@ -60,6 +61,12 @@ const legacyLine = {
 const noted: Omit<CartItem, 'qty' | 'addedAt'> = {
   ...base,
   measurements: 'bust 36in, waist 30in',
+};
+// Same variant as `base`, with a custom colour requested — also a distinct line.
+const customColoured: Omit<CartItem, 'qty' | 'addedAt'> = {
+  ...base,
+  unitPrice: 18400000 + 100000,
+  customColor: true,
 };
 
 describe('cart context', () => {
@@ -115,6 +122,19 @@ describe('cart context', () => {
     act(() => result.current.remove(cartLineKey(noted)));
     expect(result.current.items).toHaveLength(1);
     expect(result.current.items[0].measurements).toBe('');
+  });
+
+  it('keeps the same variant with a custom colour as its own line, merging identical requests', () => {
+    const { result } = renderHook(() => useCart(), { wrapper });
+    act(() => result.current.add(base));
+    act(() => result.current.add(customColoured));
+    act(() => result.current.add(customColoured));
+    expect(result.current.items).toHaveLength(2);
+    expect(result.current.subtotal).toBe(18400000 + 2 * 18500000);
+    // Removing the custom line leaves the stock-colour one untouched.
+    act(() => result.current.remove(cartLineKey(customColoured)));
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0].customColor).toBe(false);
   });
 
   it('computes subtotal across variants', () => {
@@ -188,8 +208,9 @@ describe('cart context', () => {
     // checkout's expectedUnitPrice guard owns the pricing).
     expect(item.includedComponents).toEqual([]);
     expect(item.excludedComponents).toEqual([]);
+    expect(item.customColor).toBe(false); // predates custom colours too
     expect(item.measurements).toBe('');
-    expect(cartLineKey(item)).toBe('v1:::18400000');
+    expect(cartLineKey(item)).toBe('v1:::18400000:0');
     expect(result.current.subtotal).toBe(2 * 18400000);
   });
 
@@ -206,7 +227,7 @@ describe('cart context', () => {
     expect(item.measurements).toBe('');
     // The kept dupatta price marks a set-includes-era line, so the false
     // jacket flag reads as a real untick.
-    expect(cartLineKey(item)).toBe('v1:jacket::18400000');
+    expect(cartLineKey(item)).toBe('v1:jacket::18400000:0');
   });
 
   it('migrates set-includes era carts onto the component-name arrays', () => {
@@ -224,7 +245,7 @@ describe('cart context', () => {
     expect(item.excludedComponents).toEqual(['jacket']);
     expect(item.unitPrice).toBe(19600000); // snapshotted price stays valid
     expect(item).not.toHaveProperty('includeDupatta');
-    expect(cartLineKey(item)).toBe('v1:jacket::19600000');
+    expect(cartLineKey(item)).toBe('v1:jacket::19600000:0');
   });
 
   it('a migrated pre-set-includes line merges with a fresh identical add', () => {
@@ -247,6 +268,7 @@ describe('cart context', () => {
         imageUrl: null,
         includedComponents: [],
         excludedComponents: [],
+        customColor: false,
         measurements: '',
       }),
     );

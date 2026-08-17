@@ -282,6 +282,90 @@ describe('OrdersService', () => {
     });
   });
 
+  describe('custom colour (+₹1,000 on request)', () => {
+    // seedCatalog products default customColorAvailable true (the column default).
+    it('adds the surcharge on top of base + kept add-ons and snapshots the flag', async () => {
+      const set = await seedSetProduct(products, seeded.lehengas.id);
+      const order = await service.createOrder(
+        input({
+          items: [
+            { variantId: set.variants[0].id, quantity: 1, customColor: true, expectedUnitPrice: 15000000 + 1200000 + 2400000 + 100000 },
+          ],
+        }),
+      );
+      expect(order.items[0].unitPrice).toBe(15000000 + 1200000 + 2400000 + 100000);
+      expect(order.items[0].customColor).toBe(true);
+      // The surcharge is not a component — the snapshot stays add-ons only.
+      expect(order.items[0].components).toEqual([
+        { name: 'Dupatta', price: 1200000 },
+        { name: 'Jacket', price: 2400000 },
+      ]);
+    });
+
+    it('never charges (or records) the surcharge when the product disallows it', async () => {
+      const fixed = await products.createProduct({
+        categoryId: seeded.lehengas.id,
+        slug: 'fixed-shade-lehenga',
+        name: 'Fixed Shade Lehenga',
+        description: 'This dye lot cannot be re-matched.',
+        details: 'Dry clean only',
+        price: 10000000,
+        color: 'Sage',
+        active: true,
+        customColorAvailable: false,
+        variants: [{ size: 'M', stock: 5 }],
+      });
+      const order = await service.createOrder(
+        input({ items: [{ variantId: fixed.variants[0].id, quantity: 1, customColor: true }] }),
+      );
+      expect(order.items[0].unitPrice).toBe(10000000);
+      expect(order.items[0].customColor).toBe(false);
+
+      // A stale cart that displayed the surcharge must be asked to review,
+      // never silently repriced — the EXISTING guard, no new error type.
+      await expect(
+        service.createOrder(
+          input({
+            items: [{ variantId: fixed.variants[0].id, quantity: 1, customColor: true, expectedUnitPrice: 10100000 }],
+          }),
+        ),
+      ).rejects.toMatchObject({ code: 'PRICE_CHANGED' });
+    });
+
+    it('keeps the same variant with and without a custom colour as separate lines but aggregates stock', async () => {
+      const order = await service.createOrder(
+        input({
+          items: [
+            { variantId: sageM().id, quantity: 1, customColor: true },
+            { variantId: sageM().id, quantity: 1 },
+            { variantId: sageM().id, quantity: 1, customColor: true }, // merges with the first line
+          ],
+        }),
+      );
+      expect(order.items).toHaveLength(2);
+      const custom = order.items.find((i) => i.customColor)!;
+      const stock = order.items.find((i) => !i.customColor)!;
+      expect(custom.quantity).toBe(2);
+      expect(custom.unitPrice).toBe(18400000 + 100000);
+      expect(stock.quantity).toBe(1);
+      expect(stock.unitPrice).toBe(18400000);
+      expect(order.subtotal).toBe(2 * 18500000 + 18400000);
+      const [v] = await products.getVariantsForUpdate({}, [sageM().id]);
+      expect(v.stock).toBe(0); // 3 - 3 across both combos
+    });
+
+    it('offline bills never carry the flag', async () => {
+      const order = await service.createOfflineOrder({
+        channel: 'in_store',
+        billType: 'cash_memo',
+        customer: { action: 'create', firstName: 'Lalita', phone: '9314420308' },
+        items: [{ description: 'Sage Lehenga (custom dye)', quantity: 1, unitPrice: 10100000 }],
+        total: 10100000,
+      });
+      expect(order.items[0].customColor).toBe(false);
+    });
+  });
+
   describe('made-to-measure measurements', () => {
     it('persists the trimmed note on its line and defaults to empty', async () => {
       const order = await service.createOrder(

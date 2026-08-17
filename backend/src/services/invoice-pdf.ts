@@ -84,6 +84,8 @@ export function buildInvoiceModel(order: Order): InvoiceModel {
     const variant = [item.size, item.color].filter(Boolean).join(' · ');
     if (variant) description += ` (${variant})`;
     const addOns = item.components.map((c) => c.name);
+    // The ₹1,000 surcharge is already inside unitPrice — the label discloses it.
+    if (item.customColor) addOns.push('custom colour');
     if (addOns.length) description += ` — with ${addOns.join(' & ')}`;
     return {
       sno: i + 1,
