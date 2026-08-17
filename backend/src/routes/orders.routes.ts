@@ -71,6 +71,11 @@ export function orderRoutes(orders: OrdersService, jwtSecret: string) {
     return c.json(order, 201);
   });
 
+  // First-order-discount eligibility for the signed-in shopper (Bearer, like /me/orders).
+  r.get('/orders/me/first-order-offer', requireAuth(jwtSecret), async (c) => {
+    return c.json(await orders.firstOrderOffer(c.var.user!.id));
+  });
+
   // Guest tracking: requires a matching Bearer user or ?email= matching the order.
   r.get('/orders/:orderNumber', optionalAuth(jwtSecret), async (c) => {
     const order = await orders.getOrderForRequester(c.req.param('orderNumber'), {

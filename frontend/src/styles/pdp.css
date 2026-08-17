@@ -35,6 +35,7 @@
 .page-pdp .info h1 { font-family: var(--serif-display); font-size: clamp(1.9rem,3.4vw,2.7rem); line-height: 1.05; margin: 0.9rem 0 1rem; }
 .page-pdp .info .price { font-family: var(--serif-soft); font-size: 1.7rem; color: var(--forest-700); }
 .page-pdp .info .price .tax { font-family: var(--sans); font-size: 0.7rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); margin-left: 0.6rem; }
+.page-pdp .info .offer-note { font-size: 0.78rem; color: var(--gold); margin-top: 0.4rem; }
 .page-pdp .info .desc { color: var(--fg-muted); margin: 1.4rem 0; max-width: 46ch; }
 /* sale pricing — pre-sale price struck through, ahead of the sale price */
 .was { text-decoration: line-through; opacity: .55; margin-right: .5em; }

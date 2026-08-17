@@ -650,6 +650,8 @@ export class FakeWishlistRepo implements WishlistRepo {
 
 export class FakeOrdersRepo implements OrdersRepo {
   orders: Order[] = [];
+  /** Call sequence for the first-order pair — tests assert lock-before-check. */
+  eligibilityCalls: { method: 'lock' | 'history'; userId: string }[] = [];
   private seq = 4818;
   private clock = 0;
 
@@ -673,6 +675,8 @@ export class FakeOrdersRepo implements OrdersRepo {
       deliveryMethod: order.deliveryMethod,
       deliveryFee: order.deliveryFee,
       subtotal: order.subtotal,
+      discountAmount: order.discountAmount ?? 0,
+      discountReason: order.discountReason ?? '',
       total: order.total,
       status: order.status,
       channel: 'online',
@@ -828,6 +832,15 @@ export class FakeOrdersRepo implements OrdersRepo {
 
   async nextOrderNumber(_tx: Tx): Promise<string> {
     return `TA-2026-${String(this.seq++).padStart(5, '0')}`;
+  }
+
+  async lockUserOrders(_tx: Tx, userId: string): Promise<void> {
+    this.eligibilityCalls.push({ method: 'lock', userId });
+  }
+
+  async hasNonCancelledOrders(userId: string, _tx?: Tx): Promise<boolean> {
+    this.eligibilityCalls.push({ method: 'history', userId });
+    return this.orders.some((o) => o.userId === userId && o.status !== 'cancelled');
   }
 }
 

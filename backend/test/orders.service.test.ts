@@ -282,6 +282,98 @@ describe('OrdersService', () => {
     });
   });
 
+  describe('first-order 5% discount', () => {
+    it('grants a signed-in first order 5% off and records the reason', async () => {
+      const order = await service.createOrder(input({ userId: 'user-1' }));
+      expect(order.discountAmount).toBe(920000); // 5% of 18400000
+      expect(order.discountReason).toBe('first_order_5pct');
+      expect(order.total).toBe(order.subtotal - 920000);
+    });
+
+    it('floors odd subtotals to whole paise — never over-discounts', async () => {
+      const exact = await products.createProduct({
+        categoryId: seeded.lehengas.id,
+        slug: 'odd-price-999',
+        name: 'Odd Price 999',
+        description: 'Subtotal 99900.',
+        details: '',
+        price: 99900,
+        color: 'Sage',
+        variants: [{ size: 'M', stock: 5 }],
+      });
+      const fractional = await products.createProduct({
+        categoryId: seeded.lehengas.id,
+        slug: 'odd-price-9999',
+        name: 'Odd Price 9999',
+        description: 'Subtotal 99990 — 5% lands on a half paisa.',
+        details: '',
+        price: 99990,
+        color: 'Sage',
+        variants: [{ size: 'M', stock: 5 }],
+      });
+      const a = await service.createOrder(
+        input({ userId: 'user-1', items: [{ variantId: exact.variants[0].id, quantity: 1 }] }),
+      );
+      expect(a.discountAmount).toBe(4995);
+      const b = await service.createOrder(
+        input({ userId: 'user-2', items: [{ variantId: fractional.variants[0].id, quantity: 1 }] }),
+      );
+      expect(b.discountAmount).toBe(4999); // floor(4999.5), never 5000
+    });
+
+    it('gives guests no discount', async () => {
+      const order = await service.createOrder(input());
+      expect(order.discountAmount).toBe(0);
+      expect(order.discountReason).toBe('');
+      expect(order.total).toBe(order.subtotal);
+    });
+
+    it('grants nothing once a non-cancelled order exists', async () => {
+      await service.createOrder(input({ userId: 'user-1' }));
+      const second = await service.createOrder(input({ userId: 'user-1' }));
+      expect(second.discountAmount).toBe(0);
+      expect(second.discountReason).toBe('');
+      expect(second.total).toBe(second.subtotal);
+    });
+
+    it('stays eligible when the only history is cancelled', async () => {
+      const first = await service.createOrder(input({ userId: 'user-1' }));
+      await service.cancelOrder(first.id);
+      const again = await service.createOrder(input({ userId: 'user-1' }));
+      expect(again.discountAmount).toBe(920000);
+      expect(again.discountReason).toBe('first_order_5pct');
+    });
+
+    it('offline history blocks the discount, and the offline path itself is untouched', async () => {
+      const offline = await service.createOfflineOrder({
+        channel: 'in_store',
+        billType: 'cash_memo',
+        customer: { action: 'create', firstName: 'Meera', phone: '+91 93144 20308' },
+        items: [{ description: 'Bridal lehenga', quantity: 1, unitPrice: 500000 }],
+        total: 500000,
+      });
+      expect(offline.discountAmount).toBe(0);
+      expect(offline.discountReason).toBe('');
+      const online = await service.createOrder(input({ userId: offline.userId! }));
+      expect(online.discountAmount).toBe(0);
+    });
+
+    it('takes the per-user advisory lock before reading history', async () => {
+      await service.createOrder(input({ userId: 'user-1' }));
+      expect(ordersRepo.eligibilityCalls).toEqual([
+        { method: 'lock', userId: 'user-1' },
+        { method: 'history', userId: 'user-1' },
+      ]);
+    });
+
+    it('firstOrderOffer previews eligibility without locking', async () => {
+      expect(await service.firstOrderOffer('user-1')).toEqual({ eligible: true, percentOff: 5 });
+      await service.createOrder(input({ userId: 'user-1' }));
+      expect(await service.firstOrderOffer('user-1')).toEqual({ eligible: false, percentOff: 5 });
+      expect(ordersRepo.eligibilityCalls.filter((c) => c.method === 'lock')).toHaveLength(1);
+    });
+  });
+
   describe('made-to-measure measurements', () => {
     it('persists the trimmed note on its line and defaults to empty', async () => {
       const order = await service.createOrder(

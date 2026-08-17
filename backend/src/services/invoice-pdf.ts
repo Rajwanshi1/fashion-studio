@@ -95,6 +95,9 @@ export function buildInvoiceModel(order: Order): InvoiceModel {
   });
 
   const totals: InvoiceModel['totals'] = [{ label: 'SUBTOTAL', value: formatINR(order.subtotal) }];
+  if (order.discountAmount > 0) {
+    totals.push({ label: 'FIRST ORDER — 5%', value: `−${formatINR(order.discountAmount)}` });
+  }
   if (order.gstAmount != null) totals.push({ label: 'GST', value: formatINR(order.gstAmount) });
   if (order.deliveryFee > 0) totals.push({ label: 'SHIPPING CHARGES', value: formatINR(order.deliveryFee) });
   if (order.advancePaid > 0) totals.push({ label: 'ADVANCE RECEIVED', value: formatINR(order.advancePaid) });

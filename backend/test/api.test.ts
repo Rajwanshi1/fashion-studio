@@ -421,6 +421,22 @@ describe('API', () => {
       expect((await app.request('/api/me/orders')).status).toBe(401);
     });
 
+    it('first-order offer: 401 unauthenticated, then eligible → discounted order → ineligible', async () => {
+      expect((await app.request('/api/orders/me/first-order-offer')).status).toBe(401);
+      const { token } = await registerCustomer();
+      const offer = await app.request('/api/orders/me/first-order-offer', bearer(token));
+      expect(offer.status).toBe(200);
+      expect(await offer.json()).toEqual({ eligible: true, percentOff: 5 });
+
+      const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }], token);
+      expect(order.discountAmount).toBe(920000); // 5% of 18400000
+      expect(order.discountReason).toBe('first_order_5pct');
+      expect(order.total).toBe(order.subtotal - 920000);
+
+      const after = await app.request('/api/orders/me/first-order-offer', bearer(token));
+      expect(await after.json()).toEqual({ eligible: false, percentOff: 5 });
+    });
+
     it('guest tracking requires matching ?email=, matching Bearer, and never leaks', async () => {
       const { token } = await registerCustomer();
       const stranger = await registerCustomer('rhea@example.com');

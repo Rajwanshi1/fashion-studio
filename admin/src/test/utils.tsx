@@ -93,6 +93,8 @@ export function makeOrder(overrides: Partial<Order> = {}): Order {
     deliveryMethod: 'standard',
     deliveryFee: 0,
     subtotal: 18400000,
+    discountAmount: 0,
+    discountReason: '',
     total: 18400000,
     status: 'paid',
     channel: 'online',

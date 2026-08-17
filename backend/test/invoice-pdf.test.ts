@@ -37,6 +37,8 @@ function makeOrder(over: Partial<Order> = {}): Order {
     deliveryMethod: 'standard',
     deliveryFee: 0,
     subtotal: 700000,
+    discountAmount: 0,
+    discountReason: '',
     total: 700000,
     status: 'in_atelier',
     channel: 'in_store',
@@ -142,6 +144,22 @@ describe('buildInvoiceModel', () => {
   it('shows shipping only when a delivery fee was charged', () => {
     expect(totalLabels(makeOrder())).not.toContain('SHIPPING CHARGES');
     expect(totalLabels(makeOrder({ deliveryFee: 25000 }))).toContain('SHIPPING CHARGES');
+  });
+
+  it('shows the first-order discount between subtotal and shipping, only when applied', () => {
+    expect(totalLabels(makeOrder())).not.toContain('FIRST ORDER — 5%');
+    const discounted = makeOrder({
+      subtotal: 18400000,
+      discountAmount: 920000,
+      discountReason: 'first_order_5pct',
+      deliveryFee: 25000,
+      total: 18400000 + 25000 - 920000,
+    });
+    const labels = totalLabels(discounted);
+    expect(labels.indexOf('FIRST ORDER — 5%')).toBe(labels.indexOf('SUBTOTAL') + 1);
+    expect(labels.indexOf('FIRST ORDER — 5%')).toBeLessThan(labels.indexOf('SHIPPING CHARGES'));
+    const row = buildInvoiceModel(discounted).totals.find((t) => t.label === 'FIRST ORDER — 5%')!;
+    expect(row.value).toBe('−₹9,200');
   });
 
   it('shows advance and balance rows only when they are non-zero', () => {

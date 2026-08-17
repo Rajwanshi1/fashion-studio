@@ -131,6 +131,8 @@ export interface OrdersService {
   createOfflineOrder(input: CreateOfflineOrderInput): Promise<Order>;
   getOrderForRequester(orderNumber: string, requester: OrderRequester): Promise<Order>;
   listUserOrders(userId: string): Promise<Order[]>;
+  /** Storefront preview of first-order eligibility; createOrder re-checks under the lock. */
+  firstOrderOffer(userId: string): Promise<{ eligible: boolean; percentOff: 5 }>;
   cancelOrder(orderId: string): Promise<Order>;
   updateStatus(orderId: string, next: OrderStatus): Promise<Order>;
   recordReceipt(orderId: string, input: RecordReceiptInput): Promise<Order>;
@@ -138,6 +140,8 @@ export interface OrdersService {
 }
 
 export const PRIORITY_DELIVERY_FEE = 250000; // ₹2,500 in paise
+
+export const FIRST_ORDER_PERCENT_OFF = 5;
 
 const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending_payment: ['paid', 'cancelled'],
@@ -272,6 +276,21 @@ export function createOrdersService(deps: {
         const items = [...merged.values()];
         const subtotal = items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
         const deliveryFee = input.deliveryMethod === 'priority' ? PRIORITY_DELIVERY_FEE : 0;
+
+        // First order, 5% off: signed-in shoppers with no non-cancelled order
+        // on any channel. The advisory lock serialises two simultaneous first
+        // orders by the same user — without it both would read empty history.
+        let discountAmount = 0;
+        let discountReason = '';
+        if (input.userId) {
+          await deps.orders.lockUserOrders(tx, input.userId);
+          if (!(await deps.orders.hasNonCancelledOrders(input.userId, tx))) {
+            // Floored to whole paise — never over-discount.
+            discountAmount = Math.floor((subtotal * FIRST_ORDER_PERCENT_OFF) / 100);
+            discountReason = 'first_order_5pct';
+          }
+        }
+
         const orderNumber = await deps.orders.nextOrderNumber(tx);
         const { customer } = input;
 
@@ -293,7 +312,9 @@ export function createOrdersService(deps: {
             deliveryMethod: input.deliveryMethod,
             deliveryFee,
             subtotal,
-            total: subtotal + deliveryFee,
+            discountAmount,
+            discountReason,
+            total: subtotal + deliveryFee - discountAmount,
             status: 'pending_payment',
           },
           items,
@@ -446,6 +467,14 @@ export function createOrdersService(deps: {
 
     listUserOrders(userId) {
       return deps.orders.listByUser(userId);
+    },
+
+    async firstOrderOffer(userId) {
+      // Read-only: no lock — the authoritative check runs inside createOrder.
+      return {
+        eligible: !(await deps.orders.hasNonCancelledOrders(userId)),
+        percentOff: FIRST_ORDER_PERCENT_OFF,
+      };
     },
 
     async cancelOrder(orderId) {
