@@ -203,6 +203,10 @@ export interface Order {
   deliveryMethod: DeliveryMethod;
   deliveryFee: number;
   subtotal: number;
+  /** Paise taken off the total; 0 when no offer applied. */
+  discountAmount: number;
+  /** Machine tag for the applied offer ('first_order_5pct'); '' when none. */
+  discountReason: string;
   total: number;
   status: OrderStatus;
   channel: OrderChannel;

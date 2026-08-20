@@ -222,6 +222,12 @@ function ExpandedOrder({ order, onUpdated: onUpdatedProp }: ExpandedProps) {
             <div>{formatINR(it.unitPrice * it.quantity)}</div>
           </div>
         ))}
+        {order.discountAmount > 0 && (
+          <div className="oitem">
+            <div className="x">First order − 5%</div>
+            <div>−{formatINR(order.discountAmount)}</div>
+          </div>
+        )}
         <div className="oitem">
           <div className="x">
             Delivery ({order.deliveryMethod === 'priority' ? 'Priority' : 'Standard'})

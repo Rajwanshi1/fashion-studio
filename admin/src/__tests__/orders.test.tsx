@@ -56,6 +56,32 @@ describe('Orders', () => {
     expect(await screen.findByText('In the Atelier', { selector: '.badge' })).toBeInTheDocument();
   });
 
+  it('shows the first-order discount row between items and delivery', async () => {
+    seedAdminAuth();
+    const order = makeOrder({
+      discountAmount: 920000,
+      discountReason: 'first_order_5pct',
+      total: 17480000,
+    });
+    mockFetch((url, init) => {
+      if (url.endsWith('/api/admin/orders') && (init?.method ?? 'GET') === 'GET') {
+        return { json: [order] };
+      }
+      return undefined;
+    });
+
+    renderApp('/orders');
+    await userEvent.click(await screen.findByText('TA-2026-04817'));
+
+    const rows = Array.from(document.querySelectorAll('.odetail .oitem')).map(
+      (el) => el.textContent ?? '',
+    );
+    expect(rows).toHaveLength(3); // item · discount · delivery
+    expect(rows[1]).toContain('First order − 5%');
+    expect(rows[1]).toContain('−₹9,200');
+    expect(rows[2]).toContain('Delivery');
+  });
+
   it('filters orders via status chips', async () => {
     seedAdminAuth();
     const { calls } = mockFetch((url) => {

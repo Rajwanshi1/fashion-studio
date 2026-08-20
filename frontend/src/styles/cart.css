@@ -30,15 +30,11 @@
 .page-cart .sline { display: flex; justify-content: space-between; font-size: var(--t-sm); color: var(--ink-soft); padding: 0.55rem 0; }
 .page-cart .sline.muted { color: var(--fg-muted); }
 .page-cart .sline .free { color: var(--forest-700); }
+.page-cart .sline.offer { color: var(--gold); }
 .page-cart .summary .sdiv { height: 1px; background: var(--hairline); margin: 1rem 0; }
 .page-cart .stotal { display: flex; justify-content: space-between; align-items: baseline; margin: 0.4rem 0 0.3rem; }
 .page-cart .stotal .l { font-size: 0.78rem; letter-spacing: var(--track-wide); text-transform: uppercase; }
 .page-cart .stotal .v { font-family: var(--serif-soft); font-size: 1.7rem; color: var(--forest-700); }
 .page-cart .summary .vat { font-size: 0.68rem; color: var(--fg-muted); margin-bottom: 1.4rem; }
-.page-cart .promo { display: flex; gap: 0.5rem; margin: 1.2rem 0 1.4rem; }
-.page-cart .promo input { flex: 1; border: 1px solid var(--hairline); background: var(--paper); padding: 0.75em 0.9em; font-family: var(--sans); font-size: 0.82rem; color: var(--ink); }
-.page-cart .promo input:focus { outline: none; border-color: var(--gold); }
-.page-cart .promo button { background: none; border: 1px solid var(--hairline-gold); padding: 0 1.1em; font-size: 0.64rem; letter-spacing: var(--track-wide); text-transform: uppercase; cursor: pointer; transition: all var(--dur) var(--ease); }
-.page-cart .promo button:hover { background: var(--celadon); }
 .page-cart .summary .reassure { display: flex; gap: 0.6rem; align-items: flex-start; margin-top: 1.2rem; font-size: 0.7rem; color: var(--fg-muted); line-height: 1.5; }
 .page-cart .summary .reassure .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--gold); margin-top: 0.45rem; flex: none; }

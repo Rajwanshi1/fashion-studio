@@ -6,6 +6,7 @@ import { swatchFill } from '../lib/colors';
 import type { ProductDetail, ProductImage, ProductSummary, ProductsResponse } from '../lib/types';
 import { useCart } from '../lib/cart';
 import { useSiteContent } from '../lib/content';
+import { useFirstOrderOffer } from '../lib/offers';
 import { useWishlist } from '../lib/wishlist';
 import { track } from '../lib/analytics';
 import { useCartDrawer } from '../components/CartDrawer';
@@ -30,6 +31,7 @@ export default function Product() {
   const navigate = useNavigate();
   const cart = useCart();
   const { facts, footer } = useSiteContent();
+  const offer = useFirstOrderOffer();
   const wishlist = useWishlist();
   const { openDrawer } = useCartDrawer();
   const { showToast } = useToast();
@@ -300,6 +302,9 @@ export default function Product() {
             )}
             <Price paise={liveTotal} /> <span className="tax">incl. of all taxes</span>
           </div>
+          {offer?.eligible && (
+            <div className="offer-note">5% off your first order is applied at checkout.</div>
+          )}
           <p className="desc">{product.description}</p>
 
           <div className="divline"></div>

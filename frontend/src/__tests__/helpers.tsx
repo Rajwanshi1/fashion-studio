@@ -197,6 +197,8 @@ export const ORDER: Order = {
   deliveryMethod: 'standard',
   deliveryFee: 0,
   subtotal: 18400000,
+  discountAmount: 0,
+  discountReason: '',
   total: 18400000,
   status: 'pending_payment',
   channel: 'online',
