@@ -7,6 +7,10 @@ Deep dive: `gh pr view NN` / `gh pr diff NN` (repo Rajwanshi1/fashion-studio).
 Cap: past ~150 lines, compress the oldest entries into an era-summary paragraph
 at the bottom — don't delete history.
 
+- #48 2026-08-20 Media CDN: CloudFront + responsive renditions + scrape rate-limit + loading polish — infra, backend, frontend, admin, docs
+- #47 2026-08-20 Session analytics: per-session timelines, visitor stitching, abandonment, consent bar — backend, frontend, admin
+- #46 2026-08-20 First-order 5% discount for signed-in shoppers + sign-in pop-up — backend, frontend, admin
+- #45 2026-08-20 Custom colour on request (+₹1,000) across shop, checkout and atelier — backend, frontend, admin
 - #43 2026-08-13 Audit remediation A-C: MTO stock model, copy/consistency sweep, brand-facts+archive CMS, slug aliases, provenance (#41/#42 closed into this) — backend, frontend, admin, docs, TODO
 - #40 2026-08-13 Honest PDP colour swatches from per-photo AI-read colours — backend, frontend, admin, docs
 - #39 2026-08-13 "This order contains" components replace the dupatta/jacket add-ons — backend, frontend, admin, e2e, docs
