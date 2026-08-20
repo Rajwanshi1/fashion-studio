@@ -42,10 +42,15 @@ import type {
   KpiAndFunnel,
   NewEvent,
   SearchRow,
+  ServerEvent,
+  SessionOutcomeFilter,
+  SessionSummary,
   SizeRow,
   SourceRow,
+  TimelineEvent,
   TopProduct,
   TrendDay,
+  VisitorDetail,
 } from '../src/data/events.repo';
 import type { OtpRecord, OtpsRepo } from '../src/data/otps.repo';
 import type { ScansRepo, SourceStats } from '../src/data/scans.repo';
@@ -402,6 +407,7 @@ export class FakeProductsRepo implements ProductsRepo {
             unitPrice: effectivePrice(p),
             imageUrl: p.imageUrl,
             components: p.components.map(({ name, optional, price }) => ({ name, optional, price })),
+            customColorAvailable: p.customColorAvailable,
           });
         }
       }
@@ -480,6 +486,8 @@ export class FakeProductsRepo implements ProductsRepo {
         height: im.height ?? null,
       })),
       components: toComponents(input.components),
+      // Mirrors the column default: every garment allows it unless opted out.
+      customColorAvailable: input.customColorAvailable ?? true,
       // Mirrors the real repo: new pieces start hidden unless explicitly published.
       active: input.active ?? false,
       variants: sizes.map((v) => ({ id: nextId('v'), productId: id, size: v.size, stock: v.stock })),
@@ -515,7 +523,7 @@ export class FakeProductsRepo implements ProductsRepo {
     const keys = [
       'name', 'description', 'details', 'price', 'color', 'flag', 'imageUrl', 'active',
       'collection', 'craft', 'fabric', 'occasion',
-      'salePrice', 'costPrice', 'colorFamily',
+      'salePrice', 'costPrice', 'colorFamily', 'customColorAvailable',
       'karigarName', 'hoursWorked', 'techniques', 'finishedOn',
     ] as const;
     for (const key of keys) {
@@ -661,6 +669,8 @@ export class FakeWishlistRepo implements WishlistRepo {
 
 export class FakeOrdersRepo implements OrdersRepo {
   orders: Order[] = [];
+  /** Call sequence for the first-order pair — tests assert lock-before-check. */
+  eligibilityCalls: { method: 'lock' | 'history'; userId: string }[] = [];
   private seq = 4818;
   private clock = 0;
 
@@ -684,6 +694,8 @@ export class FakeOrdersRepo implements OrdersRepo {
       deliveryMethod: order.deliveryMethod,
       deliveryFee: order.deliveryFee,
       subtotal: order.subtotal,
+      discountAmount: order.discountAmount ?? 0,
+      discountReason: order.discountReason ?? '',
       total: order.total,
       status: order.status,
       channel: 'online',
@@ -708,7 +720,9 @@ export class FakeOrdersRepo implements OrdersRepo {
     for (const it of items) this.productsRepo?.orderedProductIds.add(it.productId);
     const created = this.baseOrder(
       order,
-      items.map((it): OrderItem => ({ ...it, measurements: it.measurements ?? '', id: nextId('oi') })),
+      items.map(
+        (it): OrderItem => ({ ...it, customColor: it.customColor ?? false, measurements: it.measurements ?? '', id: nextId('oi') }),
+      ),
     );
     this.orders.push(created);
     return structuredClone(created);
@@ -734,6 +748,7 @@ export class FakeOrdersRepo implements OrdersRepo {
             quantity: it.quantity,
             imageUrl: it.imageUrl ?? null,
             components: [],
+            customColor: false,
             measurements: '',
           }),
         ),
@@ -839,6 +854,15 @@ export class FakeOrdersRepo implements OrdersRepo {
 
   async nextOrderNumber(_tx: Tx): Promise<string> {
     return `TA-2026-${String(this.seq++).padStart(5, '0')}`;
+  }
+
+  async lockUserOrders(_tx: Tx, userId: string): Promise<void> {
+    this.eligibilityCalls.push({ method: 'lock', userId });
+  }
+
+  async hasNonCancelledOrders(userId: string, _tx?: Tx): Promise<boolean> {
+    this.eligibilityCalls.push({ method: 'history', userId });
+    return this.orders.some((o) => o.userId === userId && o.status !== 'cancelled');
   }
 }
 
@@ -1058,7 +1082,13 @@ export class FakeContentRepo implements ContentRepo {
   }
 }
 
-type StoredEvent = NewEvent & { createdAt: Date };
+type StoredEvent = NewEvent & {
+  id: number;
+  createdAt: Date;
+  occurredAt: Date;
+  ip: string | null;
+  orderId: string | null;
+};
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -1086,10 +1116,41 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export class FakeEventsRepo implements EventsRepo {
   rows: StoredEvent[] = [];
   productNames = new Map<string, string>();
+  /** orderId → orderNumber, mirroring the real repo's LEFT JOIN orders. */
+  orderNumbers = new Map<string, string>();
+  private seq = 0;
 
   async insertBatch(rows: NewEvent[]): Promise<void> {
     const now = new Date();
-    this.rows.push(...rows.map((r) => ({ ...r, createdAt: now })));
+    this.rows.push(
+      ...rows.map((r) => ({
+        ...r,
+        id: ++this.seq,
+        createdAt: now,
+        occurredAt: r.occurredAt ?? now,
+        ip: r.ip ?? null,
+        orderId: r.orderId ?? null,
+      })),
+    );
+  }
+
+  async insertServerEvent(event: ServerEvent): Promise<void> {
+    const now = new Date();
+    this.rows.push({
+      eventType: event.eventType,
+      visitorId: event.visitorId,
+      sessionId: event.sessionId,
+      userId: event.userId,
+      path: event.path,
+      productId: event.productId,
+      device: 'desktop',
+      props: event.props,
+      id: ++this.seq,
+      createdAt: now,
+      occurredAt: now,
+      ip: event.ip,
+      orderId: event.orderId,
+    });
   }
 
   private within(days: number): StoredEvent[] {
@@ -1244,6 +1305,103 @@ export class FakeEventsRepo implements EventsRepo {
       counts.set(color, (counts.get(color) ?? 0) + 1);
     }
     return [...counts.entries()].map(([color, adds]) => ({ color, adds })).sort((a, b) => b.adds - a.adds);
+  }
+
+  /** Mirrors the SQL session aggregation (events.repo.ts SESSION_AGG). */
+  private summarize(rows: StoredEvent[]): SessionSummary[] {
+    const bySession = new Map<string, StoredEvent[]>();
+    for (const r of rows) {
+      const group = bySession.get(r.sessionId) ?? [];
+      group.push(r);
+      bySession.set(r.sessionId, group);
+    }
+    const chrono = (a: StoredEvent, b: StoredEvent) =>
+      a.occurredAt.getTime() - b.occurredAt.getTime() || a.id - b.id;
+    return [...bySession.entries()].map(([sessionId, group]) => {
+      const sorted = [...group].sort(chrono);
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      const ordered = sorted.some((r) => r.eventType === 'order_created' || r.eventType === 'order_placed');
+      const reachedCheckout = sorted.some((r) =>
+        ['checkout_start', 'checkout_step', 'payment_result'].includes(r.eventType),
+      );
+      const carted = sorted.some((r) => r.eventType === 'add_to_cart');
+      const lastOf = <T>(pick: (r: StoredEvent) => T | null): T | null => {
+        for (let i = sorted.length - 1; i >= 0; i--) {
+          const v = pick(sorted[i]);
+          if (v !== null) return v;
+        }
+        return null;
+      };
+      const orderId = lastOf((r) => r.orderId);
+      return {
+        sessionId,
+        visitorId: first.visitorId,
+        userId: lastOf((r) => r.userId),
+        startedAt: first.occurredAt.toISOString(),
+        endedAt: last.occurredAt.toISOString(),
+        durationSec: Math.max(0, Math.round((last.occurredAt.getTime() - first.occurredAt.getTime()) / 1000)),
+        device: first.device,
+        landingPath: sorted.find((r) => r.path !== null)?.path ?? null,
+        eventCount: sorted.length,
+        outcome: ordered ? 'ordered' : reachedCheckout ? 'checkout' : carted ? 'carted' : 'browsed',
+        abandoned:
+          !ordered && (carted || reachedCheckout) && last.occurredAt.getTime() < Date.now() - 30 * 60 * 1000,
+        orderId,
+        orderNumber: (orderId && this.orderNumbers.get(orderId)) || null,
+        ip: lastOf((r) => r.ip),
+      };
+    });
+  }
+
+  async listSessions(
+    days: number,
+    outcome: SessionOutcomeFilter,
+    page: number,
+    pageSize: number,
+  ): Promise<{ sessions: SessionSummary[]; total: number }> {
+    const filtered = this.summarize(this.within(days))
+      .filter((s) => {
+        if (outcome === 'all') return true;
+        if (outcome === 'abandoned') return s.abandoned;
+        return s.outcome === outcome;
+      })
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt) || a.sessionId.localeCompare(b.sessionId));
+    return {
+      sessions: filtered.slice((page - 1) * pageSize, page * pageSize),
+      total: filtered.length,
+    };
+  }
+
+  async sessionTimeline(sessionId: string): Promise<TimelineEvent[]> {
+    return this.rows
+      .filter((r) => r.sessionId === sessionId)
+      .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id - b.id)
+      .map((r) => ({
+        eventType: r.eventType,
+        occurredAt: r.occurredAt.toISOString(),
+        path: r.path,
+        productId: r.productId,
+        productName: (r.productId && this.productNames.get(r.productId)) || null,
+        props: r.props as Record<string, unknown>,
+      }));
+  }
+
+  async visitorDetail(visitorId: string): Promise<VisitorDetail> {
+    const mine = this.rows.filter((r) => r.visitorId === visitorId);
+    const latestIp = [...mine]
+      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.id - a.id)
+      .find((r) => r.ip !== null)?.ip ?? null;
+    const sameIpSessions = latestIp
+      ? new Set(this.rows.filter((r) => r.visitorId !== visitorId && r.ip === latestIp).map((r) => r.sessionId)).size
+      : 0;
+    return {
+      visitorId,
+      sessions: this.summarize(mine).sort(
+        (a, b) => b.startedAt.localeCompare(a.startedAt) || a.sessionId.localeCompare(b.sessionId),
+      ),
+      sameIpSessions,
+    };
   }
 }
 

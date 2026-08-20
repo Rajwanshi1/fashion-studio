@@ -19,6 +19,9 @@ export interface NewOrder {
   deliveryMethod: DeliveryMethod;
   deliveryFee: number;
   subtotal: number;
+  /** Paise; optional so the offline path stays untouched (columns default). */
+  discountAmount?: number;
+  discountReason?: string;
   total: number;
   status: OrderStatus;
 }
@@ -35,6 +38,8 @@ export interface NewOrderItem {
   imageUrl: string | null;
   /** Kept optional add-ons snapshotted at order time; price paise. */
   components: { name: string; price: number }[];
+  /** Custom colour charged on this line; optional so offline call sites are untouched. */
+  customColor?: boolean;
   /** Free-text made-to-measure note; optional so offline call sites are untouched. */
   measurements?: string;
 }
@@ -94,6 +99,10 @@ export interface OrdersRepo {
   /** Stamps invoice_sent_at = now(); returns the fresh order (null when missing). */
   markInvoiceSent(id: string): Promise<Order | null>;
   nextOrderNumber(tx: Tx): Promise<string>;
+  /** Serialises concurrent first orders by one user (pg_advisory_xact_lock). */
+  lockUserOrders(tx: Tx, userId: string): Promise<void>;
+  /** Any non-cancelled order on any channel — the first-order-discount check. */
+  hasNonCancelledOrders(userId: string, tx?: Tx): Promise<boolean>;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -113,6 +122,7 @@ function mapItem(row: any, rw: UrlRewriter): OrderItem {
     quantity: row.quantity,
     imageUrl: rw(row.image_url ?? null),
     components: row.components ?? [],
+    customColor: row.custom_color ?? false,
     measurements: row.measurements ?? '',
   };
 }
@@ -146,6 +156,8 @@ function mapOrder(row: any, items: OrderItem[], receipts: Receipt[]): Order {
     deliveryMethod: row.delivery_method,
     deliveryFee: row.delivery_fee,
     subtotal: row.subtotal,
+    discountAmount: row.discount_amount ?? 0,
+    discountReason: row.discount_reason ?? '',
     total: row.total,
     status: row.status,
     channel: row.channel,
@@ -216,8 +228,9 @@ export function createOrdersRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) => 
       const { rows } = await client.query(
         `INSERT INTO orders (order_number, user_id, email, phone, first_name, last_name,
                              address_line1, address_line2, city, state, pincode, country,
-                             delivery_method, delivery_fee, subtotal, total, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+                             delivery_method, delivery_fee, subtotal, discount_amount,
+                             discount_reason, total, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
          RETURNING *`,
         [
           order.orderNumber,
@@ -235,6 +248,8 @@ export function createOrdersRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) => 
           order.deliveryMethod,
           order.deliveryFee,
           order.subtotal,
+          order.discountAmount ?? 0,
+          order.discountReason ?? '',
           order.total,
           order.status,
         ],
@@ -244,8 +259,8 @@ export function createOrdersRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) => 
       for (const item of items) {
         const { rows: itemRows } = await client.query(
           `INSERT INTO order_items (order_id, product_id, variant_id, product_name, size, color,
-                                    unit_price, quantity, image_url, components, measurements)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+                                    unit_price, quantity, image_url, components, custom_color, measurements)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
           [
             orderRow.id,
             item.productId,
@@ -257,6 +272,7 @@ export function createOrdersRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) => 
             item.quantity,
             item.imageUrl,
             JSON.stringify(item.components),
+            item.customColor ?? false,
             item.measurements ?? '',
           ],
         );
@@ -427,6 +443,20 @@ export function createOrdersRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) => 
     async nextOrderNumber(tx) {
       const { rows } = await (tx as PoolClient).query("SELECT nextval('order_number_seq')::int AS n");
       return `TA-2026-${String(rows[0].n).padStart(5, '0')}`;
+    },
+
+    async lockUserOrders(tx, userId) {
+      // xact-scoped: released automatically at commit/rollback.
+      await (tx as PoolClient).query('SELECT pg_advisory_xact_lock(hashtextextended($1::text, 42))', [userId]);
+    },
+
+    async hasNonCancelledOrders(userId, tx) {
+      if (!UUID_RE.test(userId)) return false;
+      const { rows } = await ((tx as PoolClient) ?? pool).query(
+        "SELECT 1 FROM orders WHERE user_id = $1 AND status <> 'cancelled' LIMIT 1",
+        [userId],
+      );
+      return rows.length > 0;
     },
   };
 }

@@ -6,7 +6,7 @@ import {
   requesterOwnsOrder,
 } from '../src/services/orders.service';
 import type { Order } from '../src/types';
-import { FakeOrdersRepo, FakeProductsRepo, FakeReceiptsRepo, FakeUsersRepo, fakeTx, seedCatalog, seedSetProduct } from './fakes';
+import { FakeEventsRepo, FakeOrdersRepo, FakeProductsRepo, FakeReceiptsRepo, FakeUsersRepo, fakeTx, seedCatalog, seedSetProduct } from './fakes';
 
 const customer = {
   email: 'Guest@Example.com',
@@ -138,6 +138,70 @@ describe('OrdersService', () => {
       expect(order.items[0].quantity).toBe(50);
       const [v] = await products.getVariantsForUpdate({}, [sageCustom().id]);
       expect(v.stock).toBe(0);
+    });
+  });
+
+  describe('createOrder → server-stamped order_created event', () => {
+    const ANALYTICS = {
+      visitorId: '11111111-1111-1111-1111-111111111111',
+      sessionId: '22222222-2222-2222-2222-222222222222',
+    };
+
+    function serviceWith(events: Parameters<typeof createOrdersService>[0]['events']) {
+      return createOrdersService({
+        products,
+        orders: ordersRepo,
+        users: new FakeUsersRepo(ordersRepo),
+        receipts: new FakeReceiptsRepo(ordersRepo),
+        events,
+        runInTransaction: fakeTx,
+      } as Parameters<typeof createOrdersService>[0]);
+    }
+
+    it('emits order_created with the orderId after a successful order', async () => {
+      const events = new FakeEventsRepo();
+      const order = await serviceWith(events).createOrder(
+        input({ analytics: ANALYTICS, ip: '203.0.113.9', userId: 'user-42' }),
+      );
+      expect(events.rows).toHaveLength(1);
+      expect(events.rows[0]).toMatchObject({
+        eventType: 'order_created',
+        visitorId: ANALYTICS.visitorId,
+        sessionId: ANALYTICS.sessionId,
+        userId: 'user-42',
+        orderId: order.id,
+        ip: '203.0.113.9',
+        path: null,
+        productId: null,
+        props: { orderNumber: order.orderNumber, total: order.total },
+      });
+    });
+
+    it('an analytics failure never fails the order', async () => {
+      const failing = {
+        insertServerEvent: async () => {
+          throw new Error('events table on fire');
+        },
+      };
+      const order = await serviceWith(failing).createOrder(input({ analytics: ANALYTICS }));
+      expect(order.status).toBe('pending_payment');
+      expect(ordersRepo.orders).toHaveLength(1);
+    });
+
+    it('emits nothing when analytics ids are absent', async () => {
+      const events = new FakeEventsRepo();
+      await serviceWith(events).createOrder(input());
+      expect(events.rows).toHaveLength(0);
+    });
+
+    it('emits nothing when the order itself fails (no event before the commit)', async () => {
+      const events = new FakeEventsRepo();
+      await expect(
+        serviceWith(events).createOrder(
+          input({ analytics: ANALYTICS, items: [{ variantId: 'ghost', quantity: 1 }] }),
+        ),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(events.rows).toHaveLength(0);
     });
   });
 
@@ -279,6 +343,182 @@ describe('OrdersService', () => {
       expect(order.items).toHaveLength(1);
       expect(order.items[0].quantity).toBe(2);
       expect(order.items[0].unitPrice).toBe(18600000);
+    });
+  });
+
+  describe('first-order 5% discount', () => {
+    it('grants a signed-in first order 5% off and records the reason', async () => {
+      const order = await service.createOrder(input({ userId: 'user-1' }));
+      expect(order.discountAmount).toBe(920000); // 5% of 18400000
+      expect(order.discountReason).toBe('first_order_5pct');
+      expect(order.total).toBe(order.subtotal - 920000);
+    });
+
+    it('floors odd subtotals to whole paise — never over-discounts', async () => {
+      const exact = await products.createProduct({
+        categoryId: seeded.lehengas.id,
+        slug: 'odd-price-999',
+        name: 'Odd Price 999',
+        description: 'Subtotal 99900.',
+        details: '',
+        price: 99900,
+        color: 'Sage',
+        variants: [{ size: 'M', stock: 5 }],
+      });
+      const fractional = await products.createProduct({
+        categoryId: seeded.lehengas.id,
+        slug: 'odd-price-9999',
+        name: 'Odd Price 9999',
+        description: 'Subtotal 99990 — 5% lands on a half paisa.',
+        details: '',
+        price: 99990,
+        color: 'Sage',
+        variants: [{ size: 'M', stock: 5 }],
+      });
+      const a = await service.createOrder(
+        input({ userId: 'user-1', items: [{ variantId: exact.variants[0].id, quantity: 1 }] }),
+      );
+      expect(a.discountAmount).toBe(4995);
+      const b = await service.createOrder(
+        input({ userId: 'user-2', items: [{ variantId: fractional.variants[0].id, quantity: 1 }] }),
+      );
+      expect(b.discountAmount).toBe(4999); // floor(4999.5), never 5000
+    });
+
+    it('gives guests no discount', async () => {
+      const order = await service.createOrder(input());
+      expect(order.discountAmount).toBe(0);
+      expect(order.discountReason).toBe('');
+      expect(order.total).toBe(order.subtotal);
+    });
+
+    it('grants nothing once a non-cancelled order exists', async () => {
+      await service.createOrder(input({ userId: 'user-1' }));
+      const second = await service.createOrder(input({ userId: 'user-1' }));
+      expect(second.discountAmount).toBe(0);
+      expect(second.discountReason).toBe('');
+      expect(second.total).toBe(second.subtotal);
+    });
+
+    it('stays eligible when the only history is cancelled', async () => {
+      const first = await service.createOrder(input({ userId: 'user-1' }));
+      await service.cancelOrder(first.id);
+      const again = await service.createOrder(input({ userId: 'user-1' }));
+      expect(again.discountAmount).toBe(920000);
+      expect(again.discountReason).toBe('first_order_5pct');
+    });
+
+    it('offline history blocks the discount, and the offline path itself is untouched', async () => {
+      const offline = await service.createOfflineOrder({
+        channel: 'in_store',
+        billType: 'cash_memo',
+        customer: { action: 'create', firstName: 'Meera', phone: '+91 93144 20308' },
+        items: [{ description: 'Bridal lehenga', quantity: 1, unitPrice: 500000 }],
+        total: 500000,
+      });
+      expect(offline.discountAmount).toBe(0);
+      expect(offline.discountReason).toBe('');
+      const online = await service.createOrder(input({ userId: offline.userId! }));
+      expect(online.discountAmount).toBe(0);
+    });
+
+    it('takes the per-user advisory lock before reading history', async () => {
+      await service.createOrder(input({ userId: 'user-1' }));
+      expect(ordersRepo.eligibilityCalls).toEqual([
+        { method: 'lock', userId: 'user-1' },
+        { method: 'history', userId: 'user-1' },
+      ]);
+    });
+
+    it('firstOrderOffer previews eligibility without locking', async () => {
+      expect(await service.firstOrderOffer('user-1')).toEqual({ eligible: true, percentOff: 5 });
+      await service.createOrder(input({ userId: 'user-1' }));
+      expect(await service.firstOrderOffer('user-1')).toEqual({ eligible: false, percentOff: 5 });
+      expect(ordersRepo.eligibilityCalls.filter((c) => c.method === 'lock')).toHaveLength(1);
+    });
+  });
+
+  describe('custom colour (+₹1,000 on request)', () => {
+    // seedCatalog products default customColorAvailable true (the column default).
+    it('adds the surcharge on top of base + kept add-ons and snapshots the flag', async () => {
+      const set = await seedSetProduct(products, seeded.lehengas.id);
+      const order = await service.createOrder(
+        input({
+          items: [
+            { variantId: set.variants[0].id, quantity: 1, customColor: true, expectedUnitPrice: 15000000 + 1200000 + 2400000 + 100000 },
+          ],
+        }),
+      );
+      expect(order.items[0].unitPrice).toBe(15000000 + 1200000 + 2400000 + 100000);
+      expect(order.items[0].customColor).toBe(true);
+      // The surcharge is not a component — the snapshot stays add-ons only.
+      expect(order.items[0].components).toEqual([
+        { name: 'Dupatta', price: 1200000 },
+        { name: 'Jacket', price: 2400000 },
+      ]);
+    });
+
+    it('never charges (or records) the surcharge when the product disallows it', async () => {
+      const fixed = await products.createProduct({
+        categoryId: seeded.lehengas.id,
+        slug: 'fixed-shade-lehenga',
+        name: 'Fixed Shade Lehenga',
+        description: 'This dye lot cannot be re-matched.',
+        details: 'Dry clean only',
+        price: 10000000,
+        color: 'Sage',
+        active: true,
+        customColorAvailable: false,
+        variants: [{ size: 'M', stock: 5 }],
+      });
+      const order = await service.createOrder(
+        input({ items: [{ variantId: fixed.variants[0].id, quantity: 1, customColor: true }] }),
+      );
+      expect(order.items[0].unitPrice).toBe(10000000);
+      expect(order.items[0].customColor).toBe(false);
+
+      // A stale cart that displayed the surcharge must be asked to review,
+      // never silently repriced — the EXISTING guard, no new error type.
+      await expect(
+        service.createOrder(
+          input({
+            items: [{ variantId: fixed.variants[0].id, quantity: 1, customColor: true, expectedUnitPrice: 10100000 }],
+          }),
+        ),
+      ).rejects.toMatchObject({ code: 'PRICE_CHANGED' });
+    });
+
+    it('keeps the same variant with and without a custom colour as separate lines but aggregates stock', async () => {
+      const order = await service.createOrder(
+        input({
+          items: [
+            { variantId: sageM().id, quantity: 1, customColor: true },
+            { variantId: sageM().id, quantity: 1 },
+            { variantId: sageM().id, quantity: 1, customColor: true }, // merges with the first line
+          ],
+        }),
+      );
+      expect(order.items).toHaveLength(2);
+      const custom = order.items.find((i) => i.customColor)!;
+      const stock = order.items.find((i) => !i.customColor)!;
+      expect(custom.quantity).toBe(2);
+      expect(custom.unitPrice).toBe(18400000 + 100000);
+      expect(stock.quantity).toBe(1);
+      expect(stock.unitPrice).toBe(18400000);
+      expect(order.subtotal).toBe(2 * 18500000 + 18400000);
+      const [v] = await products.getVariantsForUpdate({}, [sageM().id]);
+      expect(v.stock).toBe(0); // 3 - 3 across both combos
+    });
+
+    it('offline bills never carry the flag', async () => {
+      const order = await service.createOfflineOrder({
+        channel: 'in_store',
+        billType: 'cash_memo',
+        customer: { action: 'create', firstName: 'Lalita', phone: '9314420308' },
+        items: [{ description: 'Sage Lehenga (custom dye)', quantity: 1, unitPrice: 10100000 }],
+        total: 10100000,
+      });
+      expect(order.items[0].customColor).toBe(false);
     });
   });
 

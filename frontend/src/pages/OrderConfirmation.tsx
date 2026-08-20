@@ -144,6 +144,7 @@ export default function OrderConfirmation() {
                           {[it.color, it.size, `Qty ${it.quantity}`].filter(Boolean).join(' · ')}
                           {it.components.length > 0 &&
                             ` · With ${it.components.map((c) => c.name).join(' & ')}`}
+                          {it.customColor && ' · Custom colour'}
                         </div>
                       </div>
                       <div className="pr">{formatINR(it.unitPrice * it.quantity)}</div>

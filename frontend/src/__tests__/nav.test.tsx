@@ -17,6 +17,7 @@ const item: Omit<CartItem, 'qty' | 'addedAt'> = {
   imageUrl: null,
   includedComponents: [],
   excludedComponents: [],
+  customColor: false,
   measurements: '',
 };
 

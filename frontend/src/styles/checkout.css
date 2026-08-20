@@ -77,6 +77,7 @@
 .page-checkout .ci .cp { font-family: var(--serif-soft); font-size: 1.05rem; color: var(--forest-700); white-space: nowrap; }
 .page-checkout .srow { display: flex; justify-content: space-between; font-size: var(--t-sm); color: var(--ink-soft); padding: 0.5rem 0; }
 .page-checkout .srow.muted { color: var(--fg-muted); }
+.page-checkout .srow.offer { color: var(--gold); }
 .page-checkout .srow .free { color: var(--forest-700); }
 .page-checkout .co-summary .sdiv { height: 1px; background: var(--hairline); margin: 1rem 0; }
 .page-checkout .co-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 0.4rem; }

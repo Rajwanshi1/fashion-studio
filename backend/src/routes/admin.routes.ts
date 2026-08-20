@@ -216,6 +216,8 @@ const productBaseSchema = z.object({
       { message: 'Component names must be unique' },
     )
     .optional(),
+  // Custom colour on request (+₹1,000 at checkout when true).
+  customColorAvailable: z.boolean().optional(),
   dupattaPrice: legacyRemovedField,
   jacketPrice: legacyRemovedField,
   images: z

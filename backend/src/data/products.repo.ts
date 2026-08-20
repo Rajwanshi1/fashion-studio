@@ -36,6 +36,8 @@ export interface VariantForOrder {
   imageUrl: string | null;
   /** The product's set, in display order — checkout prices the kept optional rows. */
   components: { name: string; optional: boolean; price: number | null }[];
+  /** Whether a custom-colour request may be priced (+₹1,000) on this piece. */
+  customColorAvailable: boolean;
 }
 
 export interface CreateCategoryInput {
@@ -89,6 +91,8 @@ export interface CreateProductInput {
   images?: ProductImageInput[];
   /** "This order contains" rows, in display order. */
   components?: ProductComponentInput[];
+  /** Absent = available — every garment can be re-dyed unless opted out. */
+  customColorAvailable?: boolean;
   variants?: { size: string; stock: number }[];
 }
 
@@ -112,6 +116,7 @@ export interface UpdateProductInput {
   salePrice?: number | null;
   costPrice?: number | null;
   colorFamily?: ColorFamily | null;
+  customColorAvailable?: boolean;
   /** Provenance — optional; '' / null clears a field. */
   karigarName?: string;
   hoursWorked?: number | null;
@@ -276,6 +281,7 @@ function mapDetail(
     variants,
     images,
     components,
+    customColorAvailable: row.custom_color_available,
     categoryId: row.category_id,
     createdAt: row.created_at.toISOString(),
     costPrice: row.cost_price ?? null,
@@ -572,6 +578,7 @@ export function createProductsRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) =
       const { rows } = await client.query(
         `SELECT v.id, v.product_id, v.size, v.stock,
                 p.name AS product_name, p.color, ${EFFECTIVE_PRICE} AS unit_price, p.image_url,
+                p.custom_color_available,
                 COALESCE((SELECT json_agg(json_build_object('name', pc.name, 'optional', pc.optional, 'price', pc.price)
                                           ORDER BY pc.position, pc.id)
                           FROM product_components pc WHERE pc.product_id = p.id), '[]'::json) AS components
@@ -589,6 +596,7 @@ export function createProductsRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) =
         unitPrice: row.unit_price,
         imageUrl: rw(row.image_url ?? null),
         components: (row.components as { name: string; optional: boolean; price: number | null }[]) ?? [],
+        customColorAvailable: row.custom_color_available,
       }));
     },
 
@@ -624,8 +632,9 @@ export function createProductsRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) =
         try {
           const { rows } = await client.query(
             `INSERT INTO products (category_id, slug, name, description, details, price, color, flag, image_url, active,
-                                   collection, craft, fabric, occasion, sale_price, cost_price, color_family)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+                                   collection, craft, fabric, occasion, sale_price, cost_price, color_family,
+                                   custom_color_available)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
             [
               input.categoryId,
               input.slug,
@@ -648,6 +657,7 @@ export function createProductsRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) =
               input.salePrice ?? null,
               input.costPrice ?? null,
               input.colorFamily ?? null,
+              input.customColorAvailable ?? true,
             ],
           );
           productId = rows[0].id;
@@ -692,6 +702,7 @@ export function createProductsRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) =
         salePrice: 'sale_price',
         costPrice: 'cost_price',
         colorFamily: 'color_family',
+        customColorAvailable: 'custom_color_available',
         karigarName: 'karigar_name',
         hoursWorked: 'hours_worked',
         techniques: 'techniques',

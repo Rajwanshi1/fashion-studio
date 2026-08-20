@@ -46,6 +46,9 @@ export type EventType =
 interface QueuedEvent {
   type: EventType;
   path: string;
+  /** Date.now() at queue time — the server clamps, so a batch flushed late
+   *  still lands each event at its real moment. */
+  occurredAt: number;
   productId?: string;
   props?: Record<string, unknown>;
 }
@@ -69,7 +72,7 @@ let memoryVisitorId: string | null = null;
 let memorySessionId: string | null = null;
 let memorySessionTs = 0;
 
-function getVisitorId(): string {
+export function getVisitorId(): string {
   try {
     let id = localStorage.getItem(VISITOR_KEY);
     if (!id) {
@@ -262,11 +265,20 @@ function registerListeners(): void {
 
 registerListeners();
 
+/** Current session id for callers that attach analytics identity to API
+ *  payloads (checkout). Reading counts as activity, like track(). */
+export function getSessionId(): string {
+  const session = getOrRotateSession();
+  cachedSessionId = session.id;
+  return session.id;
+}
+
 export function track(
   type: EventType,
   data?: { productId?: string; props?: Record<string, unknown> },
 ): void {
   const path = currentPath();
+  const occurredAt = Date.now();
   const session = getOrRotateSession();
   cachedSessionId = session.id;
 
@@ -274,6 +286,7 @@ export function track(
     queue.push({
       type: 'session_start',
       path,
+      occurredAt,
       props: {
         referrer: currentReferrer(),
         ...parseUtm(),
@@ -282,7 +295,7 @@ export function track(
     });
   }
 
-  const event: QueuedEvent = { type, path };
+  const event: QueuedEvent = { type, path, occurredAt };
   if (data?.productId) event.productId = data.productId;
   if (data?.props) event.props = data.props;
   queue.push(event);

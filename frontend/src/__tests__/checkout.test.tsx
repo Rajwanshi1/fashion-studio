@@ -67,7 +67,7 @@ describe('checkout', () => {
     expect(String(confirmCall?.[1]?.body)).toContain('"outcome":"success"');
   });
 
-  it('sends measurements and excluded components per line, omitting empties', async () => {
+  it('sends measurements, excluded components and custom colour per line, omitting empties', async () => {
     seedCart(); // line 1: plain, no note, nothing unticked
     const cart = JSON.parse(localStorage.getItem('ta.cart') ?? '[]');
     cart.push({
@@ -76,6 +76,11 @@ describe('checkout', () => {
       size: 'Custom',
       measurements: 'bust 36in, waist 30in',
       excludedComponents: ['Jacket'],
+    });
+    cart.push({
+      ...cart[0],
+      customColor: true,
+      unitPrice: cart[0].unitPrice + 100000, // ₹1,000 surcharge, added on the PDP
     });
     localStorage.setItem('ta.cart', JSON.stringify(cart));
     const fetchMock = mockFetch(checkoutRoutes);
@@ -90,14 +95,39 @@ describe('checkout', () => {
       (c) => String(c[0]).endsWith('/api/orders') && c[1]?.method === 'POST',
     );
     const body = JSON.parse(String(orderCall?.[1]?.body));
-    expect(body.items).toHaveLength(2);
+    expect(body.items).toHaveLength(3);
     expect(body.items[0]).not.toHaveProperty('measurements'); // empty note omitted
     expect(body.items[0]).not.toHaveProperty('excludedComponents'); // nothing unticked omitted
+    expect(body.items[0]).not.toHaveProperty('customColor'); // not requested — omitted
     expect(body.items[1].measurements).toBe('bust 36in, waist 30in');
     expect(body.items[1].excludedComponents).toEqual(['Jacket']);
+    expect(body.items[2].customColor).toBe(true);
     // Every line ships the price it displayed — the server 409s on drift.
     expect(body.items[0].expectedUnitPrice).toBeGreaterThan(0);
     expect(body.items[1].expectedUnitPrice).toBe(body.items[0].expectedUnitPrice);
+    // The surcharge rides inside expectedUnitPrice, nowhere else.
+    expect(body.items[2].expectedUnitPrice).toBe(body.items[0].expectedUnitPrice + 100000);
+  });
+
+  it('attaches the tracker identity so the server can stamp order_created', async () => {
+    seedCart();
+    const fetchMock = mockFetch(checkoutRoutes);
+    renderApp('/checkout');
+
+    const user = userEvent.setup();
+    await fillForm(user);
+    await user.click(screen.getByRole('button', { name: /Place Order/ }));
+    await screen.findByRole('dialog', { name: 'Razorpay · Test Mode' });
+
+    const orderCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]).endsWith('/api/orders') && c[1]?.method === 'POST',
+    );
+    const body = JSON.parse(String(orderCall?.[1]?.body));
+    // The ids in the body are the tracker's own — the same visitor the
+    // beacons report.
+    expect(body.analytics.visitorId).toBe(localStorage.getItem('ta.visitor'));
+    const session = JSON.parse(localStorage.getItem('ta.session') ?? '{}');
+    expect(body.analytics.sessionId).toBe(session.id);
   });
 
   it('payments disabled: 503 from checkout shows the coming-soon notice, order saved', async () => {

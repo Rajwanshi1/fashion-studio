@@ -60,6 +60,7 @@ function DrawerUI({ open, onClose }: { open: boolean; onClose: () => void }) {
                   {i.color} · Size {i.size} · Qty {i.qty}
                   {i.includedComponents.length > 0 &&
                     ` · With ${i.includedComponents.join(' & ')}`}
+                  {i.customColor && ' · Custom colour'}
                 </div>
                 {i.measurements && <div className="line-note">{i.measurements}</div>}
                 <button className="rm" onClick={() => remove(cartLineKey(i))}>

@@ -1292,3 +1292,13 @@ select.inp {
 
 /* Validation summaries list every problem at once */
 .form-err p { margin: 0.15rem 0; }
+
+/* ---- Sessions: expanded timeline + pager ---- */
+.timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+.timeline li { display: flex; gap: 0.9rem; align-items: baseline; font-size: 0.82rem; }
+.t-offset { flex: none; min-width: 4.5ch; text-align: right; font-variant-numeric: tabular-nums; color: var(--fg-muted); }
+.t-type { flex: none; min-width: 14ch; text-transform: uppercase; font-size: 0.68rem; letter-spacing: var(--track-wide); color: var(--ink); }
+.t-detail { min-width: 0; overflow-wrap: anywhere; }
+.t-props { color: var(--fg-muted); font-size: 0.76rem; }
+.pager { margin-top: 1rem; align-items: center; }
+.page-count { font-size: 0.78rem; color: var(--fg-muted); }

@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { cartLineKey, useCart } from '../lib/cart';
 import { formatINR } from '../lib/format';
+import { useFirstOrderOffer } from '../lib/offers';
 import Shop from '../components/Shop';
 import ImageSlot from '../components/ImageSlot';
 import Reveal from '../components/Reveal';
@@ -11,7 +12,10 @@ import { usePageTitle } from '../lib/usePageTitle';
 export default function CartPage() {
   usePageTitle('Your Bag');
   const { items, setQty, remove, subtotal, count } = useCart();
+  const offer = useFirstOrderOffer();
   const navigate = useNavigate();
+  // Display-only preview; the server recomputes at order time.
+  const discount = offer?.eligible ? Math.floor((subtotal * 5) / 100) : 0;
 
   return (
     <Shop page="page-cart">
@@ -45,6 +49,7 @@ export default function CartPage() {
                       Includes {i.includedComponents.join(' · ')}
                     </span>
                   )}
+                  {i.customColor && <span>Custom colour</span>}
                   <span className="tag">Made to Order · 4–6 weeks</span>
                 </div>
                 {i.measurements && <div className="line-note">{i.measurements}</div>}
@@ -95,16 +100,17 @@ export default function CartPage() {
             <span>Estimated Duties</span>
             <span>Calculated at checkout</span>
           </div>
-
-          <div className="promo">
-            <input type="text" placeholder="Gift card or promo code" />
-            <button type="button">Apply</button>
-          </div>
+          {discount > 0 && (
+            <div className="sline offer">
+              <span>First order − 5%</span>
+              <span>−{formatINR(discount)}</span>
+            </div>
+          )}
 
           <div className="sdiv"></div>
           <div className="stotal">
             <span className="l">Total</span>
-            <span className="v">{formatINR(subtotal)}</span>
+            <span className="v">{formatINR(subtotal - discount)}</span>
           </div>
           <div className="vat">Inclusive of all taxes</div>
 

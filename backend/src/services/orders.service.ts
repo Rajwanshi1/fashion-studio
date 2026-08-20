@@ -1,4 +1,5 @@
 import type { DocumentsRepo } from '../data/documents.repo';
+import type { EventsRepo } from '../data/events.repo';
 import type { MeasurementsRepo } from '../data/measurements.repo';
 import type { OrderDetailsPatch, OrdersRepo } from '../data/orders.repo';
 import type { ProductsRepo, VariantForOrder } from '../data/products.repo';
@@ -50,9 +51,18 @@ export interface CreateOrderInput {
      *  those two names so an invisible component is never charged. Removed
      *  with the legacy-column drop chore. */
     legacyIncludes?: { dupatta: boolean; jacket: boolean };
+    /** Custom colour requested (+₹1,000 when the product allows it); part of
+     *  line identity. Ignored — not priced, not recorded — when the product
+     *  disallows it (a stale cart then trips expectedUnitPrice above). */
+    customColor?: boolean;
     /** Free-text made-to-measure note; part of line identity. */
     measurements?: string;
   }[];
+  /** Tracker identity for the server-stamped order_created analytics event;
+   *  absent (no event) when the client has no analytics ids to offer. */
+  analytics?: { visitorId: string; sessionId: string } | null;
+  /** First X-Forwarded-For hop, threaded from the route for that event. */
+  ip?: string | null;
 }
 
 /** Manual entry of a handwritten bill (in-store, Instagram DM, exhibition). */
@@ -131,6 +141,8 @@ export interface OrdersService {
   createOfflineOrder(input: CreateOfflineOrderInput): Promise<Order>;
   getOrderForRequester(orderNumber: string, requester: OrderRequester): Promise<Order>;
   listUserOrders(userId: string): Promise<Order[]>;
+  /** Storefront preview of first-order eligibility; createOrder re-checks under the lock. */
+  firstOrderOffer(userId: string): Promise<{ eligible: boolean; percentOff: 5 }>;
   cancelOrder(orderId: string): Promise<Order>;
   updateStatus(orderId: string, next: OrderStatus): Promise<Order>;
   recordReceipt(orderId: string, input: RecordReceiptInput): Promise<Order>;
@@ -138,6 +150,10 @@ export interface OrdersService {
 }
 
 export const PRIORITY_DELIVERY_FEE = 250000; // ₹2,500 in paise
+
+export const CUSTOM_COLOR_SURCHARGE = 100000; // ₹1,000 in paise
+
+export const FIRST_ORDER_PERCENT_OFF = 5;
 
 const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending_payment: ['paid', 'cancelled'],
@@ -162,6 +178,8 @@ export function createOrdersService(deps: {
   receipts: ReceiptsRepo;
   documents: DocumentsRepo;
   measurements: MeasurementsRepo;
+  /** Optional analytics sink for the server-stamped order_created event. */
+  events?: Pick<EventsRepo, 'insertServerEvent'> | null;
   runInTransaction: TxRunner;
 }): OrdersService {
   const service: OrdersService = {
@@ -176,6 +194,7 @@ export function createOrdersService(deps: {
           excluded: Set<string>;
           expected: number | null;
           legacy: { dupatta: boolean; jacket: boolean } | null;
+          customColor: boolean;
           measurements: string;
           qty: number;
         }
@@ -187,17 +206,19 @@ export function createOrdersService(deps: {
         );
         const expected = item.expectedUnitPrice ?? null;
         const legacy = item.legacyIncludes ?? null;
+        const customColor = item.customColor ?? false;
         const measurements = (item.measurements ?? '').trim();
         const key = [
           item.variantId,
           [...excluded].sort().join(','),
           expected ?? '',
           legacy ? `L${legacy.dupatta ? 1 : 0}${legacy.jacket ? 1 : 0}` : '',
+          customColor ? 'C' : '',
           measurements,
         ].join('|');
         const existing = combos.get(key);
         if (existing) existing.qty += item.quantity;
-        else combos.set(key, { variantId: item.variantId, excluded, expected, legacy, measurements, qty: item.quantity });
+        else combos.set(key, { variantId: item.variantId, excluded, expected, legacy, customColor, measurements, qty: item.quantity });
       }
       if (combos.size === 0) {
         throw new DomainError('EMPTY_ORDER', 'Order must contain at least one item');
@@ -208,7 +229,7 @@ export function createOrdersService(deps: {
         quantities.set(combo.variantId, (quantities.get(combo.variantId) ?? 0) + combo.qty);
       }
 
-      return deps.runInTransaction(async (tx) => {
+      const created = await deps.runInTransaction(async (tx) => {
         const variantIds = [...quantities.keys()];
         const variants = await deps.products.getVariantsForUpdate(tx, variantIds);
         const byId = new Map(variants.map((v) => [v.id, v]));
@@ -236,7 +257,14 @@ export function createOrdersService(deps: {
                 })
               : optionalPriced.filter((c) => !combo.excluded.has(c.name.trim().toLowerCase()))
           ).map((c) => ({ name: c.name, price: c.price! }));
-          const unitPrice = v.unitPrice + kept.reduce((sum, c) => sum + c.price, 0);
+          // A custom-colour request only counts (and only charges) on a piece
+          // that allows it — a disallowed request prices out as if never made,
+          // and a cart that displayed the surcharge trips PRICE_CHANGED below.
+          const customColor = combo.customColor && v.customColorAvailable;
+          const unitPrice =
+            v.unitPrice +
+            kept.reduce((sum, c) => sum + c.price, 0) +
+            (customColor ? CUSTOM_COLOR_SURCHARGE : 0);
           // The one guard against a stale cart: the shopper is only ever
           // charged a per-unit price their cart actually displayed.
           if (combo.expected != null && combo.expected !== unitPrice) {
@@ -255,6 +283,7 @@ export function createOrdersService(deps: {
             quantity: combo.qty,
             imageUrl: v.imageUrl,
             components: kept,
+            customColor,
             // Display-only free text — prices still come exclusively from the DB rows.
             measurements: combo.measurements,
           };
@@ -264,7 +293,7 @@ export function createOrdersService(deps: {
         // never had alongside a fresh line for the same selection.
         const merged = new Map<string, (typeof priced)[number]>();
         for (const item of priced) {
-          const key = [item.variantId, item.unitPrice, item.components.map((c) => c.name).join(','), item.measurements].join('|');
+          const key = [item.variantId, item.unitPrice, item.components.map((c) => c.name).join(','), item.customColor ? 'C' : '', item.measurements].join('|');
           const existing = merged.get(key);
           if (existing) existing.quantity += item.quantity;
           else merged.set(key, item);
@@ -272,6 +301,21 @@ export function createOrdersService(deps: {
         const items = [...merged.values()];
         const subtotal = items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
         const deliveryFee = input.deliveryMethod === 'priority' ? PRIORITY_DELIVERY_FEE : 0;
+
+        // First order, 5% off: signed-in shoppers with no non-cancelled order
+        // on any channel. The advisory lock serialises two simultaneous first
+        // orders by the same user — without it both would read empty history.
+        let discountAmount = 0;
+        let discountReason = '';
+        if (input.userId) {
+          await deps.orders.lockUserOrders(tx, input.userId);
+          if (!(await deps.orders.hasNonCancelledOrders(input.userId, tx))) {
+            // Floored to whole paise — never over-discount.
+            discountAmount = Math.floor((subtotal * FIRST_ORDER_PERCENT_OFF) / 100);
+            discountReason = 'first_order_5pct';
+          }
+        }
+
         const orderNumber = await deps.orders.nextOrderNumber(tx);
         const { customer } = input;
 
@@ -293,7 +337,9 @@ export function createOrdersService(deps: {
             deliveryMethod: input.deliveryMethod,
             deliveryFee,
             subtotal,
-            total: subtotal + deliveryFee,
+            discountAmount,
+            discountReason,
+            total: subtotal + deliveryFee - discountAmount,
             status: 'pending_payment',
           },
           items,
@@ -304,6 +350,28 @@ export function createOrdersService(deps: {
         }
         return order;
       });
+
+      // Server-stamped conversion event, AFTER the commit — order_created is
+      // not in the /track whitelist, so it can never be spoofed by a client.
+      // An analytics failure must never fail a placed order.
+      if (input.analytics && deps.events) {
+        try {
+          await deps.events.insertServerEvent({
+            eventType: 'order_created',
+            visitorId: input.analytics.visitorId,
+            sessionId: input.analytics.sessionId,
+            userId: input.userId ?? null,
+            orderId: created.id,
+            path: null,
+            productId: null,
+            ip: input.ip ?? null,
+            props: { orderNumber: created.orderNumber, total: created.total },
+          });
+        } catch (err) {
+          console.error('order_created analytics event failed:', err);
+        }
+      }
+      return created;
     },
 
     async createOfflineOrder(input) {
@@ -446,6 +514,14 @@ export function createOrdersService(deps: {
 
     listUserOrders(userId) {
       return deps.orders.listByUser(userId);
+    },
+
+    async firstOrderOffer(userId) {
+      // Read-only: no lock — the authoritative check runs inside createOrder.
+      return {
+        eligible: !(await deps.orders.hasNonCancelledOrders(userId)),
+        percentOff: FIRST_ORDER_PERCENT_OFF,
+      };
     },
 
     async cancelOrder(orderId) {

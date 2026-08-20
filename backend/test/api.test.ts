@@ -421,6 +421,22 @@ describe('API', () => {
       expect((await app.request('/api/me/orders')).status).toBe(401);
     });
 
+    it('first-order offer: 401 unauthenticated, then eligible → discounted order → ineligible', async () => {
+      expect((await app.request('/api/orders/me/first-order-offer')).status).toBe(401);
+      const { token } = await registerCustomer();
+      const offer = await app.request('/api/orders/me/first-order-offer', bearer(token));
+      expect(offer.status).toBe(200);
+      expect(await offer.json()).toEqual({ eligible: true, percentOff: 5 });
+
+      const order = await placeOrder([{ variantId: sageM().id, quantity: 1 }], token);
+      expect(order.discountAmount).toBe(920000); // 5% of 18400000
+      expect(order.discountReason).toBe('first_order_5pct');
+      expect(order.total).toBe(order.subtotal - 920000);
+
+      const after = await app.request('/api/orders/me/first-order-offer', bearer(token));
+      expect(await after.json()).toEqual({ eligible: false, percentOff: 5 });
+    });
+
     it('guest tracking requires matching ?email=, matching Bearer, and never leaks', async () => {
       const { token } = await registerCustomer();
       const stranger = await registerCustomer('rhea@example.com');
@@ -1942,6 +1958,148 @@ describe('API', () => {
 
       expect(body.sizes).toContainEqual({ size: 'M', adds: 1 });
       expect(body.colors).toContainEqual({ color: 'Sage', adds: 1 });
+    });
+  });
+
+  describe('session analytics', () => {
+    const VISITOR = '11111111-1111-1111-1111-111111111111';
+    const SESSION = '22222222-2222-2222-2222-222222222222';
+    const validBatch = () => ({
+      visitorId: VISITOR,
+      sessionId: SESSION,
+      events: [{ type: 'page_view', path: '/shop' }],
+    });
+
+    it("POST /api/track rejects 'order_created' — server-only, unspoofable", async () => {
+      const res = await app.request('/api/track', post({ ...validBatch(), events: [{ type: 'order_created' }] }));
+      expect(res.status).toBe(400);
+      expect(f.events.rows).toHaveLength(0);
+    });
+
+    it('POST /api/track accepts occurredAt and stores the first x-forwarded-for hop', async () => {
+      const sent = Date.now() - 5_000;
+      const res = await app.request('/api/track', {
+        ...post({ ...validBatch(), events: [{ type: 'page_view', occurredAt: sent }] }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-forwarded-for': '203.0.113.9, 10.0.0.1',
+        },
+      });
+      expect(res.status).toBe(204);
+      expect(f.events.rows[0].ip).toBe('203.0.113.9');
+      expect(f.events.rows[0].occurredAt!.getTime()).toBe(sent);
+    });
+
+    it('POST /api/track rejects a non-integer occurredAt', async () => {
+      const res = await app.request(
+        '/api/track',
+        post({ ...validBatch(), events: [{ type: 'page_view', occurredAt: 'yesterday' }] }),
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('POST /api/track answers 204 for a bot UA but records nothing', async () => {
+      const res = await app.request('/api/track', {
+        ...post(validBatch()),
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)',
+        },
+      });
+      expect(res.status).toBe(204);
+      expect(f.events.rows).toHaveLength(0);
+    });
+
+    it('POST /api/orders with analytics ids stamps order_created; without them, nothing', async () => {
+      const res = await app.request(
+        '/api/orders',
+        post({
+          customer: CUSTOMER,
+          deliveryMethod: 'standard',
+          items: [{ variantId: sageM().id, quantity: 1 }],
+          analytics: { visitorId: VISITOR, sessionId: SESSION },
+        }),
+      );
+      expect(res.status).toBe(201);
+      const order = await res.json();
+      expect(f.events.rows).toHaveLength(1);
+      expect(f.events.rows[0]).toMatchObject({
+        eventType: 'order_created',
+        sessionId: SESSION,
+        orderId: order.id,
+        props: { orderNumber: order.orderNumber, total: order.total },
+      });
+
+      await placeOrder([{ variantId: sageM().id, quantity: 1 }]);
+      expect(f.events.rows).toHaveLength(1); // unchanged — no analytics ids sent
+    });
+
+    it('GET /api/analytics/sessions requires admin auth: 401 anonymous, 403 customer', async () => {
+      expect((await app.request('/api/analytics/sessions')).status).toBe(401);
+      const { token: customerToken } = await registerCustomer();
+      expect((await app.request('/api/analytics/sessions', bearer(customerToken))).status).toBe(403);
+    });
+
+    it('GET /api/analytics/sessions validates days/outcome/page', async () => {
+      expect((await app.request('/api/analytics/sessions?days=14', bearer(adminToken))).status).toBe(400);
+      expect((await app.request('/api/analytics/sessions?outcome=won', bearer(adminToken))).status).toBe(400);
+      expect((await app.request('/api/analytics/sessions?page=0', bearer(adminToken))).status).toBe(400);
+      expect((await app.request('/api/analytics/sessions?days=7&outcome=abandoned', bearer(adminToken))).status).toBe(200);
+    });
+
+    it('GET /api/analytics/sessions returns paged session summaries', async () => {
+      await app.request('/api/track', post({
+        ...validBatch(),
+        events: [
+          { type: 'session_start', path: '/' },
+          { type: 'product_view', path: '/product/sage' },
+          { type: 'add_to_cart', path: '/product/sage' },
+        ],
+      }));
+      const res = await app.request('/api/analytics/sessions', bearer(adminToken));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toMatchObject({ total: 1, page: 1, pageSize: 50 });
+      expect(body.sessions[0]).toMatchObject({
+        sessionId: SESSION,
+        visitorId: VISITOR,
+        landingPath: '/',
+        eventCount: 3,
+        outcome: 'carted',
+        abandoned: false,
+        orderNumber: null,
+      });
+    });
+
+    it('GET /api/analytics/sessions/:id returns the ordered timeline (admin only)', async () => {
+      await app.request('/api/track', post(validBatch()));
+      expect((await app.request(`/api/analytics/sessions/${SESSION}`)).status).toBe(401);
+      expect((await app.request('/api/analytics/sessions/not-a-uuid', bearer(adminToken))).status).toBe(400);
+
+      const res = await app.request(`/api/analytics/sessions/${SESSION}`, bearer(adminToken));
+      expect(res.status).toBe(200);
+      const timeline = await res.json();
+      expect(timeline).toHaveLength(1);
+      expect(timeline[0]).toMatchObject({ eventType: 'page_view', path: '/shop', productName: null });
+      expect(typeof timeline[0].occurredAt).toBe('string');
+    });
+
+    it('GET /api/analytics/visitors/:id returns sessions + the same-ip hint (admin only)', async () => {
+      const OTHER = '99999999-9999-9999-9999-999999999999';
+      const track = (visitorId: string, sessionId: string) => app.request('/api/track', {
+        ...post({ visitorId, sessionId, events: [{ type: 'session_start' }] }),
+        headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '203.0.113.9' },
+      });
+      await track(VISITOR, SESSION);
+      await track(OTHER, '88888888-8888-8888-8888-888888888888');
+
+      expect((await app.request(`/api/analytics/visitors/${VISITOR}`)).status).toBe(401);
+      const res = await app.request(`/api/analytics/visitors/${VISITOR}`, bearer(adminToken));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.visitorId).toBe(VISITOR);
+      expect(body.sessions).toHaveLength(1);
+      expect(body.sameIpSessions).toBe(1);
     });
   });
 });

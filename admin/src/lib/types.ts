@@ -124,6 +124,8 @@ export interface AdminProduct {
   variants: Variant[];
   /** "This order contains" — every piece of the set, in display order. */
   components: ProductComponent[];
+  /** Whether the shopper may request a custom colour (+₹1,000 surcharge). */
+  customColorAvailable: boolean;
   /** Provenance — optional, shown on the PDP only when filled: the karigar's
    *  first name, honestly counted hours, techniques, finish date (YYYY-MM-DD). */
   karigarName: string;
@@ -161,6 +163,8 @@ export interface OrderItem {
   imageUrl: string | null;
   /** Kept optional add-ons snapshotted at order time; price paise, 0 = included free. */
   components: { name: string; price: number }[];
+  /** Custom colour requested (the ₹1,000 surcharge is inside unitPrice). */
+  customColor: boolean;
   /** Free-text made-to-measure note; '' when none. */
   measurements: string;
 }
@@ -193,6 +197,10 @@ export interface Order {
   deliveryMethod: 'standard' | 'priority';
   deliveryFee: number;
   subtotal: number;
+  /** Paise taken off the total; 0 when no offer applied. */
+  discountAmount: number;
+  /** Machine tag for the applied offer ('first_order_5pct'); '' when none. */
+  discountReason: string;
   total: number;
   status: OrderStatus;
   channel: OrderChannel;
@@ -343,6 +351,52 @@ export interface AnalyticsSummary {
   devices: Array<{ device: string; sessions: number }>;
   sizes: Array<{ size: string; adds: number }>;
   colors: Array<{ color: string; adds: number }>;
+}
+
+/** Mirrors backend/src/data/events.repo.ts — GET /api/analytics/sessions. */
+export type SessionOutcome = 'ordered' | 'checkout' | 'carted' | 'browsed';
+
+export interface SessionSummary {
+  sessionId: string;
+  visitorId: string;
+  userId: string | null;
+  startedAt: string;
+  endedAt: string;
+  durationSec: number;
+  device: string;
+  landingPath: string | null;
+  eventCount: number;
+  outcome: SessionOutcome;
+  /** Carted/checkout, no order, and idle past the 30-min session window. */
+  abandoned: boolean;
+  orderId: string | null;
+  orderNumber: string | null;
+  ip: string | null;
+}
+
+export interface SessionsPage {
+  sessions: SessionSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Mirrors backend — GET /api/analytics/sessions/:id (full timeline). */
+export interface SessionEvent {
+  eventType: string;
+  occurredAt: string;
+  path: string | null;
+  productId: string | null;
+  productName: string | null;
+  props: Record<string, unknown>;
+}
+
+/** Mirrors backend — GET /api/analytics/visitors/:id. */
+export interface VisitorDetail {
+  visitorId: string;
+  sessions: SessionSummary[];
+  /** Sessions by OTHER visitors sharing this visitor's most recent IP. */
+  sameIpSessions: number;
 }
 
 /** Valid next order-status transitions, mirrored from the backend state machine. */

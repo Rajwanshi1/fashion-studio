@@ -38,6 +38,7 @@ function product(over: Partial<AdminProduct> = {}): AdminProduct {
     active: true,
     variants: [],
     components: [],
+    customColorAvailable: true,
     karigarName: '',
     hoursWorked: null,
     techniques: '',
