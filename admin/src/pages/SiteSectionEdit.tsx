@@ -479,7 +479,8 @@ function ImageField({
     setBusy(true);
     onUploading(true);
     try {
-      const { publicUrl } = await uploadProductImage(file);
+      // Site sections store only the URL (no dims) — skip rendition generation.
+      const { publicUrl } = await uploadProductImage(file, undefined, { renditions: false });
       onChange(publicUrl);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Photo upload failed', { tone: 'error' });

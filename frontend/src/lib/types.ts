@@ -65,6 +65,10 @@ export interface ProductImage {
   color: string;
   /** CSS '#rrggbb' fill for the colour swatch; '' when unknown. */
   colorHex: string;
+  /** Master-photo pixel dimensions. Absent/null = a pre-renditions upload —
+   *  no srcset for it (candidates may be missing). */
+  width?: number | null;
+  height?: number | null;
 }
 
 /** One piece of the set ("This order contains"), in display order. */
@@ -98,6 +102,13 @@ export interface ProductSummary {
   /** Paise; discounted BASE price, meaningful only when flag === 'sale'.
    *  Add-ons are never discounted — see displaySalePrice(). */
   salePrice: number | null;
+  /** First gallery photo's pixel dimensions — lets cards emit srcset and
+   *  reserve layout. Null = no gallery rows, or a pre-renditions upload. */
+  imageWidth: number | null;
+  imageHeight: number | null;
+  /** First gallery photo's '#rrggbb' — the card's loading placeholder fill.
+   *  '' when the photo carries no colour; null when there are no gallery rows. */
+  imageColorHex: string | null;
 }
 
 export interface Variant {

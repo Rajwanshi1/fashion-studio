@@ -551,7 +551,7 @@ export default function Checkout() {
 
             {items.map((i) => (
               <div className="ci" key={cartLineKey(i)}>
-                <ImageSlot src={i.imageUrl} label={i.name} alt={i.name} />
+                <ImageSlot src={i.imageUrl} label={i.name} alt={i.name} sizes="96px" />
                 <div>
                   <div className="cn">{i.name}</div>
                   <div className="ca">

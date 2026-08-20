@@ -267,6 +267,10 @@ export default function Product() {
                   src={img.url}
                   label={poseLabel(img, i)}
                   alt={`${product.name} — ${poseLabel(img, i)}`}
+                  width={img.width}
+                  height={img.height}
+                  sizes="72px"
+                  placeholderHex={img.colorHex || undefined}
                   onClick={() => onGalleryChange(i, 'thumb')}
                 />
               ))
@@ -587,7 +591,15 @@ export default function Product() {
           <div className="rel-grid">
             {related.map((r) => (
               <Link className="rel" key={r.id} to={`/product/${r.slug}`}>
-                <ImageSlot src={r.imageUrl} label={r.name} alt={r.name} />
+                <ImageSlot
+                  src={r.imageUrl}
+                  label={r.name}
+                  alt={r.name}
+                  width={r.imageWidth}
+                  height={r.imageHeight}
+                  placeholderHex={r.imageColorHex || undefined}
+                  sizes="(max-width: 560px) 50vw, 25vw"
+                />
                 <div className="m">
                   <div className="nm">{r.name}</div>
                   <div className="pr">

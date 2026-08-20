@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { withTransaction } from '../db';
+import type { UrlRewriter } from '../lib/media';
 import {
   Category,
   ColorFamily,
@@ -52,6 +53,10 @@ export interface ProductImageInput {
   pose?: string;
   color?: string;
   colorHex?: string;
+  /** Master pixel dimensions — sent only when every rendition upload landed
+   *  (admin uploads.ts); absent keeps the row srcset-less. */
+  width?: number | null;
+  height?: number | null;
 }
 
 /** One set piece on the way in; `price` is only kept on optional rows. */
@@ -175,17 +180,31 @@ const DEFAULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'Custom'];
 const ADDONS_TOTAL_SQL = `COALESCE((SELECT SUM(pc.price) FROM product_components pc
   WHERE pc.product_id = p.id AND pc.optional), 0)`;
 
+// First gallery photo's dimensions + colour, riding along on every summary so
+// cards can emit srcset, reserve layout and paint a colour placeholder without
+// a per-product gallery read. LEFT LATERAL: products without gallery rows (or
+// with pre-renditions rows, where width/height are NULL) come back null-safe.
+const FIRST_IMAGE_JOIN = `
+  LEFT JOIN LATERAL (
+    SELECT pi.width, pi.height, pi.color_hex FROM product_images pi
+    WHERE pi.product_id = p.id ORDER BY pi.position, pi.id LIMIT 1
+  ) fi ON TRUE`;
+
+const FIRST_IMAGE_COLUMNS = `fi.width AS image_width, fi.height AS image_height, fi.color_hex AS image_color_hex`;
+
 const SUMMARY_SELECT = `
   SELECT p.id, p.slug, p.name, p.price, p.color, p.flag, p.image_url,
          p.collection, p.occasion, p.sale_price, p.color_family,
          (${ADDONS_TOTAL_SQL}) AS addons_total,
+         ${FIRST_IMAGE_COLUMNS},
          c.slug AS category_slug, c.name AS category_name
-  FROM products p JOIN categories c ON c.id = p.category_id`;
+  FROM products p JOIN categories c ON c.id = p.category_id ${FIRST_IMAGE_JOIN}`;
 
 const DETAIL_SELECT = `
   SELECT p.*, (${ADDONS_TOTAL_SQL}) AS addons_total,
+         ${FIRST_IMAGE_COLUMNS},
          c.slug AS category_slug, c.name AS category_name
-  FROM products p JOIN categories c ON c.id = p.category_id`;
+  FROM products p JOIN categories c ON c.id = p.category_id ${FIRST_IMAGE_JOIN}`;
 
 /**
  * The base price actually charged: the sale price when the piece is on sale,
@@ -204,7 +223,7 @@ const ORDER_BY: Record<string, string> = {
   price_desc: `((${EFFECTIVE_PRICE}) + (${ADDONS_TOTAL_SQL})) DESC`,
 };
 
-function mapSummary(row: any): ProductSummary {
+function mapSummary(row: any, rw: UrlRewriter): ProductSummary {
   return {
     id: row.id,
     slug: row.slug,
@@ -212,7 +231,7 @@ function mapSummary(row: any): ProductSummary {
     price: row.price,
     color: row.color,
     flag: row.flag ?? null,
-    imageUrl: row.image_url ?? null,
+    imageUrl: rw(row.image_url ?? null),
     categorySlug: row.category_slug,
     categoryName: row.category_name,
     collection: row.collection ?? '',
@@ -220,6 +239,9 @@ function mapSummary(row: any): ProductSummary {
     addonsTotal: Number(row.addons_total ?? 0),
     colorFamily: row.color_family ?? null,
     salePrice: row.sale_price ?? null,
+    imageWidth: row.image_width ?? null,
+    imageHeight: row.image_height ?? null,
+    imageColorHex: row.image_color_hex ?? null,
   };
 }
 
@@ -227,8 +249,15 @@ function mapVariant(row: any): Variant {
   return { id: row.id, productId: row.product_id, size: row.size, stock: row.stock };
 }
 
-function mapImage(row: any): ProductImage {
-  return { url: row.url, pose: row.pose ?? '', color: row.color ?? '', colorHex: row.color_hex ?? '' };
+function mapImage(row: any, rw: UrlRewriter): ProductImage {
+  return {
+    url: rw(row.url)!,
+    pose: row.pose ?? '',
+    color: row.color ?? '',
+    colorHex: row.color_hex ?? '',
+    width: row.width ?? null,
+    height: row.height ?? null,
+  };
 }
 
 function mapComponent(row: any): ProductComponent {
@@ -240,9 +269,10 @@ function mapDetail(
   variants: Variant[],
   images: ProductImage[],
   components: ProductComponent[],
+  rw: UrlRewriter,
 ): AdminProduct {
   return {
-    ...mapSummary(row),
+    ...mapSummary(row, rw),
     description: row.description,
     details: row.details,
     craft: row.craft ?? '',
@@ -325,7 +355,10 @@ function rethrowSlugTaken(err: any): never {
   throw err;
 }
 
-export function createProductsRepo(pool: Pool): ProductsRepo {
+// `rewriteUrl` maps legacy raw-S3 image URLs onto the media CDN at read time
+// (see lib/media.ts); the default identity keeps dev/tests untouched.
+export function createProductsRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) => url): ProductsRepo {
+  const rw = rewriteUrl;
   async function loadVariants(client: Pool | PoolClient, productIds: string[]): Promise<Map<string, Variant[]>> {
     const byProduct = new Map<string, Variant[]>();
     if (productIds.length === 0) return byProduct;
@@ -347,13 +380,13 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
     const byProduct = new Map<string, ProductImage[]>();
     if (productIds.length === 0) return byProduct;
     const { rows } = await client.query(
-      `SELECT product_id, url, pose, color, color_hex FROM product_images
+      `SELECT product_id, url, pose, color, color_hex, width, height FROM product_images
        WHERE product_id = ANY($1::uuid[]) ORDER BY position, id`,
       [productIds],
     );
     for (const row of rows) {
       const list = byProduct.get(row.product_id) ?? [];
-      list.push(mapImage(row));
+      list.push(mapImage(row, rw));
       byProduct.set(row.product_id, list);
     }
     return byProduct;
@@ -364,8 +397,18 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
     await client.query('DELETE FROM product_images WHERE product_id = $1', [productId]);
     for (const [position, image] of images.entries()) {
       await client.query(
-        'INSERT INTO product_images (product_id, url, position, pose, color, color_hex) VALUES ($1, $2, $3, $4, $5, $6)',
-        [productId, image.url, position, image.pose ?? '', image.color ?? '', image.colorHex ?? ''],
+        `INSERT INTO product_images (product_id, url, position, pose, color, color_hex, width, height)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          productId,
+          image.url,
+          position,
+          image.pose ?? '',
+          image.color ?? '',
+          image.colorHex ?? '',
+          image.width ?? null,
+          image.height ?? null,
+        ],
       );
     }
   }
@@ -425,7 +468,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
       loadImages(client, [id]),
       loadComponents(client, [id]),
     ]);
-    return mapDetail(rows[0], variants.get(id) ?? [], images.get(id) ?? [], components.get(id) ?? []);
+    return mapDetail(rows[0], variants.get(id) ?? [], images.get(id) ?? [], components.get(id) ?? [], rw);
   }
 
   return {
@@ -487,7 +530,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
          LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params,
       );
-      return { items: rows.map(mapSummary), total };
+      return { items: rows.map((row) => mapSummary(row, rw)), total };
     },
 
     async getBySlug(slug) {
@@ -508,7 +551,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         loadImages(pool, [id]),
         loadComponents(pool, [id]),
       ]);
-      return mapDetail(rows[0], variants.get(id) ?? [], images.get(id) ?? [], components.get(id) ?? []);
+      return mapDetail(rows[0], variants.get(id) ?? [], images.get(id) ?? [], components.get(id) ?? [], rw);
     },
 
     async getRelated(productId, categoryId, limit) {
@@ -518,7 +561,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
          ORDER BY (p.flag IS NOT NULL) DESC, p.created_at ASC LIMIT $3`,
         [categoryId, productId, limit],
       );
-      return rows.map(mapSummary);
+      return rows.map((row) => mapSummary(row, rw));
     },
 
     async getVariantsForUpdate(tx, variantIds) {
@@ -551,7 +594,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         productName: row.product_name,
         color: row.color,
         unitPrice: row.unit_price,
-        imageUrl: row.image_url ?? null,
+        imageUrl: rw(row.image_url ?? null),
         components: (row.components as { name: string; optional: boolean; price: number | null }[]) ?? [],
         customColorAvailable: row.custom_color_available,
       }));
@@ -743,7 +786,7 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
         loadComponents(pool, ids),
       ]);
       return rows.map((row) =>
-        mapDetail(row, variants.get(row.id) ?? [], images.get(row.id) ?? [], components.get(row.id) ?? []),
+        mapDetail(row, variants.get(row.id) ?? [], images.get(row.id) ?? [], components.get(row.id) ?? [], rw),
       );
     },
 
@@ -811,22 +854,24 @@ export function createProductsRepo(pool: Pool): ProductsRepo {
   };
 }
 
-export function createWishlistRepo(pool: Pool): WishlistRepo {
+export function createWishlistRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) => url): WishlistRepo {
+  const rw = rewriteUrl;
   return {
     async list(userId) {
       const { rows } = await pool.query(
         `SELECT p.id, p.slug, p.name, p.price, p.color, p.flag, p.image_url,
                 p.collection, p.occasion, p.sale_price, p.color_family,
                 (${ADDONS_TOTAL_SQL}) AS addons_total,
+                ${FIRST_IMAGE_COLUMNS},
                 c.slug AS category_slug, c.name AS category_name
          FROM wishlists w
          JOIN products p ON p.id = w.product_id
-         JOIN categories c ON c.id = p.category_id
+         JOIN categories c ON c.id = p.category_id ${FIRST_IMAGE_JOIN}
          WHERE w.user_id = $1 AND p.active AND p.deleted_at IS NULL
          ORDER BY w.created_at DESC`,
         [userId],
       );
-      return rows.map(mapSummary);
+      return rows.map((row) => mapSummary(row, rw));
     },
 
     async add(userId, productId) {

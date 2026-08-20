@@ -11,6 +11,9 @@ vi.mock('../lib/uploads', () => ({
     pose: 'front',
     color: 'Emerald',
     colorHex: '#0f6b4f',
+    // Reported only when every rendition PUT landed (uploads.test.ts).
+    width: 2000,
+    height: 2500,
   })),
 }));
 
@@ -483,10 +486,11 @@ describe('ProductEdit', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Add Piece' }));
     const body = calls.find((c) => c.method === 'POST')?.body as PutBody;
-    // the AI-read colour rides along from the upload into the saved gallery
+    // the AI-read colour AND the measured dims ride along from the upload
+    // into the saved gallery (dims gate the storefront's srcset)
     expect(body.images).toEqual([
-      { url: UPLOADED_URL, pose: 'front', color: 'Emerald', colorHex: '#0f6b4f' },
-      { url: UPLOADED_URL, pose: 'front', color: 'Emerald', colorHex: '#0f6b4f' },
+      { url: UPLOADED_URL, pose: 'front', color: 'Emerald', colorHex: '#0f6b4f', width: 2000, height: 2500 },
+      { url: UPLOADED_URL, pose: 'front', color: 'Emerald', colorHex: '#0f6b4f', width: 2000, height: 2500 },
     ]);
   });
 

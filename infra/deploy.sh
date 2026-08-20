@@ -60,11 +60,12 @@ cmd_stacks() {
     require_delegation
   fi
   deploy_stack "$WAF_REGION" "fashion-$ENV_NAME-waf" infra/templates/waf.yaml \
-    DomainName="$DOMAIN_NAME" HostedZoneId="$hosted_zone_id"
-  local waf_arn
+    DomainName="$DOMAIN_NAME" HostedZoneId="$hosted_zone_id" AlertEmail="${ALERT_EMAIL:-}"
+  local waf_arn media_cert_arn=''
   waf_arn=$(stack_out "$WAF_REGION" "fashion-$ENV_NAME-waf" WebAclArn)
   if [ -n "$DOMAIN_NAME" ]; then
     cert_arn=$(stack_out "$WAF_REGION" "fashion-$ENV_NAME-waf" CertificateArn)
+    media_cert_arn=$(stack_out "$WAF_REGION" "fashion-$ENV_NAME-waf" MediaCertificateArn)
   fi
   # Presigned-upload CORS: the admin origin once a domain exists (mirrors
   # cmd_cors); '*' for domainless envs — the CloudFront admin domain is a main
@@ -77,7 +78,9 @@ cmd_stacks() {
     PaymentProvider="$PAYMENT_PROVIDER" AllowMockPayments="$ALLOW_MOCK_PAYMENTS" \
     SmsProvider="${SMS_PROVIDER:-disabled}" AllowConsoleOtp="${ALLOW_CONSOLE_OTP:-false}" \
     UploadsCorsOrigins="$uploads_cors" AnthropicModel="${ANTHROPIC_MODEL:-claude-sonnet-5}" \
-    DomainName="$DOMAIN_NAME" CertificateArn="$cert_arn" HostedZoneId="$hosted_zone_id"
+    DomainName="$DOMAIN_NAME" CertificateArn="$cert_arn" HostedZoneId="$hosted_zone_id" \
+    AlertEmail="${ALERT_EMAIL:-}" MediaCertificateArn="$media_cert_arn" \
+    KeepLegacyPublicRead="${KEEP_LEGACY_PUBLIC_READ:-true}"
 }
 
 cmd_image() {

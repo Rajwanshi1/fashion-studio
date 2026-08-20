@@ -23,6 +23,9 @@ export interface Config {
   anthropicApiKey: string | null;
   /** Null means no S3 — the dev LocalObjectStore serves uploads instead. */
   s3UploadsBucket: string | null;
+  /** Public base URL of the media CDN (https://media.<domain>, no trailing
+   *  slash). Null keeps product-image URLs on the raw S3 form. */
+  mediaBaseUrl: string | null;
   /** LocalObjectStore directory (dev only; ignored when S3 is configured). */
   uploadsDir: string;
   /** Public base URL of this API — the LocalObjectStore presigns against it. */
@@ -130,6 +133,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // PARSE_SPECS picks for them. Models live in src/services/ai/prompts.ts,
     // which is the file prompt tuning edits anyway. index.ts warns if it is set.
     s3UploadsBucket: env.S3_UPLOADS_BUCKET?.trim() || null,
+    // Trailing slashes are trimmed so `${base}/${key}` can never double up.
+    mediaBaseUrl: env.MEDIA_BASE_URL?.trim().replace(/\/+$/, '') || null,
     uploadsDir: env.UPLOADS_DIR?.trim() || `${process.cwd()}/.data/uploads`,
     publicApiUrl: env.PUBLIC_API_URL?.trim() || `http://localhost:${port}`,
     awsRegion: env.AWS_REGION?.trim() || 'ap-south-1',

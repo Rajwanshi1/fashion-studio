@@ -7,6 +7,11 @@
 /* ---- ImageSlot rendering (visual replica of <image-slot> empty state) ---- */
 .img-slot { display: flex; align-items: center; justify-content: center; text-align: center; padding: 0.6rem; overflow: hidden; user-select: none; }
 img.img-slot { object-fit: cover; padding: 0; }
+/* Loaded pixels ease in over the placeholder (colour hex or celadon gradient). */
+@media (prefers-reduced-motion: no-preference) {
+  img.img-slot.img-in { animation: img-slot-in 300ms ease-out; }
+}
+@keyframes img-slot-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* ---- Loading / error notes ---- */
 .api-note { padding: 2rem var(--gutter); text-align: center; color: var(--fg-muted); font-size: var(--t-sm); }

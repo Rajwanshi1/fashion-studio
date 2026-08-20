@@ -191,8 +191,9 @@ describe('site section editor', () => {
     const file = new File([new Uint8Array([1])], 'hero.jpg', { type: 'image/jpeg' });
     await userEvent.upload(screen.getByLabelText('Photo file'), file);
 
-    // no product to name it after — a plain uuid presign
-    expect(uploadProductImage).toHaveBeenCalledWith(file);
+    // no product to name it after (plain uuid presign), and no renditions —
+    // site_content stores no dims, so the extra encodes would be orphans
+    expect(uploadProductImage).toHaveBeenCalledWith(file, undefined, { renditions: false });
     expect(await screen.findByAltText('Photo')).toHaveAttribute('src', UPLOADED);
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -222,7 +223,7 @@ describe('site section editor', () => {
     expect(calls.some((c) => c.method === 'PUT')).toBe(false);
 
     await act(async () => {
-      land({ publicUrl: UPLOADED, pose: null, color: null, colorHex: null });
+      land({ publicUrl: UPLOADED, pose: null, color: null, colorHex: null, width: null, height: null });
     });
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -358,7 +359,7 @@ describe('site section editor', () => {
     await userEvent.type(screen.getByLabelText('Look 2 caption'), 'Ivory hour, after the rain.');
 
     await act(async () => {
-      land({ publicUrl: UPLOADED, pose: null, color: null, colorHex: null });
+      land({ publicUrl: UPLOADED, pose: null, color: null, colorHex: null, width: null, height: null });
     });
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));

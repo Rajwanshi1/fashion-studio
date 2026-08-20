@@ -137,7 +137,7 @@ export default function OrderConfirmation() {
                 <div className="oc-items">
                   {order.items.map((it) => (
                     <div className="oc-line" key={it.id}>
-                      <ImageSlot src={it.imageUrl} label={it.productName} alt={it.productName} />
+                      <ImageSlot src={it.imageUrl} label={it.productName} alt={it.productName} sizes="96px" />
                       <div>
                         <div className="nm">{it.productName}</div>
                         <div className="at">

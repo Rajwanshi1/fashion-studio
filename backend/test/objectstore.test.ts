@@ -1,8 +1,15 @@
+import { S3Client } from '@aws-sdk/client-s3';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { LocalObjectStore, namedStorageKey, newStorageKey, sanitizeFileSlug } from '../src/services/objectstore';
+import {
+  LocalObjectStore,
+  S3ObjectStore,
+  namedStorageKey,
+  newStorageKey,
+  sanitizeFileSlug,
+} from '../src/services/objectstore';
 
 describe('newStorageKey', () => {
   it('produces kind/yyyy/mm/uuid.jpg', () => {
@@ -41,6 +48,50 @@ describe('namedStorageKey', () => {
   });
 });
 
+describe('S3ObjectStore', () => {
+  /** Static creds so presigning works offline — no call ever leaves the test. */
+  const client = new S3Client({
+    region: 'ap-south-1',
+    credentials: { accessKeyId: 'test-key', secretAccessKey: 'test-secret' },
+  });
+
+  it('publicUrl builds the virtual-hosted S3 form without a public base', () => {
+    const store = new S3ObjectStore('fashion-test-uploads', { region: 'ap-south-1', client });
+    expect(store.publicUrl('products/2026/08/x.jpg')).toBe(
+      'https://fashion-test-uploads.s3.ap-south-1.amazonaws.com/products/2026/08/x.jpg',
+    );
+  });
+
+  it('publicUrl builds CDN URLs when a public base is configured', () => {
+    const store = new S3ObjectStore('fashion-test-uploads', {
+      region: 'ap-south-1',
+      client,
+      publicBaseUrl: 'https://media.tanviagnihotry.com',
+    });
+    expect(store.publicUrl('products/2026/08/x.jpg')).toBe(
+      'https://media.tanviagnihotry.com/products/2026/08/x.jpg',
+    );
+  });
+
+  it('presignPut echoes Cache-Control as a header the client must send', async () => {
+    const store = new S3ObjectStore('fashion-test-uploads', { region: 'ap-south-1', client });
+    const cc = 'public,max-age=31536000,immutable';
+    const { url, headers } = await store.presignPut('products/2026/08/x.jpg', 'image/jpeg', cc);
+    // S3 stores exactly the Cache-Control header that arrives with the PUT —
+    // the returned map is the ONLY thing that puts it on the wire, so it must
+    // carry both headers verbatim. (This SDK version signs host only:
+    // X-Amz-SignedHeaders=host — nothing else to assert on the URL.)
+    expect(headers).toEqual({ 'Content-Type': 'image/jpeg', 'Cache-Control': cc });
+    expect(url).toContain('X-Amz-Signature=');
+  });
+
+  it('presignPut without cacheControl keeps the original header contract', async () => {
+    const store = new S3ObjectStore('fashion-test-uploads', { region: 'ap-south-1', client });
+    const { headers } = await store.presignPut('products/2026/08/x.jpg', 'image/jpeg');
+    expect(headers).toEqual({ 'Content-Type': 'image/jpeg' });
+  });
+});
+
 describe('LocalObjectStore', () => {
   let dir: string;
   let store: LocalObjectStore;
@@ -72,6 +123,11 @@ describe('LocalObjectStore', () => {
     const { url, headers } = await store.presignPut(key, 'image/jpeg');
     expect(url).toBe(`${baseUrl}/api/uploads/local/${encodeURIComponent(key)}`);
     expect(url).toContain('bill%2F2026%2F07%2Fabc.jpg');
+    expect(headers).toEqual({ 'Content-Type': 'image/jpeg' });
+  });
+
+  it('presignPut accepts and ignores cacheControl (dev CORS only allows Content-Type/Authorization)', async () => {
+    const { headers } = await store.presignPut('bill/2026/07/abc.jpg', 'image/jpeg', 'public,max-age=31536000,immutable');
     expect(headers).toEqual({ 'Content-Type': 'image/jpeg' });
   });
 

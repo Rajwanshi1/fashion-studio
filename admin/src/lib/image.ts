@@ -127,7 +127,33 @@ async function decode(file: File): Promise<Decoded> {
   throw new Error(reasons[reasons.length - 1] ?? 'unknown decode failure');
 }
 
-export async function prepareImage(file: File): Promise<{ blob: Blob; contentType: 'image/jpeg' }> {
+/** Draw `source` at width×height and JPEG-encode it. */
+async function encodeScaled(
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+  quality: number,
+): Promise<Blob> {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not process the photo in this browser.');
+  ctx.drawImage(source, 0, 0, width, height);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+  if (!blob) throw new Error('Could not re-encode that photo in this browser.');
+  return blob;
+}
+
+export interface PreparedImage {
+  blob: Blob;
+  contentType: 'image/jpeg';
+  /** Pixel dimensions of the re-encoded master (post-downscale). */
+  width: number;
+  height: number;
+}
+
+export async function prepareImage(file: File): Promise<PreparedImage> {
   let decoded: Decoded;
   try {
     decoded = await decode(file);
@@ -145,18 +171,54 @@ export async function prepareImage(file: File): Promise<{ blob: Blob; contentTyp
   const width = Math.max(1, Math.round(decoded.width * scale));
   const height = Math.max(1, Math.round(decoded.height * scale));
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
+  let blob: Blob;
+  try {
+    blob = await encodeScaled(decoded.source, width, height, JPEG_QUALITY);
+  } finally {
     decoded.release();
-    throw new Error('Could not process the photo in this browser.');
   }
-  ctx.drawImage(decoded.source, 0, 0, width, height);
-  decoded.release();
+  return { blob, contentType: 'image/jpeg', width, height };
+}
 
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
-  if (!blob) throw new Error('Could not re-encode that photo in this browser.');
-  return { blob, contentType: 'image/jpeg' };
+/** Storefront srcset ladder — keep in sync with frontend ImageSlot.tsx. */
+export const RENDITION_WIDTHS = [320, 640, 1080, 1600];
+
+/**
+ * Web-delivery quality for the downscaled copies. The master keeps 0.92 (it
+ * feeds the vision naming call and is the archival copy); the renditions only
+ * ever hit <img> tags, where 0.85 is visually clean at a fraction of the bytes.
+ */
+const RENDITION_JPEG_QUALITY = 0.85;
+
+export interface PreparedRendition {
+  width: number;
+  blob: Blob;
+}
+
+/**
+ * Downscaled copies of the prepared master for the storefront's srcset —
+ * only ladder widths BELOW the master's (an upscale would fabricate pixels).
+ * The master blob is a plain JPEG, so the browser decoder (the same first
+ * step prepareImage's decode path takes) always handles it — one decode
+ * serves every rendition.
+ */
+export async function prepareRenditions(
+  master: Blob,
+  masterWidth: number,
+  masterHeight: number,
+  widths: number[] = RENDITION_WIDTHS,
+): Promise<PreparedRendition[]> {
+  const targets = widths.filter((w) => w < masterWidth);
+  if (targets.length === 0) return [];
+  const bitmap = await createImageBitmap(master);
+  try {
+    const out: PreparedRendition[] = [];
+    for (const width of targets) {
+      const height = Math.max(1, Math.round((masterHeight * width) / masterWidth));
+      out.push({ width, blob: await encodeScaled(bitmap, width, height, RENDITION_JPEG_QUALITY) });
+    }
+    return out;
+  } finally {
+    bitmap.close();
+  }
 }

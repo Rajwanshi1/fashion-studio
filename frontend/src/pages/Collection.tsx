@@ -324,7 +324,8 @@ export default function Collection() {
             <div className="pgrid cols-2">
               {cards.map((p, i) => (
                 <Fragment key={p.id}>
-                  <ProductCard product={p} />
+                  {/* First row (≤4 across at any width) is the PLP's LCP. */}
+                  <ProductCard product={p} eager={i < 4} />
                   {i === 1 && (
                     <div className="promo-tile">
                       <ImageSlot label="Editorial campaign" />

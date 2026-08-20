@@ -107,8 +107,8 @@ export default function Search() {
             <p className="api-note">Nothing found — try one of the popular searches above.</p>
           ) : (
             <div className="pgrid cols-4">
-              {results.map((p) => (
-                <ProductCard key={p.id} product={p} fav={false} quick={false} />
+              {results.map((p, i) => (
+                <ProductCard key={p.id} product={p} fav={false} quick={false} eager={i < 4} />
               ))}
             </div>
           )}

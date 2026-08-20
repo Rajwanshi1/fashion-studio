@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { LocalObjectStore } from '../src/services/objectstore';
-import { FakePaymentProvider, Fakes, fakeTx, makeFakes, seedCatalog } from './fakes';
+import { FakeObjectStore, FakePaymentProvider, Fakes, fakeTx, makeFakes, seedCatalog } from './fakes';
 
 const SECRET = 'uploads-test-secret';
 const BASE = 'http://localhost:3001';
@@ -121,6 +121,65 @@ describe('product image uploads (local store)', () => {
       body: new Uint8Array([1]),
     });
     expect(traversal.status).toBe(400);
+  });
+
+  it('presigns one PUT per requested rendition width, keys derived from the master key', async () => {
+    const presign = await app.request(
+      '/api/admin/uploads/product-image',
+      post({ contentType: 'image/jpeg', renditionWidths: [320, 640, 1080] }, adminToken),
+    );
+    expect(presign.status).toBe(201);
+    const body = await presign.json();
+    expect(body.renditions).toHaveLength(3);
+    expect(body.renditions.map((r: any) => r.width)).toEqual([320, 640, 1080]);
+    for (const rendition of body.renditions) {
+      expect(rendition.key).toBe(body.key.replace(/\.jpg$/, `_w${rendition.width}.jpg`));
+      expect(rendition.uploadUrl).toContain('/api/uploads/local/');
+      expect(rendition.headers['Content-Type']).toBe('image/jpeg');
+    }
+    // No widths requested → an empty renditions list, not an absent field.
+    const bare = await (
+      await app.request('/api/admin/uploads/product-image', post({ contentType: 'image/jpeg' }, adminToken))
+    ).json();
+    expect(bare.renditions).toEqual([]);
+  });
+
+  it('rejects out-of-range rendition widths', async () => {
+    const res = await app.request(
+      '/api/admin/uploads/product-image',
+      post({ contentType: 'image/jpeg', renditionWidths: [50] }, adminToken),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('stamps immutable Cache-Control into the S3-style presign headers (master + renditions)', async () => {
+    // The S3 contract is what matters here — the FakeObjectStore mirrors
+    // S3ObjectStore's header behaviour; the LocalObjectStore deliberately
+    // ignores cacheControl (dev CORS only allows Content-Type/Authorization).
+    const s3ish = createApp({
+      repos: f,
+      paymentProvider: new FakePaymentProvider(),
+      jwtSecret: SECRET,
+      corsOrigins: [],
+      runInTransaction: fakeTx,
+      objectStore: new FakeObjectStore(),
+    });
+    const login = await s3ish.request(
+      '/api/auth/login',
+      post({ email: 'admin@tanviagnihotry.com', password: 'TanviAdmin@2026' }),
+    );
+    const token = (await login.json()).token;
+    const body = await (
+      await s3ish.request(
+        '/api/admin/uploads/product-image',
+        post({ contentType: 'image/jpeg', renditionWidths: [320, 640] }, token),
+      )
+    ).json();
+    const immutable = 'public,max-age=31536000,immutable';
+    expect(body.headers).toEqual({ 'Content-Type': 'image/jpeg', 'Cache-Control': immutable });
+    for (const rendition of body.renditions) {
+      expect(rendition.headers).toEqual({ 'Content-Type': 'image/jpeg', 'Cache-Control': immutable });
+    }
   });
 
   it('answers 503 when uploads are not configured', async () => {

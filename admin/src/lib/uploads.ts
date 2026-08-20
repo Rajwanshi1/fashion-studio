@@ -4,7 +4,7 @@
 // client; the actual photo bytes go via a RAW fetch PUT to the presigned URL
 // (S3 in production, the dev-only /api/uploads/local transport otherwise).
 import { api, storedToken } from './api';
-import { prepareImage } from './image';
+import { prepareImage, prepareRenditions, RENDITION_WIDTHS } from './image';
 import type { DocumentKind } from './types';
 
 export interface PresignResult {
@@ -91,18 +91,7 @@ export async function uploadDocument(kind: DocumentKind, file: File): Promise<Up
     method: 'POST',
     body: { kind, contentType },
   });
-  let res = await fetch(presign.uploadUrl, { method: 'PUT', headers: presign.headers, body: blob });
-  if (res.status === 401 || res.status === 403) {
-    const token = storedToken();
-    if (token) {
-      res = await fetch(presign.uploadUrl, {
-        method: 'PUT',
-        headers: { ...presign.headers, Authorization: `Bearer ${token}` },
-        body: blob,
-      });
-    }
-  }
-  if (!res.ok) throw new Error(`Photo upload failed (${res.status})`);
+  await putToPresigned(presign.uploadUrl, presign.headers, blob);
   return { documentId: presign.documentId, kind, previewUrl: URL.createObjectURL(blob) };
 }
 
@@ -146,6 +135,8 @@ export interface ProductImagePresign {
   color?: string | null;
   /** '#rrggbb' swatch fill for that colour; null when unnamed. */
   colorHex?: string | null;
+  /** One presigned PUT per requested rendition width. */
+  renditions?: { width: number; key: string; uploadUrl: string; headers: Record<string, string> }[];
 }
 
 /**
@@ -164,10 +155,31 @@ function base64(bytes: Uint8Array): string {
 }
 
 /**
- * prepareImage → presign → raw PUT. Throws with a friendly message on any
- * step. The PUT goes plain first (S3 presigned URLs reject an Authorization
- * header); the dev-only local transport answers 401/403 instead, so retry
- * with the admin JWT — the same dance as uploadDocument.
+ * Raw PUT to a presigned URL with the presign's exact headers. Plain first
+ * (S3 presigned URLs reject an Authorization header); the dev-only local
+ * transport answers 401/403 instead, so retry with the admin JWT.
+ */
+async function putToPresigned(url: string, headers: Record<string, string>, blob: Blob): Promise<void> {
+  let res = await fetch(url, { method: 'PUT', headers, body: blob });
+  if (res.status === 401 || res.status === 403) {
+    const token = storedToken();
+    if (token) {
+      res = await fetch(url, {
+        method: 'PUT',
+        headers: { ...headers, Authorization: `Bearer ${token}` },
+        body: blob,
+      });
+    }
+  }
+  if (!res.ok) throw new Error(`Photo upload failed (${res.status})`);
+}
+
+/**
+ * prepareImage → presign (master + renditions) → parallel raw PUTs. Throws
+ * with a friendly message when the MASTER fails; rendition failures never
+ * block the upload — they only null the reported dimensions, because the
+ * storefront gates srcset on width/height and must never advertise
+ * `_w320.jpg` candidates that were not actually stored.
  *
  * Passing `productName` opts into AI naming: the photo travels along as base64
  * so the server can name the object after what it shows ("emerald-gown-front")
@@ -178,10 +190,25 @@ function base64(bytes: Uint8Array): string {
 export async function uploadProductImage(
   file: File,
   productName?: string,
-): Promise<{ publicUrl: string; pose: string | null; color: string | null; colorHex: string | null }> {
-  const { blob, contentType } = await prepareImage(file);
+  opts?: {
+    /** false = skip rendition generation AND report null dims. Site-CMS images
+     *  are the caller: site_content stores no width, so renditions would be
+     *  unreferenced orphans and 4 extra re-encodes per hero photo. */
+    renditions?: boolean;
+  },
+): Promise<{
+  publicUrl: string;
+  pose: string | null;
+  color: string | null;
+  colorHex: string | null;
+  width: number | null;
+  height: number | null;
+}> {
+  const { blob, contentType, width, height } = await prepareImage(file);
+  const wantRenditions = opts?.renditions !== false;
+  const renditionWidths = wantRenditions ? RENDITION_WIDTHS.filter((w) => w < width) : [];
   const name = productName?.trim() ?? '';
-  const plainBody = { contentType };
+  const plainBody = { contentType, renditionWidths };
   const body = name
     ? { ...plainBody, productName: name, imageBase64: base64(new Uint8Array(await blob.arrayBuffer())) }
     : plainBody;
@@ -201,22 +228,38 @@ export async function uploadProductImage(
       body: plainBody,
     });
   }
-  let res = await fetch(presign.uploadUrl, { method: 'PUT', headers: presign.headers, body: blob });
-  if (res.status === 401 || res.status === 403) {
-    const token = storedToken();
-    if (token) {
-      res = await fetch(presign.uploadUrl, {
-        method: 'PUT',
-        headers: { ...presign.headers, Authorization: `Bearer ${token}` },
-        body: blob,
-      });
+
+  // Master + every rendition PUT in parallel, each with ITS presign's headers
+  // (Content-Type and Cache-Control are part of the signature).
+  const masterPut = putToPresigned(presign.uploadUrl, presign.headers, blob);
+  const renditionPuts = (async () => {
+    if (renditionWidths.length === 0) return true;
+    try {
+      const renditions = await prepareRenditions(blob, width, height, renditionWidths);
+      if (renditions.length !== renditionWidths.length) return false;
+      const results = await Promise.allSettled(
+        renditions.map((r) => {
+          const target = presign.renditions?.find((p) => p.width === r.width);
+          if (!target) return Promise.reject(new Error(`no presign for rendition ${r.width}`));
+          return putToPresigned(target.uploadUrl, target.headers, r.blob);
+        }),
+      );
+      return results.every((r) => r.status === 'fulfilled');
+    } catch {
+      return false;
     }
-  }
-  if (!res.ok) throw new Error(`Photo upload failed (${res.status})`);
+  })();
+
+  await masterPut; // the master failing fails the whole upload
+  const allRenditionsLanded = await renditionPuts;
   return {
     publicUrl: presign.publicUrl,
     pose: presign.pose ?? null,
     color: presign.color ?? null,
     colorHex: presign.colorHex ?? null,
+    // Dims are the srcset gate — only claim them when every candidate exists
+    // (and never for opted-out uploads, whose candidates were never made).
+    width: wantRenditions && allRenditionsLanded ? width : null,
+    height: wantRenditions && allRenditionsLanded ? height : null,
   };
 }

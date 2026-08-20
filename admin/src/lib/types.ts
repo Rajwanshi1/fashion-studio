@@ -62,6 +62,10 @@ export interface ProductImage {
   color: string;
   /** CSS '#rrggbb' fill for the colour swatch; '' when unknown. */
   colorHex: string;
+  /** Master-photo pixel dimensions. Absent/null = a pre-renditions upload —
+   *  the storefront emits no srcset for it (candidates may be missing). */
+  width?: number | null;
+  height?: number | null;
 }
 
 /** One piece of the set ("This order contains"), in display order. */
@@ -108,6 +112,12 @@ export interface AdminProduct {
   salePrice: number | null;
   /** Paise; what the piece cost to make. Admin-only — never on a public endpoint. */
   costPrice: number | null;
+  /** First gallery photo's dims/hex, mirrored off the API summary shape —
+   *  unused by the admin UI today. Required-nullable to stay byte-identical
+   *  with backend/src/types.ts ProductSummary (the mirror invariant). */
+  imageWidth: number | null;
+  imageHeight: number | null;
+  imageColorHex: string | null;
   /** Ordered gallery; images[0].url mirrors imageUrl. */
   images: ProductImage[];
   active: boolean;

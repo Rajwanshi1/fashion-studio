@@ -10,7 +10,7 @@ vi.mock('libheif-js/wasm-bundle', () => ({
   },
 }));
 
-import { DECODE_MESSAGE, prepareImage } from '../lib/image';
+import { DECODE_MESSAGE, prepareImage, prepareRenditions } from '../lib/image';
 
 function fakeBitmap(width = 4000, height = 3000) {
   return { width, height, close: vi.fn() } as unknown as ImageBitmap;
@@ -99,6 +99,14 @@ describe('prepareImage', () => {
     expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 2000, 1500);
   });
 
+  it('reports the re-encoded master dimensions (post-downscale)', async () => {
+    const file = new File(['x'], 'shot.jpg', { type: 'image/jpeg' });
+    const { width, height } = await prepareImage(file);
+    // 4000x3000 source → 2000x1500 master.
+    expect(width).toBe(2000);
+    expect(height).toBe(1500);
+  });
+
   it('skips the wasm decoder for a file that is not an ISO container', async () => {
     createBitmap.mockRejectedValue(new Error('unsupported'));
     const file = new File(['not an image at all'], 'weird.bin', { type: 'application/octet-stream' });
@@ -133,5 +141,33 @@ describe('prepareImage', () => {
     };
     const file = new File(['x'], 'bill.jpg', { type: 'image/jpeg' });
     await expect(prepareImage(file)).rejects.toThrow('Could not re-encode that photo in this browser.');
+  });
+
+  describe('prepareRenditions', () => {
+    const master = new Blob(['master'], { type: 'image/jpeg' });
+
+    it('generates only ladder widths below the master, at proportional heights', async () => {
+      createBitmap.mockResolvedValue(fakeBitmap(2000, 1500));
+      const renditions = await prepareRenditions(master, 2000, 1500, [320, 640, 1080, 1600]);
+      expect(renditions.map((r) => r.width)).toEqual([320, 640, 1080, 1600]);
+      expect(renditions.every((r) => r.blob.type === 'image/jpeg')).toBe(true);
+      // Heights keep the master's aspect: round(1500 * w / 2000).
+      expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 320, 240);
+      expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 640, 480);
+      expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 1080, 810);
+      expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 1600, 1200);
+    });
+
+    it('skips widths at or above the master (never upscales)', async () => {
+      createBitmap.mockResolvedValue(fakeBitmap(1080, 1350));
+      const renditions = await prepareRenditions(master, 1080, 1350, [320, 640, 1080, 1600]);
+      expect(renditions.map((r) => r.width)).toEqual([320, 640]);
+    });
+
+    it('returns [] without decoding when no ladder width fits', async () => {
+      const renditions = await prepareRenditions(master, 320, 400, [320, 640, 1080, 1600]);
+      expect(renditions).toEqual([]);
+      expect(createBitmap).not.toHaveBeenCalled();
+    });
   });
 });

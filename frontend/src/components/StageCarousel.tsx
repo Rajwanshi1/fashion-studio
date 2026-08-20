@@ -22,6 +22,9 @@ const DRAG_THRESHOLD_PX = 5;
 /** Quiet time after the last scroll event before we call the scroll settled. */
 const SETTLE_MS = 200;
 
+/** The stage spans the viewport on mobile and ~60% of it on desktop (pdp.css). */
+const STAGE_SIZES = '(max-width: 900px) 100vw, 60vw';
+
 /**
  * PDP stage as a scroll-snap carousel. Touch swipes ride the native
  * scroll (no touch-action override, so vertical page scroll over the
@@ -53,8 +56,27 @@ export default function StageCarousel({
   const justDraggedRef = useRef(false);
   const settleRef = useRef(0);
   const [dragging, setDragging] = useState(false);
+  /** Slides that have EVER been the active slide or its neighbour — the only
+      ones given a real src. A 12-photo gallery must not fire 12 downloads on
+      mount; and once revealed, a slide keeps its src (unloading a scrolled-past
+      photo would flash the placeholder on the way back). */
+  const [revealed, setRevealed] = useState<Set<number>>(
+    () => new Set([index - 1, index, index + 1]),
+  );
 
   const clampIndex = (i: number) => Math.max(0, Math.min(images.length - 1, i));
+
+  // Reveal the active slide's neighbours as the index moves (thumb click,
+  // swipe, drag, dot — all funnel through the controlled `index` prop).
+  useEffect(() => {
+    setRevealed((prev) => {
+      const missing = [index - 1, index, index + 1].filter((i) => !prev.has(i));
+      if (missing.length === 0) return prev;
+      const next = new Set(prev);
+      for (const i of missing) next.add(i);
+      return next;
+    });
+  }, [index]);
 
   // An interrupted smooth scroll never produces a frame at the pending index,
   // so pendingRef cannot rely on exact arrival alone: once scrolling goes
@@ -95,11 +117,15 @@ export default function StageCarousel({
   }, [index]);
 
   // New gallery (product switch / edited piece): jump back to the start.
-  // The parent clamps `thumb` on its side.
+  // The parent clamps `thumb` on its side. Reveal around the CURRENT index,
+  // not [0,1] — today's caller resets index to 0 with the swap, but a caller
+  // that swaps images mid-gallery must not blank its visible slide.
   useEffect(() => {
     trackRef.current?.scrollTo({ left: 0, behavior: 'auto' });
     pendingRef.current = null;
     lastEmittedRef.current = 0;
+    setRevealed(new Set([0, 1, index - 1, index, index + 1].filter((n) => n >= 0)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [images]);
 
   useEffect(
@@ -203,6 +229,11 @@ export default function StageCarousel({
         src={img?.url ?? null}
         label={productName}
         alt={img ? `${productName} — ${poseLabel(img, 0)}` : productName}
+        width={img?.width}
+        height={img?.height}
+        sizes={STAGE_SIZES}
+        placeholderHex={img?.colorHex || undefined}
+        eager
       />
     );
   }
@@ -224,10 +255,17 @@ export default function StageCarousel({
       >
         {images.map((img, i) => (
           <div className="stage-slide" key={`${img.url}-${i}`} aria-hidden={i !== index}>
+            {/* Non-adjacent slides render the src-less placeholder until they
+                come within one slide of the active index. */}
             <ImageSlot
-              src={img.url}
+              src={revealed.has(i) ? img.url : null}
               label={poseLabel(img, i)}
               alt={`${productName} — ${poseLabel(img, i)}`}
+              width={img.width}
+              height={img.height}
+              sizes={STAGE_SIZES}
+              placeholderHex={img.colorHex || undefined}
+              eager={i === 0}
             />
           </div>
         ))}

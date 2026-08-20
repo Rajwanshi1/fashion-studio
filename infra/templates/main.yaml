@@ -83,9 +83,32 @@ Parameters:
   HostedZoneId:
     Type: String
     Default: ''
+  # Ops inbox for the ALB alarms. '' (the default) creates no topic and leaves
+  # both alarms action-less — the pre-alerts behaviour.
+  AlertEmail:
+    Type: String
+    Default: ''
+  # ARN of the media.<domain> cert from the waf stack (us-east-1 — see its
+  # MediaCertificate). '' serves MediaDist on its *.cloudfront.net domain only.
+  MediaCertificateArn:
+    Type: String
+    Default: ''
+  # 'true' (the default — current behaviour) keeps the legacy public-read
+  # statement and the loosened public-access block on the uploads bucket, so
+  # raw S3 product URLs still resolve while they remain in the database and in
+  # customers' order histories. Flip to 'false' ONLY after the one-time URL
+  # backfill (docs/media-cdn-runbook.md, step 8) — from then on products/* is
+  # readable through MediaDist alone.
+  KeepLegacyPublicRead:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
 Conditions:
   DetailedMonitoringOn: !Equals [!Ref DetailedMonitoring, 'true']
   HasDomain: !Not [!Equals [!Ref DomainName, '']]
+  HasMediaCert: !Not [!Equals [!Ref MediaCertificateArn, '']]
+  KeepPublicRead: !Equals [!Ref KeepLegacyPublicRead, 'true']
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, '']]
 Resources:
   EcrRepo:
     Type: AWS::ECR::Repository
@@ -143,9 +166,11 @@ Resources:
           - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
-        BlockPublicPolicy: false
+        # Loosened only while the legacy public-read statement below exists;
+        # KeepLegacyPublicRead=false restores the full block (media-cdn step 8).
+        BlockPublicPolicy: !If [KeepPublicRead, false, true]
         IgnorePublicAcls: true
-        RestrictPublicBuckets: false
+        RestrictPublicBuckets: !If [KeepPublicRead, false, true]
       CorsConfiguration:
         CorsRules:
           - AllowedMethods: [PUT, GET]
@@ -159,11 +184,84 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sid: PublicReadProductImages
+          # Legacy direct-S3 reads for the raw URLs still stored in the DB and
+          # in shipped order histories. Dropped by KeepLegacyPublicRead=false
+          # once the URL backfill has rewritten them to the media host.
+          - !If
+            - KeepPublicRead
+            - Sid: PublicReadProductImages
+              Effect: Allow
+              Principal: '*'
+              Action: s3:GetObject
+              Resource: !Sub '${UploadsBucket.Arn}/products/*'
+            - !Ref 'AWS::NoValue'
+          # The media CDN's OAC read — products/* only; the private document
+          # prefixes stay presign-only (same pattern as StorefrontBucketPolicy).
+          - Sid: MediaDistRead
             Effect: Allow
-            Principal: '*'
+            Principal: { Service: cloudfront.amazonaws.com }
             Action: s3:GetObject
             Resource: !Sub '${UploadsBucket.Arn}/products/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${MediaDist}'
+  # Access logs for the media distribution — the raw material for tuning the
+  # media-scrape-rate WAF limit. CloudFront standard logging writes via the
+  # awslogsdelivery canonical-user ACL, so ACLs must be ENABLED on this bucket
+  # (ObjectOwnership BucketOwnerPreferred); BucketOwnerEnforced would make the
+  # distribution update fail with "bucket does not enable ACL access".
+  MediaLogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'fashion-${EnvName}-media-logs-${AWS::AccountId}'
+      OwnershipControls:
+        Rules: [{ ObjectOwnership: BucketOwnerPreferred }]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - { Id: expire-90d, Status: Enabled, ExpirationInDays: 90 }
+  # Product photos served through the edge (media.<domain>) instead of raw S3
+  # URLs: cached close to shoppers, WAF-rate-limited, and the only read path
+  # for products/* once KeepLegacyPublicRead flips to false.
+  MediaDist:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'fashion-${EnvName} media'
+        HttpVersion: http2
+        PriceClass: PriceClass_200
+        WebACLId: !Ref WafWebAclArn
+        Aliases: !If [HasMediaCert, [!Sub 'media.${DomainName}'], !Ref 'AWS::NoValue']
+        ViewerCertificate: !If
+          - HasMediaCert
+          - { AcmCertificateArn: !Ref MediaCertificateArn, SslSupportMethod: sni-only, MinimumProtocolVersion: TLSv1.2_2021 }
+          - { CloudFrontDefaultCertificate: true }
+        Origins:
+          - Id: s3
+            DomainName: !GetAtt UploadsBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt Oac.Id
+            S3OriginConfig: { OriginAccessIdentity: '' }
+        DefaultCacheBehavior:
+          TargetOriginId: s3
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6   # Managed-CachingOptimized
+        # NO CustomErrorResponses on purpose (unlike the SPA distributions):
+        # this host serves <img> tags, so a missing photo must answer 403/404,
+        # never a 200 with index.html — a broken image beats a corrupt one.
+        Logging:
+          Bucket: !GetAtt MediaLogsBucket.DomainName
+          Prefix: cf/
+          IncludeCookies: false
   AppRole:
     Type: AWS::IAM::Role
     Properties:
@@ -242,49 +340,56 @@ Resources:
               - { Key: Project, Value: fashion-studio }
               - { Key: Env, Value: !Ref EnvName }
         UserData:
-          Fn::Base64: !Sub |
-            #!/bin/bash
-            set -uo pipefail
-            exec > /var/log/user-data.log 2>&1
-            dnf -y install docker
-            systemctl enable --now docker
+          # List-form Sub: MediaBaseUrl is conditional (empty when domainless),
+          # and the API's config treats an empty MEDIA_BASE_URL as unset.
+          Fn::Base64: !Sub
+            - |
+              #!/bin/bash
+              set -uo pipefail
+              exec > /var/log/user-data.log 2>&1
+              dnf -y install docker
+              systemctl enable --now docker
 
-            REGION=${AWS::Region}
-            REPO=${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepoName}
-            TAG=$(aws ssm get-parameter --name /fashion/${EnvName}/api-image-tag --region $REGION --query Parameter.Value --output text)
-            aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
-            for i in $(seq 1 80); do docker pull $REPO:$TAG && break; echo "image $TAG not ready, retry $i"; sleep 15; done
+              REGION=${AWS::Region}
+              REPO=${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepoName}
+              TAG=$(aws ssm get-parameter --name /fashion/${EnvName}/api-image-tag --region $REGION --query Parameter.Value --output text)
+              aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+              for i in $(seq 1 80); do docker pull $REPO:$TAG && break; echo "image $TAG not ready, retry $i"; sleep 15; done
 
-            DB_PW=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/db-password --region $REGION --query SecretString --output text)
-            JWT=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/jwt-secret --region $REGION --query SecretString --output text)
-            CORS=$(aws ssm get-parameter --name /fashion/${EnvName}/cors-origins --region $REGION --query Parameter.Value --output text)
-            # Both absent until MSG91 is provisioned; the API boots with OTP masked.
-            MSG91_KEY=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/msg91-auth-key --region $REGION --query SecretString --output text 2>/dev/null || echo "")
-            MSG91_TEMPLATE=$(aws ssm get-parameter --name /fashion/${EnvName}/msg91-template-id --region $REGION --query Parameter.Value --output text 2>/dev/null || echo "")
-            # Absent until bill parsing is provisioned; the API boots with parsing masked.
-            ANTHROPIC=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/anthropic-api-key --region $REGION --query SecretString --output text 2>/dev/null || echo "")
-            # Both absent until the WhatsApp Business account is provisioned; invoice sends stay masked.
-            WA_TOKEN=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/whatsapp-access-token --region $REGION --query SecretString --output text 2>/dev/null || echo "")
-            WA_PNID=$(aws ssm get-parameter --name /fashion/${EnvName}/whatsapp-phone-number-id --region $REGION --query Parameter.Value --output text 2>/dev/null || echo "")
-            until DATA_IP=$(aws ssm get-parameter --name /fashion/${EnvName}/db-host --region $REGION --query Parameter.Value --output text) && [ -n "$DATA_IP" ]; do echo "db-host param not ready"; sleep 15; done
-            TOK=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
-            IID=$(curl -s -H "X-aws-ec2-metadata-token: $TOK" http://169.254.169.254/latest/meta-data/instance-id)
+              DB_PW=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/db-password --region $REGION --query SecretString --output text)
+              JWT=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/jwt-secret --region $REGION --query SecretString --output text)
+              CORS=$(aws ssm get-parameter --name /fashion/${EnvName}/cors-origins --region $REGION --query Parameter.Value --output text)
+              # Both absent until MSG91 is provisioned; the API boots with OTP masked.
+              MSG91_KEY=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/msg91-auth-key --region $REGION --query SecretString --output text 2>/dev/null || echo "")
+              MSG91_TEMPLATE=$(aws ssm get-parameter --name /fashion/${EnvName}/msg91-template-id --region $REGION --query Parameter.Value --output text 2>/dev/null || echo "")
+              # Absent until bill parsing is provisioned; the API boots with parsing masked.
+              ANTHROPIC=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/anthropic-api-key --region $REGION --query SecretString --output text 2>/dev/null || echo "")
+              # Both absent until the WhatsApp Business account is provisioned; invoice sends stay masked.
+              WA_TOKEN=$(aws secretsmanager get-secret-value --secret-id fashion/${EnvName}/whatsapp-access-token --region $REGION --query SecretString --output text 2>/dev/null || echo "")
+              WA_PNID=$(aws ssm get-parameter --name /fashion/${EnvName}/whatsapp-phone-number-id --region $REGION --query Parameter.Value --output text 2>/dev/null || echo "")
+              until DATA_IP=$(aws ssm get-parameter --name /fashion/${EnvName}/db-host --region $REGION --query Parameter.Value --output text) && [ -n "$DATA_IP" ]; do echo "db-host param not ready"; sleep 15; done
+              TOK=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+              IID=$(curl -s -H "X-aws-ec2-metadata-token: $TOK" http://169.254.169.254/latest/meta-data/instance-id)
 
-            docker rm -f api 2>/dev/null || true
-            docker run -d --name api --restart always -p 3001:3001 \
-              --log-driver awslogs --log-opt awslogs-region=$REGION \
-              --log-opt awslogs-group=/fashion/${EnvName}/api --log-opt awslogs-stream=$IID \
-              -e NODE_ENV=production -e PORT=3001 \
-              -e DATABASE_URL="postgres://boutique:$DB_PW@$DATA_IP:5432/boutique" \
-              -e JWT_SECRET="$JWT" -e CORS_ORIGINS="$CORS" -e SEED_ON_START=false \
-              -e PAYMENT_PROVIDER=${PaymentProvider} -e ALLOW_MOCK_PAYMENTS=${AllowMockPayments} \
-              -e SMS_PROVIDER=${SmsProvider} -e ALLOW_CONSOLE_OTP=${AllowConsoleOtp} \
-              -e MSG91_AUTH_KEY="$MSG91_KEY" -e MSG91_TEMPLATE_ID="$MSG91_TEMPLATE" \
-              -e WHATSAPP_PROVIDER=${WhatsAppProvider} -e ALLOW_CONSOLE_WHATSAPP=${AllowConsoleWhatsApp} \
-              -e WHATSAPP_ACCESS_TOKEN="$WA_TOKEN" -e WHATSAPP_PHONE_NUMBER_ID="$WA_PNID" \
-              -e AWS_REGION=$REGION -e S3_UPLOADS_BUCKET=${UploadsBucket} \
-              -e ANTHROPIC_API_KEY="$ANTHROPIC" -e ANTHROPIC_MODEL=${AnthropicModel} \
-              $REPO:$TAG
+              docker rm -f api 2>/dev/null || true
+              docker run -d --name api --restart always -p 3001:3001 \
+                --log-driver awslogs --log-opt awslogs-region=$REGION \
+                --log-opt awslogs-group=/fashion/${EnvName}/api --log-opt awslogs-stream=$IID \
+                -e NODE_ENV=production -e PORT=3001 \
+                -e DATABASE_URL="postgres://boutique:$DB_PW@$DATA_IP:5432/boutique" \
+                -e JWT_SECRET="$JWT" -e CORS_ORIGINS="$CORS" -e SEED_ON_START=false \
+                -e PAYMENT_PROVIDER=${PaymentProvider} -e ALLOW_MOCK_PAYMENTS=${AllowMockPayments} \
+                -e SMS_PROVIDER=${SmsProvider} -e ALLOW_CONSOLE_OTP=${AllowConsoleOtp} \
+                -e MSG91_AUTH_KEY="$MSG91_KEY" -e MSG91_TEMPLATE_ID="$MSG91_TEMPLATE" \
+                -e WHATSAPP_PROVIDER=${WhatsAppProvider} -e ALLOW_CONSOLE_WHATSAPP=${AllowConsoleWhatsApp} \
+                -e WHATSAPP_ACCESS_TOKEN="$WA_TOKEN" -e WHATSAPP_PHONE_NUMBER_ID="$WA_PNID" \
+                -e AWS_REGION=$REGION -e S3_UPLOADS_BUCKET=${UploadsBucket} \
+                -e MEDIA_BASE_URL="${MediaBaseUrl}" \
+                -e ANTHROPIC_API_KEY="$ANTHROPIC" -e ANTHROPIC_MODEL=${AnthropicModel} \
+                $REPO:$TAG
+            # Empty when domainless — the API's config treats '' as unset and
+            # keeps building raw S3 URLs.
+            - MediaBaseUrl: !If [HasDomain, !Sub 'https://media.${DomainName}', '']
   Alb:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -354,6 +459,15 @@ Resources:
       TargetTrackingConfiguration:
         PredefinedMetricSpecification: { PredefinedMetricType: ASGAverageCPUUtilization }
         TargetValue: 60
+  # App-layer ops notifications (ap-south-1). The WAF alarms have their own
+  # us-east-1 topic in waf.yaml — CLOUDFRONT-scope metrics only exist there.
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlertEmail
+    Properties:
+      TopicName: !Sub 'fashion-${EnvName}-alerts'
+      Subscription:
+        - { Protocol: email, Endpoint: !Ref AlertEmail }
   Alb5xxAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -368,6 +482,8 @@ Resources:
       Threshold: 10
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlertEmail, [!Ref AlertTopic], !Ref 'AWS::NoValue']
+      OKActions: !If [HasAlertEmail, [!Ref AlertTopic], !Ref 'AWS::NoValue']
   UnhealthyHostsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -383,6 +499,8 @@ Resources:
       Threshold: 0
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlertEmail, [!Ref AlertTopic], !Ref 'AWS::NoValue']
+      OKActions: !If [HasAlertEmail, [!Ref AlertTopic], !Ref 'AWS::NoValue']
   Oac:
     Type: AWS::CloudFront::OriginAccessControl
     Properties:
@@ -617,6 +735,8 @@ Resources:
         - { Name: !Sub 'admin.${DomainName}', Type: AAAA, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt AdminDist.DomainName } }
         - { Name: !Sub 'api.${DomainName}', Type: A, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt ApiDist.DomainName } }
         - { Name: !Sub 'api.${DomainName}', Type: AAAA, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt ApiDist.DomainName } }
+        - { Name: !Sub 'media.${DomainName}', Type: A, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt MediaDist.DomainName } }
+        - { Name: !Sub 'media.${DomainName}', Type: AAAA, AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt MediaDist.DomainName } }
 Outputs:
   EcrUri:
     Value: !GetAtt EcrRepo.RepositoryUri
@@ -630,3 +750,5 @@ Outputs:
   UploadsBucket: { Value: !Ref UploadsBucket }
   StorefrontDistId: { Value: !Ref StorefrontDist }
   AdminDistId: { Value: !Ref AdminDist }
+  MediaDomain: { Value: !GetAtt MediaDist.DomainName }
+  MediaDistId: { Value: !Ref MediaDist }

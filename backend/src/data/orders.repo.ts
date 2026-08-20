@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { mapReceipt } from './receipts.repo';
+import type { UrlRewriter } from '../lib/media';
 import { BillType, DeliveryMethod, Order, OrderChannel, OrderItem, OrderStatus, Receipt, Tx } from '../types';
 
 export interface NewOrder {
@@ -106,7 +107,10 @@ export interface OrdersRepo {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function mapItem(row: any): OrderItem {
+// `rw` maps legacy raw-S3 thumbnails onto the media CDN at read time (see
+// lib/media.ts) — order lines snapshot image_url at order time, so shipped
+// orders keep the old form in the DB long after uploads move to the CDN.
+function mapItem(row: any, rw: UrlRewriter): OrderItem {
   return {
     id: row.id,
     productId: row.product_id ?? null,
@@ -116,7 +120,7 @@ function mapItem(row: any): OrderItem {
     color: row.color,
     unitPrice: row.unit_price,
     quantity: row.quantity,
-    imageUrl: row.image_url ?? null,
+    imageUrl: rw(row.image_url ?? null),
     components: row.components ?? [],
     customColor: row.custom_color ?? false,
     measurements: row.measurements ?? '',
@@ -173,7 +177,8 @@ function mapOrder(row: any, items: OrderItem[], receipts: Receipt[]): Order {
   };
 }
 
-export function createOrdersRepo(pool: Pool): OrdersRepo {
+export function createOrdersRepo(pool: Pool, rewriteUrl: UrlRewriter = (url) => url): OrdersRepo {
+  const rw = rewriteUrl;
   async function loadItems(client: Pool | PoolClient, orderIds: string[]): Promise<Map<string, OrderItem[]>> {
     const byOrder = new Map<string, OrderItem[]>();
     if (orderIds.length === 0) return byOrder;
@@ -183,7 +188,7 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
     );
     for (const row of rows) {
       const list = byOrder.get(row.order_id) ?? [];
-      list.push(mapItem(row));
+      list.push(mapItem(row, rw));
       byOrder.set(row.order_id, list);
     }
     return byOrder;
@@ -271,7 +276,7 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
             item.measurements ?? '',
           ],
         );
-        created.push(mapItem(itemRows[0]));
+        created.push(mapItem(itemRows[0], rw));
       }
       return mapOrder(orderRow, created, []);
     },
@@ -330,7 +335,7 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
             item.imageUrl ?? null,
           ],
         );
-        created.push(mapItem(itemRows[0]));
+        created.push(mapItem(itemRows[0], rw));
       }
       return mapOrder(orderRow, created, []);
     },

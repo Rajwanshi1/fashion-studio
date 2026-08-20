@@ -53,7 +53,7 @@ function DrawerUI({ open, onClose }: { open: boolean; onClose: () => void }) {
           {items.length === 0 && <p className="cd-empty">Your bag is empty.</p>}
           {items.map((i) => (
             <div className="cd-item" key={cartLineKey(i)}>
-              <ImageSlot src={i.imageUrl} label={i.name} alt={i.name} />
+              <ImageSlot src={i.imageUrl} label={i.name} alt={i.name} sizes="96px" />
               <div>
                 <div className="nm">{i.name}</div>
                 <div className="at">

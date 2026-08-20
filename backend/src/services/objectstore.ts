@@ -23,7 +23,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export interface ObjectStore {
-  presignPut(key: string, contentType: string): Promise<{ url: string; headers: Record<string, string> }>;
+  /** `cacheControl`, when set, becomes part of the stored object's metadata —
+   *  the returned headers map is what the browser's PUT MUST send verbatim. */
+  presignPut(
+    key: string,
+    contentType: string,
+    cacheControl?: string,
+  ): Promise<{ url: string; headers: Record<string, string> }>;
   /** Short-lived (~5 min) view URL — how the private document prefixes are read. */
   presignGet(key: string): Promise<string>;
   /** Permanent, publicly fetchable URL — only meaningful for public-read prefixes. */
@@ -68,11 +74,15 @@ export interface S3ObjectStoreOptions {
   region?: string;
   /** Injectable for tests — never hit real AWS from a test. */
   client?: S3Client;
+  /** Media-CDN base (https://media.<domain>, no trailing slash). When set,
+   *  publicUrl builds CDN URLs instead of raw virtual-hosted S3 ones. */
+  publicBaseUrl?: string | null;
 }
 
 export class S3ObjectStore implements ObjectStore {
   private client: S3Client;
   private region: string;
+  private publicBaseUrl: string | null;
 
   constructor(
     private bucket: string,
@@ -82,14 +92,24 @@ export class S3ObjectStore implements ObjectStore {
     // the SDK's own region resolution cannot be asked for after the fact.
     this.region = opts.region ?? 'ap-south-1';
     this.client = opts.client ?? new S3Client({ region: this.region });
+    this.publicBaseUrl = opts.publicBaseUrl ?? null;
   }
 
-  async presignPut(key: string, contentType: string) {
-    // ContentType on the command is part of the signature, so the browser's PUT
-    // must send the same Content-Type header or S3 rejects the upload.
-    const command = new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: contentType });
+  async presignPut(key: string, contentType: string, cacheControl?: string) {
+    // ContentType/CacheControl ride on the signed command; S3 stores whatever
+    // Cache-Control header actually ARRIVES with the PUT, so the returned
+    // headers map is the contract — the browser must send it verbatim (and,
+    // depending on SDK signing behaviour, a mismatch can fail the signature).
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      ContentType: contentType,
+      ...(cacheControl ? { CacheControl: cacheControl } : {}),
+    });
     const url = await getSignedUrl(this.client, command, { expiresIn: PUT_EXPIRY_SECONDS });
-    return { url, headers: { 'Content-Type': contentType } };
+    const headers: Record<string, string> = { 'Content-Type': contentType };
+    if (cacheControl) headers['Cache-Control'] = cacheControl;
+    return { url, headers };
   }
 
   presignGet(key: string): Promise<string> {
@@ -97,8 +117,10 @@ export class S3ObjectStore implements ObjectStore {
     return getSignedUrl(this.client, command, { expiresIn: GET_EXPIRY_SECONDS });
   }
 
-  /** Virtual-hosted-style URL; requires public read on the key's prefix. */
+  /** CDN URL when a public base is configured; else the virtual-hosted-style
+   *  S3 URL (requires public read on the key's prefix). */
   publicUrl(key: string): string {
+    if (this.publicBaseUrl) return `${this.publicBaseUrl}/${key}`;
     return `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
   }
 
@@ -136,7 +158,10 @@ export class LocalObjectStore implements ObjectStore {
     return `${this.baseUrl}/api/uploads/local/${encodeURIComponent(key)}`;
   }
 
-  async presignPut(key: string, contentType: string) {
+  // cacheControl is accepted and ignored: the local transport neither stores
+  // nor serves cache metadata, and echoing it as a required header would fail
+  // the dev CORS preflight (the API only allows Content-Type/Authorization).
+  async presignPut(key: string, contentType: string, _cacheControl?: string) {
     this.resolvePath(key); // validate early so a bad key fails at presign time
     return { url: this.localUrl(key), headers: { 'Content-Type': contentType } };
   }

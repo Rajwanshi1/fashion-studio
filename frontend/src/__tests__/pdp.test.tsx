@@ -132,10 +132,17 @@ describe('PDP', () => {
     // Three gallery rows → three thumbs and three carousel slides.
     expect(thumbCount()).toBe(3);
     expect(document.querySelectorAll('.stage-track .stage-slide')).toHaveLength(3);
-    // Every pose appears twice — thumb + its slide.
+    // Every near pose appears twice — thumb + its slide.
     expect(screen.getAllByAltText('Sage Sequin Jacket Lehenga — front')).toHaveLength(2);
-    // The third row carries no pose → positional fallback.
-    expect(screen.getAllByAltText('Sage Sequin Jacket Lehenga — View 3')).toHaveLength(2);
+    // The third row carries no pose → positional fallback. Its slide sits
+    // beyond the active index's neighbours, so only the THUMB is a real <img>
+    // (the slide renders the src-less placeholder until it comes adjacent).
+    expect(screen.getAllByAltText('Sage Sequin Jacket Lehenga — View 3')).toHaveLength(1);
+    expect(document.querySelectorAll('.stage-track img')).toHaveLength(2);
+    // The first slide is the landing paint — eager; its neighbour stays lazy.
+    const slideImgs = document.querySelectorAll('.stage-track img');
+    expect(slideImgs[0]).toHaveAttribute('loading', 'eager');
+    expect(slideImgs[1]).toHaveAttribute('loading', 'lazy');
 
     const track = getTrack();
     const thumbs = document.getElementById('thumbs')!;
@@ -145,6 +152,9 @@ describe('PDP', () => {
     // Thumb goes active and the track scrolls to slide 1.
     expect(back.className).toContain('active');
     expect(track.scrollLeft).toBe(600);
+    // Slide 2 is now the active slide's neighbour — it gains a real src.
+    expect(screen.getAllByAltText('Sage Sequin Jacket Lehenga — View 3')).toHaveLength(2);
+    expect(document.querySelectorAll('.stage-track img')).toHaveLength(3);
 
     // Dots reflect the same index and are labelled for a screen reader.
     const dots = screen.getAllByRole('button', { name: /Go to photo \d of 3/ });

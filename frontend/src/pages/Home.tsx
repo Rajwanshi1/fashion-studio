@@ -48,13 +48,17 @@ export default function Home() {
       {/* HERO */}
       <header className="hero">
         {/* `label` is the empty-state caption (an instruction to the boutique);
-            `alt` is what a visitor's screen reader hears once a photo exists. */}
+            `alt` is what a visitor's screen reader hears once a photo exists.
+            Eager: the hero IS the landing paint — lazy would delay the LCP.
+            CMS images carry no dims, so no srcset — eager + 100vw still helps. */}
         <ImageSlot
           src={site.hero.imageUrl}
           label="Drop campaign image — full bleed editorial"
           alt={site.hero.title}
           focusX={site.hero.focusX}
           focusY={site.hero.focusY}
+          sizes="100vw"
+          eager
         />
         <div className="veil"></div>
         <div className="side-label">{site.hero.seasonLabel}</div>
@@ -153,7 +157,15 @@ export default function Home() {
             {best.map((p) => (
               <div className="product" key={p.id}>
                 <Link to={`/product/${p.slug}`}>
-                  <ImageSlot src={p.imageUrl} label={p.name} alt={p.name} />
+                  <ImageSlot
+                    src={p.imageUrl}
+                    label={p.name}
+                    alt={p.name}
+                    width={p.imageWidth}
+                    height={p.imageHeight}
+                    placeholderHex={p.imageColorHex || undefined}
+                    sizes="(max-width: 560px) 50vw, 20vw"
+                  />
                 </Link>
                 <div className="meta">
                   <div className="pname">{p.name}</div>

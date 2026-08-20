@@ -112,7 +112,15 @@ export default function Wishlist() {
               <div className="pcard" key={p.id}>
                 <div className="ph">
                   <Link to={`/product/${p.slug}`}>
-                    <ImageSlot src={p.imageUrl} label={p.name} alt={p.name} />
+                    <ImageSlot
+                      src={p.imageUrl}
+                      label={p.name}
+                      alt={p.name}
+                      width={p.imageWidth}
+                      height={p.imageHeight}
+                      placeholderHex={p.imageColorHex || undefined}
+                      sizes="96px"
+                    />
                   </Link>
                 </div>
                 <div className="m">
