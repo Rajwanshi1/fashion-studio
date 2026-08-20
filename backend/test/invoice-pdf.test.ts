@@ -134,6 +134,23 @@ describe('buildInvoiceModel', () => {
     expect(item.amount).toBe('₹36,980');
   });
 
+  it('appends custom colour to the add-on list (the ₹1,000 sits inside unitPrice)', () => {
+    const both = makeOrder({
+      items: [
+        makeItem({
+          productName: 'Anarkali Set',
+          components: [{ name: 'dupatta', price: 150000 }],
+          customColor: true,
+        }),
+      ],
+    });
+    expect(buildInvoiceModel(both).items[0].description).toBe('Anarkali Set — with dupatta & custom colour');
+    const alone = makeOrder({ items: [makeItem({ customColor: true })] });
+    expect(buildInvoiceModel(alone).items[0].description).toBe(
+      'Cowl Tissue Silk Kaftan — Ombre Dyeing — with custom colour',
+    );
+  });
+
   it('shows GST only when the bill carries a GST line', () => {
     expect(totalLabels(makeOrder())).not.toContain('GST');
     expect(totalLabels(makeOrder({ gstAmount: 35000 }))).toContain('GST');

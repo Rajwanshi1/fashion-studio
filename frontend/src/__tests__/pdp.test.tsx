@@ -434,6 +434,80 @@ describe('PDP', () => {
     });
   });
 
+  describe('custom colour on request', () => {
+    const routes = (url: string) => {
+      if (url.includes('/api/products/fern-zardozi-set-fern')) return DETAIL_SET;
+      if (url.includes('/api/products')) return { items: [], total: 0, page: 1, pages: 1 };
+      if (url.includes('/api/categories')) return [];
+      return undefined;
+    };
+
+    it('chip + note render; selecting adds ₹1,000 and the bag line carries the flag', async () => {
+      mockFetch(routes);
+      renderApp('/product/fern-zardozi-set-fern');
+      await screen.findByRole('heading', { level: 1, name: 'Fern Zardozi Set' });
+
+      expect(
+        screen.getByText(/we.ll confirm the exact shade on WhatsApp after you order/),
+      ).toBeInTheDocument();
+      const chip = screen.getByRole('button', { name: 'Custom colour' });
+      const user = userEvent.setup();
+      await user.click(chip);
+
+      // Full set 1,86,000 + 1,000 surcharge; label reads Custom, chip goes active.
+      expect(screen.getByText('₹1,87,000')).toBeInTheDocument();
+      expect(chip.className).toContain('active');
+      expect(document.getElementById('colorName')).toHaveTextContent('Custom');
+
+      await user.click(screen.getByRole('button', { name: 'Add to Bag' }));
+      const stored = JSON.parse(localStorage.getItem('ta.cart') ?? '[]');
+      expect(stored[0]).toMatchObject({
+        customColor: true,
+        unitPrice: 18700000,
+        color: 'Sage', // the base-shade reference survives on the line
+      });
+      // The drawer line discloses the request.
+      expect(screen.getByText('Sage · Size M · Qty 1 · With Dupatta & Jacket · Custom colour')).toBeInTheDocument();
+    });
+
+    it('toggling back to a photo swatch clears the request and its surcharge', async () => {
+      mockFetch(routes);
+      renderApp('/product/fern-zardozi-set-fern');
+      await screen.findByRole('heading', { level: 1, name: 'Fern Zardozi Set' });
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: 'Custom colour' }));
+      expect(screen.getByText('₹1,87,000')).toBeInTheDocument();
+      // While custom is chosen, no photo swatch reads active.
+      const swatches = within(document.getElementById('swatches')!).getAllByRole('button');
+      expect(swatches.some((s) => s.className.includes('active'))).toBe(false);
+
+      await user.click(screen.getByRole('button', { name: 'Antique Gold' }));
+      expect(screen.getByText('₹1,86,000')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Custom colour' }).className).not.toContain('active');
+      expect(document.getElementById('colorName')).toHaveTextContent('Antique Gold');
+
+      await user.click(screen.getByRole('button', { name: 'Add to Bag' }));
+      const stored = JSON.parse(localStorage.getItem('ta.cart') ?? '[]');
+      expect(stored[0]).toMatchObject({ customColor: false, unitPrice: 18600000 });
+    });
+
+    it('offers nothing when the product disallows custom colours', async () => {
+      mockFetch((url) => {
+        if (url.includes('/api/products/fern-zardozi-set-fern'))
+          return { ...DETAIL_SET, customColorAvailable: false };
+        return routes(url);
+      });
+      renderApp('/product/fern-zardozi-set-fern');
+      await screen.findByRole('heading', { level: 1, name: 'Fern Zardozi Set' });
+
+      expect(screen.queryByRole('button', { name: 'Custom colour' })).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/we.ll confirm the exact shade on WhatsApp/),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it('keeps every size orderable, stocked or not (made to order)', async () => {
     mockFetch((url) => {
       if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;

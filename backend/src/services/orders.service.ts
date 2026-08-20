@@ -50,6 +50,10 @@ export interface CreateOrderInput {
      *  those two names so an invisible component is never charged. Removed
      *  with the legacy-column drop chore. */
     legacyIncludes?: { dupatta: boolean; jacket: boolean };
+    /** Custom colour requested (+₹1,000 when the product allows it); part of
+     *  line identity. Ignored — not priced, not recorded — when the product
+     *  disallows it (a stale cart then trips expectedUnitPrice above). */
+    customColor?: boolean;
     /** Free-text made-to-measure note; part of line identity. */
     measurements?: string;
   }[];
@@ -139,6 +143,8 @@ export interface OrdersService {
 
 export const PRIORITY_DELIVERY_FEE = 250000; // ₹2,500 in paise
 
+export const CUSTOM_COLOR_SURCHARGE = 100000; // ₹1,000 in paise
+
 const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending_payment: ['paid', 'cancelled'],
   paid: ['in_atelier', 'cancelled'],
@@ -176,6 +182,7 @@ export function createOrdersService(deps: {
           excluded: Set<string>;
           expected: number | null;
           legacy: { dupatta: boolean; jacket: boolean } | null;
+          customColor: boolean;
           measurements: string;
           qty: number;
         }
@@ -187,17 +194,19 @@ export function createOrdersService(deps: {
         );
         const expected = item.expectedUnitPrice ?? null;
         const legacy = item.legacyIncludes ?? null;
+        const customColor = item.customColor ?? false;
         const measurements = (item.measurements ?? '').trim();
         const key = [
           item.variantId,
           [...excluded].sort().join(','),
           expected ?? '',
           legacy ? `L${legacy.dupatta ? 1 : 0}${legacy.jacket ? 1 : 0}` : '',
+          customColor ? 'C' : '',
           measurements,
         ].join('|');
         const existing = combos.get(key);
         if (existing) existing.qty += item.quantity;
-        else combos.set(key, { variantId: item.variantId, excluded, expected, legacy, measurements, qty: item.quantity });
+        else combos.set(key, { variantId: item.variantId, excluded, expected, legacy, customColor, measurements, qty: item.quantity });
       }
       if (combos.size === 0) {
         throw new DomainError('EMPTY_ORDER', 'Order must contain at least one item');
@@ -236,7 +245,14 @@ export function createOrdersService(deps: {
                 })
               : optionalPriced.filter((c) => !combo.excluded.has(c.name.trim().toLowerCase()))
           ).map((c) => ({ name: c.name, price: c.price! }));
-          const unitPrice = v.unitPrice + kept.reduce((sum, c) => sum + c.price, 0);
+          // A custom-colour request only counts (and only charges) on a piece
+          // that allows it — a disallowed request prices out as if never made,
+          // and a cart that displayed the surcharge trips PRICE_CHANGED below.
+          const customColor = combo.customColor && v.customColorAvailable;
+          const unitPrice =
+            v.unitPrice +
+            kept.reduce((sum, c) => sum + c.price, 0) +
+            (customColor ? CUSTOM_COLOR_SURCHARGE : 0);
           // The one guard against a stale cart: the shopper is only ever
           // charged a per-unit price their cart actually displayed.
           if (combo.expected != null && combo.expected !== unitPrice) {
@@ -255,6 +271,7 @@ export function createOrdersService(deps: {
             quantity: combo.qty,
             imageUrl: v.imageUrl,
             components: kept,
+            customColor,
             // Display-only free text — prices still come exclusively from the DB rows.
             measurements: combo.measurements,
           };
@@ -264,7 +281,7 @@ export function createOrdersService(deps: {
         // never had alongside a fresh line for the same selection.
         const merged = new Map<string, (typeof priced)[number]>();
         for (const item of priced) {
-          const key = [item.variantId, item.unitPrice, item.components.map((c) => c.name).join(','), item.measurements].join('|');
+          const key = [item.variantId, item.unitPrice, item.components.map((c) => c.name).join(','), item.customColor ? 'C' : '', item.measurements].join('|');
           const existing = merged.get(key);
           if (existing) existing.quantity += item.quantity;
           else merged.set(key, item);

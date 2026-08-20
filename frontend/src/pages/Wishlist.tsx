@@ -73,6 +73,7 @@ export default function Wishlist() {
           .filter((c) => c.optional && c.price != null)
           .map((c) => c.name),
         excludedComponents: [],
+        customColor: false,
         measurements: '',
       });
       showToast('Added to your bag');

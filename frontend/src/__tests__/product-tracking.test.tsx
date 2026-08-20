@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { StrictMode } from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Providers } from '../App';
 import Product from '../pages/Product';
@@ -52,6 +52,30 @@ describe('Product page — product_view tracking', () => {
         name: 'Sage Sequin Jacket Lehenga',
         price: 18400000,
       },
+    });
+  });
+
+  it('the custom colour chip fires color_select with the custom source', async () => {
+    mockFetch((url) => {
+      if (url.includes('/api/products/sage-sequin-jacket-lehenga')) return DETAIL1;
+      return undefined;
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/product/sage-sequin-jacket-lehenga']}>
+        <Providers>
+          <Routes>
+            <Route path="/product/:slug" element={<Product />} />
+          </Routes>
+        </Providers>
+      </MemoryRouter>,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Sage Sequin Jacket Lehenga' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Custom colour' }));
+    expect(track).toHaveBeenCalledWith('color_select', {
+      productId: 'p1',
+      props: { color: 'custom', source: 'custom' },
     });
   });
 });
