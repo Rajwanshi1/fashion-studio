@@ -12,12 +12,12 @@ Keep this file under ~60 lines.
 - #11 draft Infra go-live follow-ups (resolver-proof delegation gate)
 
 ## Chores / known issues
-- Deploy the merged backlog #39/#40/#43 + #45-#48: backend image FIRST, then
-  SPAs (migrations 013-021 all additive). Then over SSM: `backfill:photo-colors`
-  (--dry-run first), and the media-CDN rollout per docs/media-cdn-runbook.md
-  (waf + main changesets, `backfill:image-renditions`, URL SQL backfill,
-  KeepLegacyPublicRead=false ≥24h later). Quarterly: `prune:events`.
-- Audit remediation (merged via #43): after deploy run
+- Post-deploy (2026-08-20, prod == main `6ae7e52`; backfills done): ≥24h after
+  the URL backfill, run the KeepLegacyPublicRead=false main changeset
+  (media-cdn-runbook step 8) and verify direct S3 reads 403. Sarthak: confirm
+  the 2 SNS subscription emails (us-east-1 + ap-south-1) or alarms stay
+  silent. Quarterly: `prune:events`.
+- Audit remediation (merged via #43, deployed 2026-08-20): run
   docs/audit-remediation-runbook.md — CMS review, the 12 renames, provenance.
 - e2e has NOT run over #45-#48 (unit suites + throwaway-Postgres proofs only):
   run the verify skill against merged main; seed `ta.consent-ack` (new consent
