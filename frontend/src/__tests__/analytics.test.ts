@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FLUSH_MS, MAX_BATCH, TRACK_ENDPOINT, track } from '../lib/analytics';
+import { FLUSH_MS, MAX_BATCH, TRACK_ENDPOINT, getSessionId, getVisitorId, track } from '../lib/analytics';
 
 /** analytics.ts registers module-level pagehide/visibilitychange listeners
  *  once, guarded by a flag — so (unlike track.test.ts) we do NOT re-import a
@@ -67,6 +67,42 @@ describe('analytics', () => {
     // First-ever track() after localStorage was cleared rotates the
     // session, so session_start leads, followed by both triggering events.
     expect(eventTypes(body)).toEqual(['session_start', 'product_view', 'add_to_cart']);
+  });
+
+  it('stamps occurredAt at queue time, not flush time', async () => {
+    vi.useFakeTimers();
+    const queuedAt = new Date('2026-08-13T10:00:00Z').getTime();
+    vi.setSystemTime(queuedAt);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal('fetch', fetchMock);
+
+    track('product_view', { productId: 'p1' });
+    // The flush happens FLUSH_MS later — occurredAt must still be queue time.
+    await vi.advanceTimersByTimeAsync(FLUSH_MS);
+
+    const body = lastBody(fetchMock);
+    expect(body.events).toHaveLength(2); // session_start + product_view
+    expect(body.events.every((e: { occurredAt: number }) => e.occurredAt === queuedAt)).toBe(true);
+  });
+
+  it('exposes the tracker identity via getVisitorId/getSessionId, matching the envelope', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const visitorId = getVisitorId();
+    const sessionId = getSessionId();
+    expect(visitorId).toMatch(UUID_RE);
+    expect(sessionId).toMatch(UUID_RE);
+
+    track('page_view');
+    await vi.advanceTimersByTimeAsync(FLUSH_MS);
+    const body = lastBody(fetchMock);
+    expect(body.visitorId).toBe(visitorId);
+    // Reading the session id counted as activity, so track() saw a live
+    // session and did not rotate it.
+    expect(body.sessionId).toBe(sessionId);
+    expect(eventTypes(body)).toEqual(['page_view']);
   });
 
   it('flushes immediately once 20 events are queued, without a timer advance', async () => {

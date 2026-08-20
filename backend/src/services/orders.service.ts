@@ -1,4 +1,5 @@
 import type { DocumentsRepo } from '../data/documents.repo';
+import type { EventsRepo } from '../data/events.repo';
 import type { MeasurementsRepo } from '../data/measurements.repo';
 import type { OrderDetailsPatch, OrdersRepo } from '../data/orders.repo';
 import type { ProductsRepo, VariantForOrder } from '../data/products.repo';
@@ -57,6 +58,11 @@ export interface CreateOrderInput {
     /** Free-text made-to-measure note; part of line identity. */
     measurements?: string;
   }[];
+  /** Tracker identity for the server-stamped order_created analytics event;
+   *  absent (no event) when the client has no analytics ids to offer. */
+  analytics?: { visitorId: string; sessionId: string } | null;
+  /** First X-Forwarded-For hop, threaded from the route for that event. */
+  ip?: string | null;
 }
 
 /** Manual entry of a handwritten bill (in-store, Instagram DM, exhibition). */
@@ -172,6 +178,8 @@ export function createOrdersService(deps: {
   receipts: ReceiptsRepo;
   documents: DocumentsRepo;
   measurements: MeasurementsRepo;
+  /** Optional analytics sink for the server-stamped order_created event. */
+  events?: Pick<EventsRepo, 'insertServerEvent'> | null;
   runInTransaction: TxRunner;
 }): OrdersService {
   const service: OrdersService = {
@@ -221,7 +229,7 @@ export function createOrdersService(deps: {
         quantities.set(combo.variantId, (quantities.get(combo.variantId) ?? 0) + combo.qty);
       }
 
-      return deps.runInTransaction(async (tx) => {
+      const created = await deps.runInTransaction(async (tx) => {
         const variantIds = [...quantities.keys()];
         const variants = await deps.products.getVariantsForUpdate(tx, variantIds);
         const byId = new Map(variants.map((v) => [v.id, v]));
@@ -342,6 +350,28 @@ export function createOrdersService(deps: {
         }
         return order;
       });
+
+      // Server-stamped conversion event, AFTER the commit — order_created is
+      // not in the /track whitelist, so it can never be spoofed by a client.
+      // An analytics failure must never fail a placed order.
+      if (input.analytics && deps.events) {
+        try {
+          await deps.events.insertServerEvent({
+            eventType: 'order_created',
+            visitorId: input.analytics.visitorId,
+            sessionId: input.analytics.sessionId,
+            userId: input.userId ?? null,
+            orderId: created.id,
+            path: null,
+            productId: null,
+            ip: input.ip ?? null,
+            props: { orderNumber: created.orderNumber, total: created.total },
+          });
+        } catch (err) {
+          console.error('order_created analytics event failed:', err);
+        }
+      }
+      return created;
     },
 
     async createOfflineOrder(input) {

@@ -127,6 +127,7 @@ export function createApp(deps: AppDeps) {
     receipts: repos.receipts,
     documents: repos.documents,
     measurements: repos.measurements,
+    events: repos.events,
     runInTransaction,
   });
   const payments = createPaymentsService({ payments: repos.payments, orders: repos.orders, provider: paymentProvider });

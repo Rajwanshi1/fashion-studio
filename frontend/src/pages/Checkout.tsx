@@ -4,8 +4,8 @@ import { api, type ApiError } from '../lib/api';
 import type { DeliveryMethod, Order, PaymentInit } from '../lib/types';
 import { cartLineKey, useCart } from '../lib/cart';
 import { useAuth } from '../lib/auth';
+import { getSessionId, getVisitorId, track } from '../lib/analytics';
 import { useFirstOrderOffer } from '../lib/offers';
-import { track } from '../lib/analytics';
 import { formatINR } from '../lib/format';
 import { useToast } from '../components/Toast';
 import ImageSlot from '../components/ImageSlot';
@@ -93,6 +93,9 @@ export default function Checkout() {
             customColor: i.customColor || undefined, // omit empties
             measurements: i.measurements || undefined, // omit empties
           })),
+          // Lets the server stamp the unspoofable order_created event onto
+          // this session's timeline.
+          analytics: { visitorId: getVisitorId(), sessionId: getSessionId() },
         });
         setOrder(ord);
       }

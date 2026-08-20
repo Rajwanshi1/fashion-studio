@@ -40,6 +40,11 @@ const createOrderSchema = z.object({
       measurements: z.string().max(500).optional(),
     }),
   ),
+  // Tracker identity so the server can stamp the unspoofable order_created
+  // analytics event; absent for clients with blocked storage or an old SPA.
+  analytics: z
+    .object({ visitorId: z.string().uuid(), sessionId: z.string().uuid() })
+    .optional(),
 });
 
 type OrderItemBody = z.infer<typeof createOrderSchema>['items'][number];
@@ -69,6 +74,8 @@ export function orderRoutes(orders: OrdersService, jwtSecret: string) {
       ...body,
       items: body.items.map(withLegacyIncludes),
       userId: c.var.user?.id ?? null,
+      // First X-Forwarded-For hop, for the server-stamped analytics event.
+      ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || null,
     });
     return c.json(order, 201);
   });

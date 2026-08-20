@@ -16,6 +16,20 @@ export function formatDate(iso: string): string {
   });
 }
 
+/** Like formatDate but with the time of day — '12 Aug 2026, 6:42 pm' (IST). */
+export function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Asia/Kolkata',
+  });
+}
+
 /** Today's date in the boutique's timezone, YYYY-MM-DD. */
 export function todayIST(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());

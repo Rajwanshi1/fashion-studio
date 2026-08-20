@@ -343,6 +343,52 @@ export interface AnalyticsSummary {
   colors: Array<{ color: string; adds: number }>;
 }
 
+/** Mirrors backend/src/data/events.repo.ts — GET /api/analytics/sessions. */
+export type SessionOutcome = 'ordered' | 'checkout' | 'carted' | 'browsed';
+
+export interface SessionSummary {
+  sessionId: string;
+  visitorId: string;
+  userId: string | null;
+  startedAt: string;
+  endedAt: string;
+  durationSec: number;
+  device: string;
+  landingPath: string | null;
+  eventCount: number;
+  outcome: SessionOutcome;
+  /** Carted/checkout, no order, and idle past the 30-min session window. */
+  abandoned: boolean;
+  orderId: string | null;
+  orderNumber: string | null;
+  ip: string | null;
+}
+
+export interface SessionsPage {
+  sessions: SessionSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Mirrors backend — GET /api/analytics/sessions/:id (full timeline). */
+export interface SessionEvent {
+  eventType: string;
+  occurredAt: string;
+  path: string | null;
+  productId: string | null;
+  productName: string | null;
+  props: Record<string, unknown>;
+}
+
+/** Mirrors backend — GET /api/analytics/visitors/:id. */
+export interface VisitorDetail {
+  visitorId: string;
+  sessions: SessionSummary[];
+  /** Sessions by OTHER visitors sharing this visitor's most recent IP. */
+  sameIpSessions: number;
+}
+
 /** Valid next order-status transitions, mirrored from the backend state machine. */
 export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending_payment: ['paid', 'cancelled'],

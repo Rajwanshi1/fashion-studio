@@ -6,7 +6,7 @@ import {
   requesterOwnsOrder,
 } from '../src/services/orders.service';
 import type { Order } from '../src/types';
-import { FakeOrdersRepo, FakeProductsRepo, FakeReceiptsRepo, FakeUsersRepo, fakeTx, seedCatalog, seedSetProduct } from './fakes';
+import { FakeEventsRepo, FakeOrdersRepo, FakeProductsRepo, FakeReceiptsRepo, FakeUsersRepo, fakeTx, seedCatalog, seedSetProduct } from './fakes';
 
 const customer = {
   email: 'Guest@Example.com',
@@ -138,6 +138,70 @@ describe('OrdersService', () => {
       expect(order.items[0].quantity).toBe(50);
       const [v] = await products.getVariantsForUpdate({}, [sageCustom().id]);
       expect(v.stock).toBe(0);
+    });
+  });
+
+  describe('createOrder → server-stamped order_created event', () => {
+    const ANALYTICS = {
+      visitorId: '11111111-1111-1111-1111-111111111111',
+      sessionId: '22222222-2222-2222-2222-222222222222',
+    };
+
+    function serviceWith(events: Parameters<typeof createOrdersService>[0]['events']) {
+      return createOrdersService({
+        products,
+        orders: ordersRepo,
+        users: new FakeUsersRepo(ordersRepo),
+        receipts: new FakeReceiptsRepo(ordersRepo),
+        events,
+        runInTransaction: fakeTx,
+      } as Parameters<typeof createOrdersService>[0]);
+    }
+
+    it('emits order_created with the orderId after a successful order', async () => {
+      const events = new FakeEventsRepo();
+      const order = await serviceWith(events).createOrder(
+        input({ analytics: ANALYTICS, ip: '203.0.113.9', userId: 'user-42' }),
+      );
+      expect(events.rows).toHaveLength(1);
+      expect(events.rows[0]).toMatchObject({
+        eventType: 'order_created',
+        visitorId: ANALYTICS.visitorId,
+        sessionId: ANALYTICS.sessionId,
+        userId: 'user-42',
+        orderId: order.id,
+        ip: '203.0.113.9',
+        path: null,
+        productId: null,
+        props: { orderNumber: order.orderNumber, total: order.total },
+      });
+    });
+
+    it('an analytics failure never fails the order', async () => {
+      const failing = {
+        insertServerEvent: async () => {
+          throw new Error('events table on fire');
+        },
+      };
+      const order = await serviceWith(failing).createOrder(input({ analytics: ANALYTICS }));
+      expect(order.status).toBe('pending_payment');
+      expect(ordersRepo.orders).toHaveLength(1);
+    });
+
+    it('emits nothing when analytics ids are absent', async () => {
+      const events = new FakeEventsRepo();
+      await serviceWith(events).createOrder(input());
+      expect(events.rows).toHaveLength(0);
+    });
+
+    it('emits nothing when the order itself fails (no event before the commit)', async () => {
+      const events = new FakeEventsRepo();
+      await expect(
+        serviceWith(events).createOrder(
+          input({ analytics: ANALYTICS, items: [{ variantId: 'ghost', quantity: 1 }] }),
+        ),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(events.rows).toHaveLength(0);
     });
   });
 

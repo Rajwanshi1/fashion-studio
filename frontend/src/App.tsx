@@ -7,6 +7,7 @@ import { SiteContentProvider } from './lib/content';
 import { WishlistProvider } from './lib/wishlist';
 import { ToastProvider } from './components/Toast';
 import { CartDrawerProvider } from './components/CartDrawer';
+import ConsentNotice from './components/ConsentNotice';
 import { FirstOrderPopupProvider } from './components/FirstOrderPopup';
 import Home from './pages/Home';
 import Archive from './pages/Archive';
@@ -61,6 +62,7 @@ export function AppRoutes() {
     <>
       <ScrollToTop />
       <PageTracking />
+      <ConsentNotice />
       <Routes>
         <Route path="/" element={<Home />} />
         {/* The old editorial /collections page invented five editions that

@@ -1,0 +1,11 @@
+/* ============================================================
+   TANVI AGNIHOTRY — First-party analytics consent bar
+   ============================================================ */
+/* Hairline bar pinned under everything interactive: below the cart drawer
+   (300) and Razorpay modal (400), above page content. */
+.consent { position: fixed; left: 0; right: 0; bottom: 0; z-index: 200; display: flex; align-items: center; justify-content: center; gap: 1.1rem; flex-wrap: wrap; padding: 0.65rem var(--gutter); background: var(--paper); border-top: 1px solid var(--hairline); }
+.consent p { margin: 0; font-family: var(--sans); font-size: 0.72rem; letter-spacing: 0.04em; color: var(--fg-muted); }
+.consent a { color: var(--gold); text-decoration: none; border-bottom: 1px solid var(--hairline-gold); }
+.consent a:hover { color: var(--ink); }
+.consent button { font-family: var(--sans); font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink); background: none; border: 1px solid var(--hairline); border-radius: var(--edge); padding: 0.5em 1.4em; cursor: pointer; }
+.consent button:hover { border-color: var(--gold-text, var(--gold)); color: var(--gold); }
