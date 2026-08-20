@@ -48,6 +48,10 @@
 .page-pdp .swatches { display: flex; gap: 0.7rem; margin-bottom: 1.8rem; }
 .page-pdp .swatch { display: inline-block; width: 30px; height: 30px; border-radius: 999px; outline: 1px solid var(--hairline); outline-offset: 3px; transition: outline-color var(--dur) var(--ease); border: 0; padding: 0; }
 .page-pdp .swatch.active { outline-color: var(--gold); }
+.page-pdp .custom-color-row { display: flex; gap: 0.9rem; align-items: flex-start; margin: -0.9rem 0 1.8rem; }
+.page-pdp .swatch.custom-color { flex: none; background: conic-gradient(from 200deg, var(--gold), var(--celadon-50), var(--forest-700), var(--gold)); outline-style: dashed; cursor: pointer; }
+.page-pdp .custom-color-note { margin: 0; font-size: var(--t-sm); color: var(--ink-soft); max-width: 46ch; }
+.page-pdp .custom-color-note strong { color: var(--ink); font-weight: 500; }
 
 .page-pdp .sizes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .page-pdp .size { min-width: 48px; padding: 0.7em 0.9em; text-align: center; border: 1px solid var(--hairline); background: none; font-family: var(--sans); font-size: 0.8rem; letter-spacing: 0.04em; cursor: pointer; transition: all var(--dur) var(--ease); }

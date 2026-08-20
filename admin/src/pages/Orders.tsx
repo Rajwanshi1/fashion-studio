@@ -214,6 +214,7 @@ function ExpandedOrder({ order, onUpdated: onUpdatedProp }: ExpandedProps) {
                 {[it.size, it.color].filter(Boolean).join(' · ') || 'Freeform'} · ×{it.quantity}
                 {it.components.length > 0 &&
                   ` · with ${it.components.map((c) => c.name).join(' & ')}`}
+                {it.customColor && ' · custom colour (+₹1,000)'}
               </div>
               {/* Client-supplied free text — always plain text, never HTML. */}
               {it.measurements && <div className="item-note">{it.measurements}</div>}

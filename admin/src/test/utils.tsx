@@ -122,6 +122,7 @@ export function makeOrder(overrides: Partial<Order> = {}): Order {
         quantity: 1,
         imageUrl: null,
         components: [],
+        customColor: false,
         measurements: '',
       },
     ],

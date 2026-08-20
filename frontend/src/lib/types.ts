@@ -118,6 +118,8 @@ export interface ProductDetail extends ProductSummary {
   images: ProductImage[];
   /** "This order contains" — every piece of the set, in display order. */
   components: ProductComponent[];
+  /** Whether the shopper may request a custom colour (+₹1,000 surcharge). */
+  customColorAvailable: boolean;
   /** Provenance — optional, shown only when filled: the karigar's first name,
    *  honestly counted hours, techniques, finish date (YYYY-MM-DD). */
   karigarName: string;
@@ -167,6 +169,8 @@ export interface OrderItem {
   imageUrl: string | null;
   /** Kept optional add-ons snapshotted at order time; price paise, 0 = included free. */
   components: { name: string; price: number }[];
+  /** Custom colour requested (the ₹1,000 surcharge is inside unitPrice). */
+  customColor: boolean;
   /** Free-text made-to-measure note; '' when none. */
   measurements: string;
 }

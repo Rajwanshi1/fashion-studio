@@ -28,6 +28,9 @@ export interface CartItem {
   /** Names of the optional components the shopper unticked — sent to the API
    *  and part of line identity (see cartLineKey). */
   excludedComponents: string[];
+  /** Custom colour requested (+₹1,000, inside unitPrice) — sent to the API
+   *  and part of line identity. */
+  customColor: boolean;
   /** Free-text note for made-to-measure lines; '' otherwise. Part of line
    *  identity — the same variant with a different note is a separate line. */
   measurements: string;
@@ -44,9 +47,9 @@ const CART_TTL_MS = 30 * 24 * 60 * 60 * 1000;
  *  the same price (checkout guarantees each line is charged exactly its own
  *  snapshotted unitPrice). */
 export function cartLineKey(
-  i: Pick<CartItem, 'variantId' | 'excludedComponents' | 'measurements' | 'unitPrice'>,
+  i: Pick<CartItem, 'variantId' | 'excludedComponents' | 'customColor' | 'measurements' | 'unitPrice'>,
 ): string {
-  return `${i.variantId}:${[...i.excludedComponents].sort().join(',')}:${i.measurements}:${i.unitPrice}`;
+  return `${i.variantId}:${[...i.excludedComponents].sort().join(',')}:${i.measurements}:${i.unitPrice}:${i.customColor ? 1 : 0}`;
 }
 
 interface CartContextValue {
@@ -62,8 +65,8 @@ interface CartContextValue {
 const CartContext = createContext<CartContextValue | null>(null);
 
 /** A persisted line, possibly from an older release — see load()'s normalisers. */
-type StoredCartItem = Omit<CartItem, 'includedComponents' | 'excludedComponents'> &
-  Partial<Pick<CartItem, 'includedComponents' | 'excludedComponents'>> & {
+type StoredCartItem = Omit<CartItem, 'includedComponents' | 'excludedComponents' | 'customColor'> &
+  Partial<Pick<CartItem, 'includedComponents' | 'excludedComponents' | 'customColor'>> & {
     includeDupatta?: boolean;
     includeJacket?: boolean;
     dupattaPrice?: number | null;
@@ -87,6 +90,8 @@ function load(): CartItem[] {
       )
       // Carts saved before made-to-measure notes lack the field; '' = no note.
       .map((i) => (typeof i.measurements === 'string' ? i : { ...i, measurements: '' }))
+      // Carts saved before custom colours lack the flag; false = never requested.
+      .map((i) => ({ ...i, customColor: i.customColor ?? false }))
       // Carts saved before expiry lack the stamp; treat them as fresh today.
       .map((i) => (typeof i.addedAt === 'number' ? i : { ...i, addedAt: Date.now() }))
       .filter((i) => Date.now() - i.addedAt < CART_TTL_MS)

@@ -24,6 +24,8 @@ import '../styles/pdp.css';
 /** Positional fallback when a gallery row carries no pose. */
 const poseLabel = (img: ProductImage, i: number) => img.pose || `View ${i + 1}`;
 
+const CUSTOM_COLOR_SURCHARGE = 100000; // paise (₹1,000)
+
 export default function Product() {
   const { slug = '' } = useParams();
   const navigate = useNavigate();
@@ -42,6 +44,9 @@ export default function Product() {
 
   const [thumb, setThumb] = useState(0);
   const [color, setColor] = useState('');
+  // Custom colour on request (+₹1,000); mutually exclusive with the photo
+  // swatches — picking a swatch clears it.
+  const [customColor, setCustomColor] = useState(false);
   const [variantId, setVariantId] = useState('');
   const [qty, setQty] = useState(1);
   // Optional pieces are included by default; unticking removes them from the
@@ -86,6 +91,7 @@ export default function Product() {
         // Gold" embroidery close-up) must not become the bag's colour label
         // without the shopper choosing it.
         setColor(detail.color);
+        setCustomColor(false);
         setExcluded(new Set());
         // Made to order: every size is orderable, so the first chip (XS) is
         // simply the first choice — stock plays no part in selection.
@@ -191,11 +197,13 @@ export default function Product() {
   );
   const keptAddons = optionalPriced.filter((c) => !excluded.has(c.name));
   const chosenAddons = keptAddons.reduce((sum, c) => sum + (c.price ?? 0), 0);
-  // A sale discounts the base only; add-ons are always charged in full. This is
-  // the number checkout independently recomputes from getVariantsForUpdate.
-  const liveTotal = product ? effectiveBasePrice(product) + chosenAddons : 0;
+  const colorSurcharge = customColor ? CUSTOM_COLOR_SURCHARGE : 0;
+  // A sale discounts the base only; add-ons and the custom-colour surcharge are
+  // always charged in full. This is the number checkout independently
+  // recomputes from getVariantsForUpdate.
+  const liveTotal = product ? effectiveBasePrice(product) + chosenAddons + colorSurcharge : 0;
   const onSale = product ? displaySalePrice(product) != null : false;
-  const preSaleTotal = product ? product.price + chosenAddons : 0;
+  const preSaleTotal = product ? product.price + chosenAddons + colorSurcharge : 0;
 
   const addToBag = () => {
     if (!product || !selectedVariant) return;
@@ -211,6 +219,7 @@ export default function Product() {
         imageUrl: product.imageUrl,
         includedComponents: keptAddons.map((c) => c.name),
         excludedComponents: [...excluded].filter((n) => optionalPriced.some((c) => c.name === n)),
+        customColor,
         measurements: isMadeToMeasure ? measurements.trim() : '',
       },
       qty,
@@ -302,19 +311,22 @@ export default function Product() {
 
           <div className="opt-label">
             <span>
-              Colour — <strong id="colorName">{color}</strong>
+              {/* The cart line keeps the swatch colour as the base-shade
+                  reference — only the label reads Custom. */}
+              Colour — <strong id="colorName">{customColor ? 'Custom' : color}</strong>
             </span>
           </div>
           <div className="swatches" id="swatches">
             {swatches.map((s) => (
               <button
                 key={s.name}
-                className={`swatch${s.fill == null ? ' c-default' : ''}${s.name === color ? ' active' : ''}`}
+                className={`swatch${s.fill == null ? ' c-default' : ''}${!customColor && s.name === color ? ' active' : ''}`}
                 style={s.fill != null ? { background: s.fill } : undefined}
                 aria-label={s.name}
                 title={s.name}
                 onClick={() => {
                   setColor(s.name);
+                  setCustomColor(false);
                   track('color_select', {
                     productId: product.id,
                     props: { color: s.name, source: 'photo' },
@@ -326,6 +338,27 @@ export default function Product() {
               />
             ))}
           </div>
+          {product.customColorAvailable && (
+            <div className="custom-color-row">
+              <button
+                className={`swatch custom-color${customColor ? ' active' : ''}`}
+                aria-label="Custom colour"
+                title="Custom colour"
+                onClick={() => {
+                  if (customColor) return;
+                  setCustomColor(true);
+                  track('color_select', {
+                    productId: product.id,
+                    props: { color: 'custom', source: 'custom' },
+                  });
+                }}
+              />
+              <p className="custom-color-note">
+                <strong>Custom colour</strong> — On request · +₹1,000 — we&rsquo;ll confirm the
+                exact shade on WhatsApp after you order.
+              </p>
+            </div>
+          )}
 
           <div className="opt-label">
             <span>Size</span>

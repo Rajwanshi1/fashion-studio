@@ -37,6 +37,8 @@ export interface NewOrderItem {
   imageUrl: string | null;
   /** Kept optional add-ons snapshotted at order time; price paise. */
   components: { name: string; price: number }[];
+  /** Custom colour charged on this line; optional so offline call sites are untouched. */
+  customColor?: boolean;
   /** Free-text made-to-measure note; optional so offline call sites are untouched. */
   measurements?: string;
 }
@@ -116,6 +118,7 @@ function mapItem(row: any): OrderItem {
     quantity: row.quantity,
     imageUrl: row.image_url ?? null,
     components: row.components ?? [],
+    customColor: row.custom_color ?? false,
     measurements: row.measurements ?? '',
   };
 }
@@ -251,8 +254,8 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
       for (const item of items) {
         const { rows: itemRows } = await client.query(
           `INSERT INTO order_items (order_id, product_id, variant_id, product_name, size, color,
-                                    unit_price, quantity, image_url, components, measurements)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+                                    unit_price, quantity, image_url, components, custom_color, measurements)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
           [
             orderRow.id,
             item.productId,
@@ -264,6 +267,7 @@ export function createOrdersRepo(pool: Pool): OrdersRepo {
             item.quantity,
             item.imageUrl,
             JSON.stringify(item.components),
+            item.customColor ?? false,
             item.measurements ?? '',
           ],
         );

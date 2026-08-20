@@ -90,6 +90,7 @@ export default function Checkout() {
             // The server 409s if it would charge anything other than this — a
             // stale cart is asked to review, never silently repriced.
             expectedUnitPrice: i.unitPrice,
+            customColor: i.customColor || undefined, // omit empties
             measurements: i.measurements || undefined, // omit empties
           })),
         });
@@ -554,6 +555,7 @@ export default function Checkout() {
                     {i.color} · Size {i.size} · Qty {i.qty}
                     {i.includedComponents.length > 0 &&
                       ` · With ${i.includedComponents.join(' & ')}`}
+                    {i.customColor && ' · Custom colour'}
                   </div>
                   {i.measurements && <div className="line-note">{i.measurements}</div>}
                 </div>

@@ -395,6 +395,7 @@ export class FakeProductsRepo implements ProductsRepo {
             unitPrice: effectivePrice(p),
             imageUrl: p.imageUrl,
             components: p.components.map(({ name, optional, price }) => ({ name, optional, price })),
+            customColorAvailable: p.customColorAvailable,
           });
         }
       }
@@ -471,6 +472,8 @@ export class FakeProductsRepo implements ProductsRepo {
         colorHex: im.colorHex ?? '',
       })),
       components: toComponents(input.components),
+      // Mirrors the column default: every garment allows it unless opted out.
+      customColorAvailable: input.customColorAvailable ?? true,
       // Mirrors the real repo: new pieces start hidden unless explicitly published.
       active: input.active ?? false,
       variants: sizes.map((v) => ({ id: nextId('v'), productId: id, size: v.size, stock: v.stock })),
@@ -506,7 +509,7 @@ export class FakeProductsRepo implements ProductsRepo {
     const keys = [
       'name', 'description', 'details', 'price', 'color', 'flag', 'imageUrl', 'active',
       'collection', 'craft', 'fabric', 'occasion',
-      'salePrice', 'costPrice', 'colorFamily',
+      'salePrice', 'costPrice', 'colorFamily', 'customColorAvailable',
       'karigarName', 'hoursWorked', 'techniques', 'finishedOn',
     ] as const;
     for (const key of keys) {
@@ -701,7 +704,9 @@ export class FakeOrdersRepo implements OrdersRepo {
     for (const it of items) this.productsRepo?.orderedProductIds.add(it.productId);
     const created = this.baseOrder(
       order,
-      items.map((it): OrderItem => ({ ...it, measurements: it.measurements ?? '', id: nextId('oi') })),
+      items.map(
+        (it): OrderItem => ({ ...it, customColor: it.customColor ?? false, measurements: it.measurements ?? '', id: nextId('oi') }),
+      ),
     );
     this.orders.push(created);
     return structuredClone(created);
@@ -727,6 +732,7 @@ export class FakeOrdersRepo implements OrdersRepo {
             quantity: it.quantity,
             imageUrl: it.imageUrl ?? null,
             components: [],
+            customColor: false,
             measurements: '',
           }),
         ),
