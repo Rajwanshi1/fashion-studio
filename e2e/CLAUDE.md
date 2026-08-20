@@ -14,3 +14,6 @@ branch's failures against main's; don't chase these as regressions.
 - SPAs preview on 4173/4174 (strictPort); parallel Claude sessions may already
   hold the verify-skill ports.
 - Specs restore the stock they consume — preserve that property in new specs.
+- Storefront shows a consent bar (`ta.consent-ack`) and a first-visit offer
+  pop-up (`ta.offer-seen`) since #46/#47 — seed both localStorage flags in
+  specs that assume an overlay-free viewport.

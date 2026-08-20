@@ -4,7 +4,7 @@
 - src/routes/      HTTP layer, zod-validated (admin.routes.ts ~640 lines is the biggest)
 - src/services/    business logic; services/ai/ = Anthropic bill/catalog parsing
 - src/data/        SQL-only repositories (products.repo.ts ~780 lines)
-- src/lib/         deliveries, phone, vcard helpers
+- src/lib/         deliveries, phone, vcard, media (CDN URL rewrite + rendition keys) helpers
 - src/middleware/  auth, rate-limit
 - db/migrations/   numbered SQL, append-only — NEVER edit an applied migration
 - test/            unit + API tests (routes driven via app.request)
