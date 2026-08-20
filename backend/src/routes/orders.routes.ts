@@ -28,6 +28,8 @@ const createOrderSchema = z.object({
       excludedComponents: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
       // Paise the cart displayed per unit; the service 409s on disagreement.
       expectedUnitPrice: z.number().int().min(0).optional(),
+      // Custom colour on request (+₹1,000, priced by the service).
+      customColor: z.boolean().optional(),
       // Deprecated pre-components booleans, still accepted for one release so a
       // cached old SPA is priced by what it actually displayed (zod would strip
       // them and the order would include pieces the shopper unticked). Remove
@@ -76,6 +78,11 @@ export function orderRoutes(orders: OrdersService, jwtSecret: string) {
       ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || null,
     });
     return c.json(order, 201);
+  });
+
+  // First-order-discount eligibility for the signed-in shopper (Bearer, like /me/orders).
+  r.get('/orders/me/first-order-offer', requireAuth(jwtSecret), async (c) => {
+    return c.json(await orders.firstOrderOffer(c.var.user!.id));
   });
 
   // Guest tracking: requires a matching Bearer user or ?email= matching the order.

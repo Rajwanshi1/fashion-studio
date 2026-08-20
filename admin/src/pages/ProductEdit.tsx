@@ -56,6 +56,8 @@ interface FormState {
   occasion: string;
   /** "This order contains" rows; priceRupees as typed, meaningful only when optional. */
   components: { id: string; name: string; optional: boolean; priceRupees: string }[];
+  /** Shoppers may request a custom colour (+₹1,000 at checkout). */
+  customColorAvailable: boolean;
   /** Provenance (edit mode only) — honest facts, blank when unknown. */
   karigarName: string;
   hoursText: string;
@@ -91,6 +93,8 @@ const EMPTY_FORM: FormState = {
   fabric: '',
   occasion: '',
   components: [],
+  // Matches the column default — every new garment can be re-dyed on request.
+  customColorAvailable: true,
   karigarName: '',
   hoursText: '',
   techniques: '',
@@ -240,6 +244,7 @@ export default function ProductEdit() {
           fabric: product.fabric,
           occasion: product.occasion,
           components: product.components.map((c) => componentRow(c.name, c.optional, rupees(c.price))),
+          customColorAvailable: product.customColorAvailable ?? true,
           karigarName: product.karigarName ?? '',
           hoursText: product.hoursWorked != null ? String(product.hoursWorked) : '',
           techniques: product.techniques ?? '',
@@ -444,6 +449,7 @@ export default function ProductEdit() {
       fabric: form.fabric.trim(),
       occasion: form.occasion.trim(),
       components,
+      customColorAvailable: form.customColorAvailable,
     };
 
     setBusy(true);
@@ -854,6 +860,20 @@ export default function ProductEdit() {
           >
             Add component
           </button>
+        </div>
+
+        <div className="field">
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={form.customColorAvailable}
+              onChange={(e) => set('customColorAvailable', e.target.checked)}
+            />
+            Custom colour available (+₹1,000)
+          </label>
+          <p className="x">
+            Shoppers can request their own shade at checkout; the atelier confirms it on WhatsApp.
+          </p>
         </div>
 
         <p className="section-label">Internal</p>

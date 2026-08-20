@@ -8,6 +8,7 @@ import { WishlistProvider } from './lib/wishlist';
 import { ToastProvider } from './components/Toast';
 import { CartDrawerProvider } from './components/CartDrawer';
 import ConsentNotice from './components/ConsentNotice';
+import { FirstOrderPopupProvider } from './components/FirstOrderPopup';
 import Home from './pages/Home';
 import Archive from './pages/Archive';
 import Collection from './pages/Collection';
@@ -46,7 +47,9 @@ export function Providers({ children }: { children: ReactNode }) {
       <CartProvider>
         <WishlistProvider>
           <ToastProvider>
-            <CartDrawerProvider>{children}</CartDrawerProvider>
+            <CartDrawerProvider>
+              <FirstOrderPopupProvider>{children}</FirstOrderPopupProvider>
+            </CartDrawerProvider>
           </ToastProvider>
         </WishlistProvider>
       </CartProvider>

@@ -5,6 +5,7 @@ import type { DeliveryMethod, Order, PaymentInit } from '../lib/types';
 import { cartLineKey, useCart } from '../lib/cart';
 import { useAuth } from '../lib/auth';
 import { getSessionId, getVisitorId, track } from '../lib/analytics';
+import { useFirstOrderOffer } from '../lib/offers';
 import { formatINR } from '../lib/format';
 import { useToast } from '../components/Toast';
 import ImageSlot from '../components/ImageSlot';
@@ -24,6 +25,7 @@ export default function Checkout() {
   usePageTitle('Checkout');
   const { items, subtotal, count, clear } = useCart();
   const { user } = useAuth();
+  const offer = useFirstOrderOffer();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -48,7 +50,10 @@ export default function Checkout() {
   const [paymentsUnavailable, setPaymentsUnavailable] = useState(false);
 
   const deliveryFee = delivery === 'priority' ? PRIORITY_FEE : 0;
-  const total = subtotal + deliveryFee;
+  // Display-only preview; the server recomputes the discount inside the order
+  // transaction and the payment charges the server's total.
+  const discount = offer?.eligible ? Math.floor((subtotal * 5) / 100) : 0;
+  const total = subtotal + deliveryFee - discount;
 
   const checkoutStartedRef = useRef(false);
   useEffect(() => {
@@ -85,6 +90,7 @@ export default function Checkout() {
             // The server 409s if it would charge anything other than this — a
             // stale cart is asked to review, never silently repriced.
             expectedUnitPrice: i.unitPrice,
+            customColor: i.customColor || undefined, // omit empties
             measurements: i.measurements || undefined, // omit empties
           })),
           // Lets the server stamp the unspoofable order_created event onto
@@ -552,6 +558,7 @@ export default function Checkout() {
                     {i.color} · Size {i.size} · Qty {i.qty}
                     {i.includedComponents.length > 0 &&
                       ` · With ${i.includedComponents.join(' & ')}`}
+                    {i.customColor && ' · Custom colour'}
                   </div>
                   {i.measurements && <div className="line-note">{i.measurements}</div>}
                 </div>
@@ -564,6 +571,12 @@ export default function Checkout() {
               <span>Subtotal</span>
               <span>{formatINR(subtotal)}</span>
             </div>
+            {discount > 0 && (
+              <div className="srow offer">
+                <span>First order − 5%</span>
+                <span>−{formatINR(discount)}</span>
+              </div>
+            )}
             <div className="srow muted">
               <span>Shipping</span>
               {deliveryFee === 0 ? (

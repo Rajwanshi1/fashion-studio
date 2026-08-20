@@ -214,6 +214,7 @@ function ExpandedOrder({ order, onUpdated: onUpdatedProp }: ExpandedProps) {
                 {[it.size, it.color].filter(Boolean).join(' · ') || 'Freeform'} · ×{it.quantity}
                 {it.components.length > 0 &&
                   ` · with ${it.components.map((c) => c.name).join(' & ')}`}
+                {it.customColor && ' · custom colour (+₹1,000)'}
               </div>
               {/* Client-supplied free text — always plain text, never HTML. */}
               {it.measurements && <div className="item-note">{it.measurements}</div>}
@@ -221,6 +222,12 @@ function ExpandedOrder({ order, onUpdated: onUpdatedProp }: ExpandedProps) {
             <div>{formatINR(it.unitPrice * it.quantity)}</div>
           </div>
         ))}
+        {order.discountAmount > 0 && (
+          <div className="oitem">
+            <div className="x">First order − 5%</div>
+            <div>−{formatINR(order.discountAmount)}</div>
+          </div>
+        )}
         <div className="oitem">
           <div className="x">
             Delivery ({order.deliveryMethod === 'priority' ? 'Priority' : 'Standard'})

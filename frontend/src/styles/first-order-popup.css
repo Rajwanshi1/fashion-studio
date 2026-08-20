@@ -1,0 +1,13 @@
+/* ============================================================
+   TANVI AGNIHOTRY — First-order offer pop-up (one-time, quiet)
+   ============================================================ */
+.fo-backdrop { position: fixed; inset: 0; background: rgba(35,43,38,0.42); z-index: 320; animation: fo-fade 320ms cubic-bezier(.22,1,.36,1); }
+.fo-popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100vw - 2.5rem)); background: var(--paper); border: 1px solid var(--hairline-gold); border-radius: var(--edge); padding: 2.4rem 2.2rem 2.1rem; text-align: center; z-index: 330; box-shadow: 0 40px 80px -40px rgba(35,43,38,0.55); animation: fo-fade 380ms cubic-bezier(.22,1,.36,1); }
+.fo-popup .eyebrow { display: block; margin-bottom: 0.9rem; }
+.fo-popup h3 { font-family: var(--serif-display); font-size: 1.45rem; margin-bottom: 0.8rem; }
+.fo-popup p { margin: 0 0 1.6rem; font-size: var(--t-sm); color: var(--ink-soft); }
+.fo-actions { display: grid; gap: 0.7rem; }
+.fo-actions .btn-buy { text-align: center; }
+.fo-later { background: none; border: 0; padding: 0.2rem; cursor: pointer; font-family: var(--sans); font-size: 0.66rem; letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--fg-muted); }
+.fo-later:hover { color: var(--gold); }
+@keyframes fo-fade { from { opacity: 0; } to { opacity: 1; } }

@@ -42,6 +42,7 @@ function makeProduct(overrides: ProductFixture = {}): ProductFixture {
     occasion: 'Wedding',
     addonsTotal: 1200000,
     components: [{ id: 'pc1', name: 'Dupatta', optional: true, price: 1200000 }],
+    customColorAvailable: true,
     colorFamily: 'green',
     salePrice: null,
     costPrice: null,
@@ -227,6 +228,41 @@ describe('ProductEdit', () => {
     ]);
 
     expect(await screen.findByRole('heading', { name: 'Products' })).toBeInTheDocument();
+  });
+
+  it('saves the custom colour toggle in the PUT payload', async () => {
+    seedAdminAuth();
+    const calls = renderEdit(makeProduct());
+
+    const toggle = await screen.findByRole('checkbox', { name: 'Custom colour available (+₹1,000)' });
+    expect(toggle).toBeChecked(); // loaded from the piece
+    await userEvent.click(toggle);
+    await userEvent.click(screen.getByRole('button', { name: 'Save Piece' }));
+
+    const body = calls.find((c) => c.method === 'PUT')?.body as { customColorAvailable: boolean };
+    expect(body.customColorAvailable).toBe(false);
+  });
+
+  it('defaults the custom colour toggle on for a new piece and posts it', async () => {
+    seedAdminAuth();
+    const { calls } = mockFetch((url, init) => {
+      if (url.endsWith('/api/categories')) return { json: CATEGORIES };
+      if (url.endsWith('/api/admin/products') && init?.method === 'POST') return { json: { id: 'p' } };
+      if (url.endsWith('/api/admin/products')) return { json: [] };
+      return undefined;
+    });
+
+    renderApp('/products/new');
+    await screen.findByRole('button', { name: /Gowns/ });
+    expect(screen.getByRole('checkbox', { name: 'Custom colour available (+₹1,000)' })).toBeChecked();
+
+    await userEvent.type(screen.getByLabelText('Name'), 'Emerald Court Gown');
+    await userEvent.click(screen.getByRole('button', { name: /Gowns/ }));
+    await userEvent.type(screen.getByLabelText('Price (₹ rupees)'), '184000');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Piece' }));
+
+    const body = calls.find((c) => c.method === 'POST')?.body as { customColorAvailable: boolean };
+    expect(body.customColorAvailable).toBe(true);
   });
 
   it('blocks the save when two components share a name', async () => {
