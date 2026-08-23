@@ -29,7 +29,10 @@ deploy_stack() { # region name template extra-params...
 require_delegation() {
   local zone_ns live_ns ns hit=0
   zone_ns=$(stack_out "$PRIMARY_REGION" "fashion-$ENV_NAME-dns" NameServers)
-  live_ns=$(dig +short NS "$DOMAIN_NAME" | sed 's/\.$//' | sort | tr '\n' ' ')
+  # Query a public resolver directly: the operator's local resolver can cache the
+  # registrar's old NS for up to their TTL, long after the registry has the new
+  # delegation (which is what ACM's resolvers see).
+  live_ns=$(dig +short NS "$DOMAIN_NAME" @8.8.8.8 | sed 's/\.$//' | sort | tr '\n' ' ')
   for ns in ${zone_ns//,/ }; do
     case " $live_ns " in *" ${ns%.} "*) hit=1 ;; esac
   done
